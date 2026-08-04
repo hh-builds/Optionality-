@@ -1,0 +1,1963 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Financial Optionality Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.4/babel.min.js"></script>
+<style>
+:root{
+  --surface-1:#fcfcfb; --surface-2:#ffffff; --page:#f4f4f1;
+  --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+  --series-pension:#2a78d6; --series-isa:#1baf7a; --series-gia:#eb6834;
+  --series-cash:#eda100; --series-home:#4a3aa7; --series-red:#e34948;
+  --good:#0ca30c; --warning:#e8930c; --serious:#ec835a; --critical:#d03b3b;
+  --good-text:#006300;
+  --accent:#2a78d6; --accent-soft:rgba(42,120,214,0.10);
+  --shadow:0 1px 2px rgba(11,11,11,0.05),0 4px 16px rgba(11,11,11,0.04);
+  --phase-accum:rgba(42,120,214,0.08);
+  --phase-bridge:rgba(232,147,12,0.10);
+  --phase-ret:rgba(27,175,122,0.10);
+}
+html[data-theme="dark"]{
+  --surface-1:#1a1a19; --surface-2:#212120; --page:#0d0d0d;
+  --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+  --series-pension:#3987e5; --series-isa:#199e70; --series-gia:#d95926;
+  --series-cash:#c98500; --series-home:#9085e9; --series-red:#e66767;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --good-text:#0ca30c;
+  --accent:#3987e5; --accent-soft:rgba(57,135,229,0.14);
+  --shadow:0 1px 2px rgba(0,0,0,0.4),0 4px 16px rgba(0,0,0,0.35);
+  --phase-accum:rgba(57,135,229,0.12);
+  --phase-bridge:rgba(250,178,25,0.12);
+  --phase-ret:rgba(25,158,112,0.14);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--page); color:var(--text-primary);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 80px;display:flex;flex-direction:column}
+/* editable inputs pulled above the read-only outputs via flex order */
+.inputs-block{order:0}
+.outputs-block{order:1}
+.foot-block{order:2}
+a{color:var(--accent)}
+h1,h2,h3{margin:0;font-weight:600;letter-spacing:-0.01em}
+.muted{color:var(--muted)}
+.sec{color:var(--text-secondary)}
+button{font-family:inherit}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent)}
+.brand h1{font-size:18px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+.btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
+  padding:7px 13px;border-radius:9px;font-size:13px;cursor:pointer;font-weight:500;transition:.12s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.primary:hover{opacity:.9;color:#fff}
+
+/* hero */
+.hero{background:var(--surface-1);border:1px solid var(--border);border-radius:18px;
+  padding:26px 28px;box-shadow:var(--shadow);margin-bottom:16px;
+  display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.hero .lbl{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hero .big{font-size:64px;font-weight:650;line-height:1.02;letter-spacing:-0.03em;margin:6px 0 2px}
+.hero .big .yrs{font-size:26px;color:var(--text-secondary);font-weight:500;letter-spacing:0}
+.hero .sub{color:var(--text-secondary);font-size:14px}
+.hero-right{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;
+  font-size:13px;font-weight:600;border:1px solid var(--border)}
+.pill .ic{width:9px;height:9px;border-radius:50%}
+.pill.good{color:var(--good-text);background:rgba(12,163,12,0.10)} .pill.good .ic{background:var(--good)}
+.pill.med{color:#a06a00;background:rgba(232,147,12,0.12)} .pill.med .ic{background:var(--warning)}
+html[data-theme="dark"] .pill.med{color:var(--warning)}
+.pill.low{color:var(--critical);background:rgba(208,59,59,0.12)} .pill.low .ic{background:var(--critical)}
+.hero-target{text-align:right;font-size:13px;color:var(--text-secondary)}
+.hero-target b{color:var(--text-primary);font-weight:600}
+.conf-why{font-size:12px;color:var(--muted);line-height:1.45;max-width:270px;text-align:right;margin-top:2px}
+.hero-plan{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap}
+.hero-plan .hp-lbl{font-size:13px;color:var(--text-secondary);font-weight:500}
+.hero-plan .btn{padding:6px 12px;font-size:13px}
+.hero-plan .hp-ref{font-size:12px;color:var(--muted)}
+.hero-plan .hp-ref b{color:var(--text-secondary)}
+.manual-tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--warning);
+  background:rgba(232,147,12,0.14);padding:2px 7px;border-radius:5px;vertical-align:middle;margin-left:6px}
+html[data-theme="dark"] .manual-tag{color:var(--warning)}
+
+/* grid + cards */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.card{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
+  padding:16px 16px;box-shadow:var(--shadow)}
+.card h3{font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.card .v{font-size:25px;font-weight:600;letter-spacing:-0.02em}
+.kv{display:flex;justify-content:space-between;font-size:13px;margin-top:6px;gap:8px}
+.kv .k{color:var(--muted)} .kv .val{color:var(--text-secondary);font-weight:500}
+.tag{font-size:11px;font-weight:700;letter-spacing:.03em;padding:3px 8px;border-radius:6px;text-transform:uppercase}
+.tag.ahead{color:var(--good-text);background:rgba(12,163,12,0.12)}
+.tag.ontrack{color:var(--accent);background:var(--accent-soft)}
+.tag.behind{color:var(--critical);background:rgba(208,59,59,0.12)}
+
+/* layout columns */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
+  padding:18px;box-shadow:var(--shadow)}
+.panel > h2{font-size:15px;margin-bottom:4px}
+.panel .desc{font-size:13px;color:var(--muted);margin-bottom:14px}
+
+/* optimiser */
+.opt{background:linear-gradient(180deg,var(--accent-soft),transparent);
+  border:1px solid var(--border);border-radius:16px;padding:20px 22px;box-shadow:var(--shadow);margin-bottom:16px}
+.opt .head{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.opt .head .star{color:var(--warning)}
+.opt-split{display:flex;justify-content:space-between;font-size:13px;margin:14px 2px 6px;font-weight:600}
+.opt-split .p{color:var(--series-pension)} .opt-split .i{color:var(--series-isa)}
+input[type=range]{width:100%;height:8px;-webkit-appearance:none;appearance:none;border-radius:8px;
+  background:linear-gradient(90deg,var(--series-pension),var(--series-isa));outline:none;margin:6px 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;
+  background:var(--surface-2);border:3px solid var(--accent);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--surface-2);
+  border:3px solid var(--accent);cursor:pointer}
+.opt-out{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:16px}
+.opt-out .mini{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;
+  display:flex;flex-direction:column;justify-content:space-between;min-height:64px}
+.opt-out .mini .k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;font-weight:600;line-height:1.25}
+.opt-out .mini .val{font-size:19px;font-weight:600;margin-top:6px;letter-spacing:-0.01em}
+
+/* inputs */
+.inputs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.acc{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.acc > summary{cursor:pointer;padding:13px 16px;font-weight:600;font-size:14px;list-style:none;
+  display:flex;align-items:center;justify-content:space-between;user-select:none}
+.acc > summary::-webkit-details-marker{display:none}
+.acc > summary .chev{color:var(--muted);transition:.2s;font-size:12px}
+.acc[open] > summary .chev{transform:rotate(90deg)}
+.acc .body{padding:4px 16px 16px;border-top:1px solid var(--border)}
+.field{margin:12px 0}
+.field label{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-weight:500}
+.field input[type=number],.field input[type=text],.field select{
+  width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);
+  color:var(--text-primary);font-size:14px;font-family:inherit}
+.field .row{display:flex;gap:8px;align-items:center}
+.field .pct{position:relative}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{background:var(--surface-2);border:none;padding:7px 12px;font-size:13px;cursor:pointer;color:var(--text-secondary)}
+.seg button.on{background:var(--accent);color:#fff}
+.switch{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);cursor:pointer}
+.switch input{width:16px;height:16px;accent-color:var(--accent)}
+
+/* inline editable number (optimiser + quick-edit) */
+.inline-num{width:110px;padding:5px 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);
+  color:var(--text-primary);font-size:14px;font-weight:600;font-family:inherit;font-variant-numeric:tabular-nums}
+.inline-num:focus{outline:none;border-color:var(--accent)}
+
+/* quick-edit current position strip */
+.qedit{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:16px 18px;
+  box-shadow:var(--shadow);margin-bottom:16px}
+.qedit h2{font-size:15px;margin-bottom:2px}
+.qedit .desc{font-size:13px;color:var(--muted);margin-bottom:14px}
+.qgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.qcell{display:flex;flex-direction:column;gap:5px}
+.qcell label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.qcell .qin{position:relative;display:flex;align-items:center}
+.qcell .qin span{position:absolute;left:9px;color:var(--muted);font-size:14px;pointer-events:none}
+.qcell input{width:100%;padding:8px 10px 8px 20px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface-2);color:var(--text-primary);font-size:15px;font-weight:600;font-family:inherit;
+  font-variant-numeric:tabular-nums}
+.qcell input:focus{outline:none;border-color:var(--accent)}
+.qcell.savings input{padding-left:20px}
+.qcell.savings{border-left:1px solid var(--border);padding-left:12px}
+@media (max-width:960px){.qgrid{grid-template-columns:repeat(2,1fr)} .qcell.savings{border-left:none;padding-left:0}}
+
+/* events */
+.event-row{display:grid;grid-template-columns:1.1fr .8fr 1.25fr .7fr .95fr auto;gap:5px;align-items:center;margin:6px 0}
+.event-row input,.event-row select{padding:6px 6px;font-size:13px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surface-2);color:var(--text-primary);width:100%;min-width:0}
+.event-row .evh{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding-left:2px}
+/* savings plan optimise bar */
+.opt-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:2px 0 6px}
+.opt-bar .btn.primary{white-space:nowrap}
+.opt-bar-note{font-size:12px;color:var(--muted);line-height:1.4}
+.opt-msg{font-size:13px;border-radius:9px;padding:9px 12px;margin:6px 0 4px;line-height:1.45}
+.opt-msg.ok{color:var(--good-text);background:rgba(12,163,12,0.10);border:1px solid rgba(12,163,12,0.25)}
+.opt-msg.bad{color:var(--critical);background:rgba(208,59,59,0.10);border:1px solid rgba(208,59,59,0.25)}
+html[data-theme="dark"] .opt-msg.ok{color:var(--good)}
+/* savings plan rows */
+.plan-row{display:grid;grid-template-columns:.85fr 1fr 1.7fr 1.15fr auto;gap:8px;align-items:center;margin:7px 0}
+.plan-row input[type=number]{padding:6px 6px;font-size:13px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surface-2);color:var(--text-primary);width:100%;min-width:0}
+.plan-row .evh{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding-left:2px}
+.plan-row .plan-split{font-size:12.5px}
+.plan-row input[type=range]{margin:0}
+@media (max-width:640px){
+  .plan-row{grid-template-columns:1fr 1fr;gap:6px 10px}
+  .plan-row .plan-split{grid-column:1 / -1}
+}
+/* let the wide cash-events section use the full row width so its columns breathe */
+.acc.span-all{grid-column:1 / -1}
+.icon-btn{background:none;border:1px solid var(--border);border-radius:7px;cursor:pointer;color:var(--muted);
+  width:30px;height:30px;font-size:15px;line-height:1}
+.icon-btn:hover{color:var(--critical);border-color:var(--critical)}
+.add-link{background:none;border:1px dashed var(--border);border-radius:8px;color:var(--accent);
+  padding:8px;width:100%;cursor:pointer;font-size:13px;font-weight:500;margin-top:6px}
+
+/* opportunity / risk */
+.oppitem{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.oppitem:last-child{border-bottom:none}
+.oppitem .lab{font-size:14px;text-align:left}
+.oppitem .delta{font-weight:700;font-size:13px;white-space:nowrap}
+.delta.pos{color:var(--good-text)} .delta.neg{color:var(--critical)}
+.oppitem.clickable{width:100%;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;
+  font-family:inherit;color:var(--text-primary);transition:.12s;padding-left:6px;padding-right:6px;border-radius:6px}
+.oppitem.clickable:hover{background:var(--accent-soft)}
+.apply-hint{color:var(--accent);font-size:11px;font-weight:600;opacity:0;transition:.12s;margin-left:4px}
+.oppitem.clickable:hover .apply-hint{opacity:1}
+
+/* KPI reason line */
+.kpi-reason{font-size:13px;font-weight:700;margin:2px 0 8px}
+.kpi-reason.good{color:var(--good-text)} .kpi-reason.bad{color:var(--critical)}
+
+/* LIFE TIMELINE — evenly spaced so labels never overlap */
+.timeline-panel{margin-bottom:16px}
+.timeline{position:relative;display:flex;align-items:flex-start;gap:4px;padding:4px 2px 2px}
+.tl-line{position:absolute;top:10px;left:5%;right:5%;height:2px;background:var(--baseline);z-index:0}
+.tl-node{position:relative;z-index:1;flex:1 1 0;min-width:0;background:none;border:none;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit;padding:0}
+.tl-dot{width:13px;height:13px;border-radius:50%;background:var(--muted);border:2px solid var(--surface-1);box-shadow:0 0 0 1px var(--baseline)}
+.tl-node.hi .tl-dot{background:var(--accent);box-shadow:0 0 0 2px var(--accent);width:15px;height:15px;margin-top:-1px}
+.tl-node.tl-event .tl-dot{background:var(--series-gia)}
+.tl-node.tl-coast .tl-dot{background:var(--series-isa)}
+.tl-node.tl-access .tl-dot{background:var(--series-home)}
+.tl-age{font-size:12.5px;font-weight:700;color:var(--text-primary);margin-top:2px}
+.tl-lbl{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.2;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tl-node.hi .tl-lbl{color:var(--accent);font-weight:600}
+.tl-node:hover .tl-lbl{color:var(--text-primary)}
+@media (max-width:560px){ .tl-lbl{font-size:9.5px} .tl-age{font-size:11px} }
+
+/* ACTIONS + RECOMMENDATION */
+.actions-grid{align-items:stretch}
+.action-panel{background:linear-gradient(180deg,var(--accent-soft),transparent)}
+.strat-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}
+.strat-tab{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:6px 11px;
+  font-size:12.5px;font-weight:600;cursor:pointer;color:var(--text-secondary);font-family:inherit;transition:.12s}
+.strat-tab:hover{border-color:var(--accent)}
+.strat-tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.alloc-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.alloc-cell{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center}
+.alloc-cell .ac-k{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.alloc-cell .ac-v{font-size:22px;font-weight:650;margin-top:4px;letter-spacing:-0.01em}
+.alloc-why{font-size:13px;color:var(--text-secondary);margin-top:12px;line-height:1.5}
+.checklist{margin-top:14px;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:7px}
+.chk{font-size:13px;color:var(--text-secondary);display:flex;gap:8px;align-items:baseline;line-height:1.4}
+.chk .ck{color:var(--good);font-weight:700;flex-shrink:0}
+.chk b{color:var(--text-primary)}
+
+/* HEADLINE TILES */
+.headline-tiles{display:flex;flex-direction:column;gap:10px}
+.htile{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:12px 14px}
+.htile .ht-k{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700}
+.htile .ht-v{font-size:26px;font-weight:650;letter-spacing:-0.02em;margin:2px 0}
+.htile .ht-s{font-size:12px;color:var(--muted);line-height:1.4}
+
+/* DECISION COMPARATOR */
+.cmp-table th,.cmp-table td{text-align:right}
+.cmp-table th:first-child,.cmp-table td:first-child{text-align:left;position:static}
+.cmp-table td:first-child{font-weight:600}
+tr.cmp-best{background:rgba(12,163,12,0.08)}
+.best-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--good-text);
+  background:rgba(12,163,12,0.14);padding:2px 7px;border-radius:5px;margin-left:8px}
+html[data-theme="dark"] .best-tag{color:var(--good)}
+.cmp-rec{font-size:13.5px;color:var(--text-secondary);line-height:1.55;margin-top:12px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+.cmp-rec b{color:var(--text-primary)}
+@media (max-width:640px){ .alloc-row{grid-template-columns:1fr} .timeline{overflow-x:auto} }
+
+/* success lights */
+.lights{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.light{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:16px 10px}
+.light .ld{width:20px;height:20px;border-radius:50%}
+.light .name{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.light .st{font-size:13px;font-weight:600}
+.light .lsub{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:2px}
+.ld.g{background:var(--good)} .ld.a{background:var(--warning)} .ld.r{background:var(--critical)}
+
+/* table */
+.tablewrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap}
+th{background:var(--surface-2);color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;
+  letter-spacing:.02em;position:sticky;top:0;text-align:right;border-bottom:1px solid var(--border)}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--surface-1)}
+th:first-child{z-index:2}
+td{border-bottom:1px solid var(--grid)}
+tr.accumulation td:first-child{box-shadow:inset 3px 0 var(--series-pension)}
+tr.bridge td:first-child{box-shadow:inset 3px 0 var(--warning)}
+tr.retirement td:first-child{box-shadow:inset 3px 0 var(--series-isa)}
+tr.bridge{background:var(--phase-bridge)}
+tr.retirement{background:var(--phase-ret)}
+.legend-row{display:flex;gap:16px;margin:10px 0;font-size:12px;flex-wrap:wrap}
+.legend-row span{display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary)}
+.legend-row .sw{width:11px;height:11px;border-radius:3px}
+.notecell{color:var(--muted);font-size:11px;max-width:180px;white-space:normal;text-align:left}
+
+/* chart */
+.chart-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;gap:8px}
+.terms-tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:999px;white-space:nowrap}
+/* table group header (Pension | ISA-GIA) */
+tr.grouprow th{background:var(--surface-2);border-bottom:1px solid var(--border);padding:5px 10px}
+tr.grouprow th.grp{text-align:center;font-size:11px;letter-spacing:.04em}
+tr.grouprow th.grp-p{color:var(--series-pension)}
+tr.grouprow th.grp-a{color:var(--series-isa)}
+th.grp-p, td:nth-child(2){border-left:2px solid var(--border)}
+td:nth-child(7){border-left:2px solid var(--border)}
+tr.grouprow th.grp-a{border-left:2px solid var(--border)}
+.tooltip{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;
+  box-shadow:var(--shadow);font-size:12px}
+.tooltip .t-age{font-weight:600;margin-bottom:5px}
+.tooltip .t-row{display:flex;justify-content:space-between;gap:14px}
+.tooltip .t-row .nm{display:flex;align-items:center;gap:6px;color:var(--text-secondary)}
+.tooltip .t-row .sw{width:9px;height:9px;border-radius:2px}
+.tooltip .t-row .amt{font-weight:600;font-variant-numeric:tabular-nums}
+
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  font-weight:700;margin:26px 2px 12px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:"";flex:1;height:1px;background:var(--border)}
+.note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6}
+.assumptions{font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;margin-top:8px;line-height:1.7}
+
+@media (max-width:960px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid2,.grid3,.inputs-grid{grid-template-columns:1fr}
+  .opt-out{grid-template-columns:repeat(2,1fr)}
+  .lights{grid-template-columns:repeat(2,1fr)}
+  .hero .big{font-size:52px}
+}
+@media (max-width:560px){
+  .kpis{grid-template-columns:1fr}
+  .opt-out{grid-template-columns:1fr}
+  .event-row{grid-template-columns:1fr 1fr;}
+}
+@media print{
+  .toolbar,.add-link,.icon-btn,input[type=range]{display:none!important}
+  body{background:#fff} .acc{break-inside:avoid} .panel,.card,.hero{box-shadow:none;border:1px solid #ddd}
+  .wrap{max-width:100%}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+/* ===== ENGINE (inlined) ===== */
+/* =====================================================================
+   Financial Optionality Engine
+   Pure calculation layer — no UI, no DOM. Deterministic given inputs.
+   Exposed as a global `Engine` object (also CommonJS export for tests).
+   All money is nominal £ unless noted. Ages may be fractional.
+   ===================================================================== */
+(function (root) {
+  'use strict';
+
+  var clamp = function (x, lo, hi) { return Math.max(lo, Math.min(hi, x)); };
+  var round2 = function (x) { return Math.round(x * 100) / 100; };
+
+  // Savings plan = list of periods {fromYear, amount, allocPension}. Returns the
+  // period active `t` years from now (the latest one that has started), or null.
+  function normalisePlan(inp) {
+    if (inp.savingsPlan && inp.savingsPlan.length) {
+      return inp.savingsPlan.slice().sort(function (a, b) { return (a.fromYear || 0) - (b.fromYear || 0); });
+    }
+    // migrate legacy single-field setup
+    return [{ fromYear: 0, amount: inp.annualSavings || 0,
+              allocPension: (inp.allocPension != null ? inp.allocPension : 0.30) }];
+  }
+  function activeSavings(plan, t) {
+    var best = null;
+    for (var i = 0; i < plan.length; i++) {
+      var fy = plan[i].fromYear || 0;
+      if (fy <= t && (best === null || fy >= (best.fromYear || 0))) best = plan[i];
+    }
+    return best;
+  }
+
+  // ---- Default inputs -------------------------------------------------
+  var DEFAULTS = {
+    // Personal
+    currentAge: 35,
+    targetOptionalityAge: 40,      // optional aspiration
+    plannedStopAge: null,          // manual override of the optionality age (null = auto / earliest)
+    pensionAccessAge: 60,
+    lifeExpectancy: 95,
+    statePensionAge: 68,
+    statePensionIncluded: true,
+    statePensionAmount: 10000,     // annual, today's money
+
+    // Pension
+    pensionCurrent: 10000,
+    employerContribution: 10000,   // annual, added to pension while working
+    pensionReturn: 0.07,
+    pensionFee: 0.003,
+    withdrawalRate: 0.04,          // sustainable pension withdrawal rate
+
+    // ISA
+    isaCurrent: 10000,
+    isaReturn: 0.07,
+
+    // GIA
+    giaCurrent: 10000,
+    giaReturn: 0.07,
+    giaTaxDrag: 0.005,
+
+    // Cash
+    cashCurrent: 10000,
+
+    // Bridge (post-stop, pre-pension-access)
+    bridgeReturn: 0.05,
+
+    // Inflation
+    inflation: 0.025,
+
+    // Spending
+    bridgeSpending: 10000,         // annual, before pension access
+    retirementSpending: 10000,     // annual, after pension access
+    spendingInflationLinked: true,
+
+    // Savings plan — list of periods, each active from `fromYear` (years from now)
+    // until the next period starts. amount is annual; allocPension = share to pension.
+    savingsPlan: [
+      { fromYear: 0, amount: 10000, allocPension: 0.30 }
+    ],
+    // legacy mirrors of period 0 (kept for back-compat / migration)
+    annualSavings: 10000,
+    allocPension: 0.30,
+
+    // Property (optional, informational)
+    homeValue: 0,
+    mortgage: 0,
+
+    // Future cash events — timed as "years from now" (yearsFromNow)
+    cashEvents: [
+      { name: 'Lump sum', amount: 10000, yearsFromNow: 5, direction: 'in', account: 'gia' }
+    ]
+  };
+
+  // ---- Core single-path simulation ------------------------------------
+  // Simulate the plan assuming the user stops work permanently at `stopAge`.
+  // Returns rows + summary. Handles fractional stopAge via a transition year.
+  function simulate(inp, stopAge) {
+    var infl = inp.inflation;
+    var startAge = inp.currentAge;
+    var accessAge = inp.pensionAccessAge;
+    var endAge = inp.lifeExpectancy;
+
+    var plan = normalisePlan(inp);
+
+    // balances
+    var pension = inp.pensionCurrent;
+    var isa = inp.isaCurrent;
+    var gia = inp.giaCurrent;
+    var cash = inp.cashCurrent;
+
+    var rows = [];
+    var survived = true;
+    var failAge = null;
+    var minAccessibleBridge = Infinity;
+
+    var pensionAtAccess = null;
+    var accessibleAtOptionality = null;
+    var accessibleAtAccess = null;
+
+    var firstRetiredAge = Math.floor(stopAge);
+
+    for (var a = startAge; a < endAge; a++) {
+      var workFrac = clamp(stopAge - a, 0, 1);   // fraction of THIS year still working
+      var spendFrac = 1 - workFrac;               // fraction retired / drawing down
+      var yearsFromNow = a - startAge;
+      var inflFactor = inp.spendingInflationLinked ? Math.pow(1 + infl, yearsFromNow) : 1;
+
+      var pensionStart = pension, isaStart = isa, giaStart = gia, cashStart = cash;
+      var accessStart = isa + gia + cash;
+
+      var notes = [];
+
+      // 1) Cash events at this integer age (inflows or one-off outflows / "hits")
+      var pensionIn = 0, pensionOut = 0, accessIn = 0, accessOut = 0;
+      for (var e = 0; e < inp.cashEvents.length; e++) {
+        var ev = inp.cashEvents[e];
+        var evAge = (ev.yearsFromNow != null) ? (startAge + ev.yearsFromNow) : ev.age;
+        if (Math.floor(evAge) === a) {
+          var acct = ev.account || ev.destination || 'gia';
+          var dir = ev.direction || 'in';
+          var amt = Math.abs(ev.amount);
+          if (dir === 'in') {
+            if (acct === 'pension') { pension += amt; pensionIn += amt; }
+            else if (acct === 'isa') { isa += amt; accessIn += amt; }
+            else if (acct === 'gia') { gia += amt; accessIn += amt; }
+            else { cash += amt; accessIn += amt; }
+            notes.push(ev.name + ' +' + Math.round(amt));
+          } else {
+            // one-off outflow: take from the chosen account, cascading across
+            // accessible accounts if the chosen one can't cover it.
+            var need = amt;
+            if (acct === 'pension') {
+              var tp = Math.min(pension, need); pension -= tp; need -= tp; pensionOut += tp;
+            } else {
+              var order = [acct].concat(['cash', 'isa', 'gia'].filter(function (x) { return x !== acct; }));
+              for (var oi = 0; oi < order.length; oi++) {
+                var bal = order[oi] === 'cash' ? cash : order[oi] === 'isa' ? isa : gia;
+                var take = Math.min(bal, need); need -= take;
+                if (order[oi] === 'cash') cash -= take;
+                else if (order[oi] === 'isa') isa -= take;
+                else gia -= take;
+              }
+              accessOut += (amt - need);
+            }
+            notes.push(ev.name + ' −' + Math.round(amt - need));
+          }
+        }
+      }
+
+      // 2) Contributions from the active savings period (scaled by working fraction)
+      if (workFrac > 0) {
+        var seg = activeSavings(plan, yearsFromNow);
+        var segAmt = seg ? seg.amount : 0;
+        var segAlloc = seg ? (seg.allocPension != null ? seg.allocPension : 0.30) : 0;
+        var pensionSave = segAmt * segAlloc;
+        var isaGiaSave = segAmt * (1 - segAlloc);
+        var pc = (pensionSave + inp.employerContribution) * workFrac;
+        pension += pc; pensionIn += pc;
+        var ig = isaGiaSave * workFrac;
+        // fill ISA up to £20k/yr first, remainder to GIA
+        var isaRoom = 20000 * workFrac;
+        var toIsa = Math.min(ig, isaRoom);
+        isa += toIsa; gia += (ig - toIsa);
+        accessIn += ig;
+      }
+
+      // capture pension-at-access (value at start of access-age year, after any contribs that year)
+      if (a === Math.floor(accessAge) && pensionAtAccess === null) {
+        pensionAtAccess = pension;
+        accessibleAtAccess = isa + gia + cash;
+      }
+      if (a === firstRetiredAge && accessibleAtOptionality === null) {
+        accessibleAtOptionality = isa + gia + cash;
+      }
+
+      // 3) Spending / withdrawals (only for the retired fraction of the year)
+      var sppAmt = 0; // state pension received this year (informational)
+      if (spendFrac > 0) {
+        var baseSpend = (a < accessAge ? inp.bridgeSpending : inp.retirementSpending);
+        var spendNeed = baseSpend * inflFactor * spendFrac;
+        var sp = (inp.statePensionIncluded && a >= inp.statePensionAge)
+          ? inp.statePensionAmount * inflFactor * spendFrac : 0;
+        sppAmt = sp;
+        var need = Math.max(0, spendNeed - sp);
+
+        if (a < accessAge) {
+          // BRIDGE: accessible only (cash -> isa -> gia)
+          var draw = need;
+          var fromCash = Math.min(cash, draw); cash -= fromCash; draw -= fromCash;
+          var fromIsa = Math.min(isa, draw); isa -= fromIsa; draw -= fromIsa;
+          var fromGia = Math.min(gia, draw); gia -= fromGia; draw -= fromGia;
+          accessOut += (need - draw);
+          if (draw > 0.5) { survived = false; if (failAge === null) failAge = a; }
+        } else {
+          // RETIREMENT: pension first, then accessible
+          var draw2 = need;
+          var fromPen = Math.min(pension, draw2); pension -= fromPen; draw2 -= fromPen;
+          pensionOut += fromPen;
+          var fromCash2 = Math.min(cash, draw2); cash -= fromCash2; draw2 -= fromCash2;
+          var fromIsa2 = Math.min(isa, draw2); isa -= fromIsa2; draw2 -= fromIsa2;
+          var fromGia2 = Math.min(gia, draw2); gia -= fromGia2; draw2 -= fromGia2;
+          accessOut += (fromCash2 + fromIsa2 + fromGia2);
+          if (draw2 > 0.5) { survived = false; if (failAge === null) failAge = a; }
+        }
+      }
+
+      // track bridge low-water mark
+      if (a >= stopAge && a < accessAge) {
+        minAccessibleBridge = Math.min(minAccessibleBridge, isa + gia + cash);
+      }
+
+      // 4) Growth on remaining balances
+      var inBridge = (a >= stopAge && a < accessAge);
+      var pensionGrowthRate = inp.pensionReturn - inp.pensionFee;
+      var isaRate = inBridge ? inp.bridgeReturn : inp.isaReturn;
+      var giaRate = (inBridge ? inp.bridgeReturn : inp.giaReturn) - inp.giaTaxDrag;
+
+      var pensionGrowth = pension * pensionGrowthRate;
+      var isaGrowth = isa * isaRate;
+      var giaGrowth = gia * giaRate;
+      pension += pensionGrowth;
+      isa += isaGrowth;
+      gia += giaGrowth;
+
+      var phase = (a < stopAge) ? 'accumulation' : (a < accessAge ? 'bridge' : 'retirement');
+
+      rows.push({
+        age: a,
+        phase: phase,
+        pensionStart: round2(pensionStart),
+        pensionIn: round2(pensionIn),
+        pensionOut: round2(pensionOut),
+        pensionGrowth: round2(pensionGrowth),
+        pensionEnd: round2(pension),
+        accessStart: round2(accessStart),
+        contributions: round2(accessIn),
+        accessIn: round2(accessIn),
+        accessOut: round2(accessOut),
+        withdrawals: round2(accessOut),        // ISA/GIA/cash out (kept for back-compat)
+        pensionWithdraw: round2(pensionOut),
+        totalWithdraw: round2(pensionOut + accessOut),
+        statePension: round2(sppAmt),
+        growth: round2(isaGrowth + giaGrowth),
+        accessEnd: round2(isa + gia + cash),
+        isa: round2(isa), gia: round2(gia), cash: round2(cash),
+        netWorth: round2(pension + isa + gia + cash),
+        notes: notes.join('; ')
+      });
+    }
+
+    if (minAccessibleBridge === Infinity) minAccessibleBridge = isa + gia + cash;
+    var endWorth = pension + isa + gia + cash;
+
+    return {
+      survived: survived,
+      failAge: failAge,
+      rows: rows,
+      endWorth: endWorth,
+      minAccessibleBridge: minAccessibleBridge,
+      pensionAtAccess: pensionAtAccess === null ? pension : pensionAtAccess,
+      accessibleAtOptionality: accessibleAtOptionality === null ? (isa + gia + cash) : accessibleAtOptionality,
+      accessibleAtAccess: accessibleAtAccess === null ? 0 : accessibleAtAccess
+    };
+  }
+
+  // ---- Solve for the Financial Optionality Age ------------------------
+  // Earliest stopAge (0.1yr precision) at which the plan survives to life expectancy.
+  function findOptionalityAge(inp) {
+    var lo = inp.currentAge;
+    var hi = inp.lifeExpectancy;
+    // if stopping now already works, optionality is now
+    if (simulate(inp, lo).survived) return lo;
+    // if even working to the end fails, unreachable
+    if (!simulate(inp, hi).survived) return null;
+    // binary search on the monotonic survive() boundary
+    for (var i = 0; i < 40; i++) {
+      var mid = (lo + hi) / 2;
+      if (simulate(inp, mid).survived) hi = mid; else lo = mid;
+      if (hi - lo < 0.02) break;
+    }
+    // `hi` is on the survivable side. Round UP to the 0.1 grid so the reported
+    // age is guaranteed to survive (rounding down could land just below the
+    // boundary and show a spurious shortfall). Nudge up if any edge case fails.
+    var ans = Math.ceil(hi * 10) / 10;
+    var guard = 0;
+    while (ans < inp.lifeExpectancy && !simulate(inp, ans).survived && guard < 30) {
+      ans = Math.round((ans + 0.1) * 10) / 10; guard++;
+    }
+    return ans;
+  }
+
+  // Present value of a required-pension pot to fund retirement net spending
+  // from access age to life expectancy (discounted at the pension growth rate).
+  function requiredPensionAtAccess(inp) {
+    var r = inp.pensionReturn - inp.pensionFee;
+    var infl = inp.inflation;
+    var total = 0;
+    for (var a = inp.pensionAccessAge; a < inp.lifeExpectancy; a++) {
+      var yearsFromNow = a - inp.currentAge;
+      var inflF = inp.spendingInflationLinked ? Math.pow(1 + infl, yearsFromNow) : 1;
+      var spend = inp.retirementSpending * inflF;
+      var sp = (inp.statePensionIncluded && a >= inp.statePensionAge)
+        ? inp.statePensionAmount * inflF : 0;
+      var net = Math.max(0, spend - sp);
+      var yearsToAccess = a - inp.pensionAccessAge;
+      total += net / Math.pow(1 + r, yearsToAccess);
+    }
+    return total;
+  }
+
+  // Required accessible pot at optionality age to fund the bridge to pension access.
+  function requiredBridgeValue(inp, optionalityAge) {
+    var r = inp.bridgeReturn;
+    var infl = inp.inflation;
+    var total = 0;
+    var start = Math.max(inp.currentAge, Math.floor(optionalityAge));
+    for (var a = start; a < inp.pensionAccessAge; a++) {
+      var yearsFromNow = a - inp.currentAge;
+      var inflF = inp.spendingInflationLinked ? Math.pow(1 + infl, yearsFromNow) : 1;
+      var spend = inp.bridgeSpending * inflF;
+      var sp = (inp.statePensionIncluded && a >= inp.statePensionAge)
+        ? inp.statePensionAmount * inflF : 0;
+      var net = Math.max(0, spend - sp);
+      var yearsToStart = a - start;
+      total += net / Math.pow(1 + r, yearsToStart);
+    }
+    return total;
+  }
+
+  // Coast FIRE: earliest age at which the CURRENT pension (no further contributions)
+  // grows on its own to the required pension at access.
+  function coastFireAge(inp) {
+    var r = inp.pensionReturn - inp.pensionFee;
+    var req = requiredPensionAtAccess(inp);
+    for (var a = inp.currentAge; a <= inp.pensionAccessAge; a += 0.1) {
+      var grown = inp.pensionCurrent * Math.pow(1 + r, inp.pensionAccessAge - a);
+      if (grown >= req) return Math.round(a * 10) / 10;
+    }
+    return null; // never coasts on current pot alone within timeframe
+  }
+
+  // The largest flat (today's-money) retirement spend the plan can actually
+  // sustain to life expectancy, holding the stop age, savings and bridge fixed.
+  // This is consistent with the survival simulation (unlike a flat 4% rule).
+  function maxSustainableRetirement(inp, stopAge) {
+    function survivesAt(R) {
+      var x = JSON.parse(JSON.stringify(inp));
+      x.retirementSpending = R;
+      return simulate(x, stopAge).survived;
+    }
+    if (!survivesAt(0)) return 0;
+    var lo = 0, hi = Math.max(inp.retirementSpending * 3, 250000), guard = 0;
+    while (survivesAt(hi) && guard < 40) { hi *= 1.5; guard++; }
+    for (var i = 0; i < 34; i++) {
+      var mid = (lo + hi) / 2;
+      if (survivesAt(mid)) lo = mid; else hi = mid;
+    }
+    return lo;
+  }
+
+  // Rough income breakdown (today's money) for display only.
+  function sustainableRetirementIncome(inp, sim) {
+    // pension pot at access supports withdrawalRate; plus state pension; plus
+    // annuitised accessible remainder over the retirement horizon.
+    var years = inp.lifeExpectancy - inp.pensionAccessAge;
+    var accessRemainder = sim.accessibleAtAccess || 0;
+    var accessAnnual = years > 0 ? accessRemainder / years : 0;
+    var pensionAnnual = sim.pensionAtAccess * inp.withdrawalRate;
+    var sp = inp.statePensionIncluded ? inp.statePensionAmount : 0;
+    // discount nominal-at-access figures back to today's money
+    var inflF = inp.spendingInflationLinked
+      ? Math.pow(1 + inp.inflation, inp.pensionAccessAge - inp.currentAge) : 1;
+    return {
+      total: (pensionAnnual + accessAnnual) / inflF + sp,
+      pensionIncome: pensionAnnual / inflF,
+      accessIncome: accessAnnual / inflF,
+      statePension: sp
+    };
+  }
+
+  // ---- Full compute: everything the dashboard needs -------------------
+  function compute(inp) {
+    // earliest achievable optionality age (the "optimised" answer)
+    var optionalityAge = findOptionalityAge(inp);
+    // manual override: if the user has pinned a stop age, project to THAT instead
+    var overridden = (inp.plannedStopAge != null && inp.plannedStopAge !== '' && !isNaN(inp.plannedStopAge));
+    var planned = overridden ? inp.plannedStopAge : optionalityAge;
+    var effectiveStop = (planned == null) ? inp.lifeExpectancy : planned;
+    var sim = simulate(inp, effectiveStop);
+    var planSurvives = sim.survived;
+
+    var reqPension = requiredPensionAtAccess(inp);
+    var reqBridge = requiredBridgeValue(inp, effectiveStop);
+    var retInc = sustainableRetirementIncome(inp, sim);
+    // consistent with the actual simulation: the real max retirement spend
+    var maxRet = maxSustainableRetirement(inp, effectiveStop);
+
+    var pensionDiff = sim.pensionAtAccess - reqPension;
+    var accessDiff = sim.accessibleAtOptionality - reqBridge;
+
+    // status helpers
+    function status(diff, base) {
+      var ratio = base > 0 ? diff / base : (diff >= 0 ? 1 : -1);
+      if (ratio >= 0.05) return 'ahead';
+      if (ratio >= -0.05) return 'ontrack';
+      return 'behind';
+    }
+
+    // confidence based on whether the (possibly overridden) plan survives and its buffer
+    var buffer = sim.endWorth;
+    var confidence;
+    if (!planSurvives) confidence = 'low';
+    else if (buffer > inp.retirementSpending * 3) confidence = 'high';
+    else if (buffer > 0) confidence = 'medium';
+    else confidence = 'low';
+
+    var yearsEarlyLate = (inp.targetOptionalityAge != null)
+      ? round2(inp.targetOptionalityAge - effectiveStop) : null; // +ve = early
+
+    // classify any shortfall: a "bridge" shortfall means accessible wealth runs
+    // dry before pension access (wealth may be fine overall, just locked away);
+    // a "retirement" shortfall means the money genuinely runs out.
+    var failPhase = null;
+    if (!planSurvives && sim.failAge != null) {
+      failPhase = (sim.failAge < inp.pensionAccessAge) ? 'bridge' : 'retirement';
+    }
+    var bridgeShortfall = Math.max(0, reqBridge - sim.accessibleAtOptionality);
+
+    return {
+      inputs: inp,
+      optionalityAge: optionalityAge,   // earliest achievable (the "optimised" age)
+      effectiveStop: round2(effectiveStop),
+      overridden: overridden,
+      planSurvives: planSurvives,
+      failAge: sim.failAge != null ? round2(sim.failAge) : null,
+      failPhase: failPhase,
+      bridgeShortfall: bridgeShortfall,
+      achievable: optionalityAge !== null,
+      confidence: confidence,
+      yearsEarlyLate: yearsEarlyLate,
+      rows: sim.rows,
+      endWorth: sim.endWorth,
+
+      pension: {
+        current: inp.pensionCurrent,
+        atAccess: sim.pensionAtAccess,
+        required: reqPension,
+        difference: pensionDiff,
+        status: status(pensionDiff, reqPension),
+        coastFireAge: coastFireAge(inp)
+      },
+      accessible: {
+        current: inp.isaCurrent + inp.giaCurrent + inp.cashCurrent,
+        atOptionality: sim.accessibleAtOptionality,
+        requiredBridge: reqBridge,
+        difference: accessDiff,
+        remainingAtAccess: sim.accessibleAtAccess,
+        status: status(accessDiff, reqBridge)
+      },
+      retirement: {
+        sustainableIncome: maxRet,
+        target: inp.retirementSpending,
+        pensionIncome: retInc.pensionIncome,
+        accessIncome: retInc.accessIncome,
+        statePension: retInc.statePension,
+        legacy: sim.endWorth,
+        status: status(maxRet - inp.retirementSpending, inp.retirementSpending)
+      },
+      netWorth: {
+        pension: inp.pensionCurrent,
+        isa: inp.isaCurrent,
+        gia: inp.giaCurrent,
+        cash: inp.cashCurrent,
+        homeEquity: Math.max(0, inp.homeValue - inp.mortgage),
+        total: inp.pensionCurrent + inp.isaCurrent + inp.giaCurrent + inp.cashCurrent
+      }
+    };
+  }
+
+  function withPatch(inp, patch) { var x = JSON.parse(JSON.stringify(inp)); for (var k in patch) x[k] = patch[k]; return x; }
+  function bumpSavings(inp, delta) {
+    return normalisePlan(inp).map(function (s) { return { fromYear: s.fromYear || 0, amount: (s.amount || 0) + delta, allocPension: s.allocPension }; });
+  }
+  function shiftEvents(inp, yrs) {
+    return (inp.cashEvents || []).map(function (e) { var c = JSON.parse(JSON.stringify(e)); if (c.yearsFromNow != null) c.yearsFromNow += yrs; else if (c.age != null) c.age += yrs; return c; });
+  }
+
+  // ---- Opportunity engine --------------------------------------------
+  // Each lever carries a `patch` (absolute input changes) so the UI can apply it.
+  function opportunities(inp) {
+    var base = findOptionalityAge(inp);
+    if (base === null) return [];
+    var levers = [
+      { label: 'Reduce annual spending by £10,000', patch: { bridgeSpending: inp.bridgeSpending - 10000, retirementSpending: inp.retirementSpending - 10000 } },
+      { label: 'Save £5,000 more per year', patch: { savingsPlan: bumpSavings(inp, 5000) } },
+      { label: 'Bring pension access forward to ' + (inp.pensionAccessAge - 2), patch: { pensionAccessAge: Math.max(inp.currentAge + 1, inp.pensionAccessAge - 2) } },
+      { label: 'Receive a £100k lump sum in 1 year', patch: { cashEvents: (inp.cashEvents || []).concat([{ name: 'Extra liquidity', amount: 100000, yearsFromNow: 1, direction: 'in', account: 'gia' }]) } },
+      { label: 'Increase returns by 1% p.a.', patch: { pensionReturn: inp.pensionReturn + 0.01, isaReturn: inp.isaReturn + 0.01, giaReturn: inp.giaReturn + 0.01, bridgeReturn: inp.bridgeReturn + 0.01 } }
+    ];
+    var out = [];
+    for (var i = 0; i < levers.length; i++) {
+      var na = findOptionalityAge(withPatch(inp, levers[i].patch));
+      if (na === null) continue;
+      out.push({ label: levers[i].label, deltaMonths: Math.round((base - na) * 12), patch: levers[i].patch });
+    }
+    out.sort(function (a, b) { return b.deltaMonths - a.deltaMonths; });
+    return out;
+  }
+
+  // ---- Risk engine ----------------------------------------------------
+  function risks(inp) {
+    var base = findOptionalityAge(inp);
+    if (base === null) return [];
+    var shocks = [
+      { label: 'Pension access rises to ' + (inp.pensionAccessAge + 2), patch: { pensionAccessAge: inp.pensionAccessAge + 2 } },
+      { label: 'Returns average 2% lower', patch: { pensionReturn: inp.pensionReturn - 0.02, isaReturn: inp.isaReturn - 0.02, giaReturn: inp.giaReturn - 0.02, bridgeReturn: inp.bridgeReturn - 0.02 } },
+      { label: 'Spending rises by £15,000/yr', patch: { bridgeSpending: inp.bridgeSpending + 15000, retirementSpending: inp.retirementSpending + 15000 } },
+      { label: 'Inflation 2% higher', patch: { inflation: inp.inflation + 0.02 } },
+      { label: 'Lump sums delayed by 3 years', patch: { cashEvents: shiftEvents(inp, 3) } }
+    ];
+    var out = [];
+    for (var i = 0; i < shocks.length; i++) {
+      var na = findOptionalityAge(withPatch(inp, shocks[i].patch));
+      var deltaMonths = na === null ? 999 : Math.round((na - base) * 12);
+      out.push({ label: shocks[i].label, deltaMonths: deltaMonths, breaks: na === null, patch: shocks[i].patch });
+    }
+    out.sort(function (a, b) { return b.deltaMonths - a.deltaMonths; });
+    return out;
+  }
+
+  // ---- Savings-plan optimiser ----------------------------------------
+  // Keeps the yearly savings AMOUNTS fixed (what you can actually save) and
+  // searches the pension / ISA-GIA split — year by year — to make the earliest
+  // optionality age as early as possible (tie-broken by the biggest end buffer,
+  // for a more resilient plan). Returns a new savingsPlan.
+  function optimisePlan(inp) {
+    var startAge = inp.currentAge;
+    var basePlan = normalisePlan(inp);
+    var baseAge = findOptionalityAge(inp);
+    var anySavings = basePlan.some(function (s) { return (s.amount || 0) > 0; });
+    if (!anySavings) return { savingsPlan: JSON.parse(JSON.stringify(basePlan)), optionalityAge: baseAge, baselineAge: baseAge, changed: false };
+
+    // horizon: the years you might still be saving (until you stop), + buffer
+    var horizon = (baseAge == null)
+      ? Math.min(Math.max(1, Math.round(inp.pensionAccessAge - startAge)), 40)
+      : Math.min(Math.ceil(baseAge - startAge) + 2, 45);
+    horizon = Math.max(1, horizon);
+
+    var years = [];
+    for (var t = 0; t < horizon; t++) {
+      var seg = activeSavings(basePlan, t);
+      years.push({ fromYear: t, amount: seg ? seg.amount : 0, allocPension: 0.30 });
+    }
+
+    var work = JSON.parse(JSON.stringify(inp));
+    work.plannedStopAge = null;          // always optimise the EARLIEST achievable age
+    function evalYears(ys) {
+      work.savingsPlan = ys;
+      var age = findOptionalityAge(work);
+      if (age == null) return { age: 1e6, legacy: -1e18 };
+      var sim = simulate(work, age);
+      return { age: age, legacy: sim.endWorth };
+    }
+    // minimise age; among equal ages prefer a bigger safety buffer
+    function scoreOf(r) { return r.age - r.legacy * 1e-12; }
+
+    // 1) seed with the best single constant split
+    var bestConst = 0.30, bestScore = null;
+    for (var s = 0; s <= 100; s += 5) {
+      var yc = years.map(function (y) { return { fromYear: y.fromYear, amount: y.amount, allocPension: s / 100 }; });
+      var sc = scoreOf(evalYears(yc));
+      if (bestScore === null || sc < bestScore) { bestScore = sc; bestConst = s / 100; }
+    }
+    for (var z = 0; z < years.length; z++) years[z].allocPension = bestConst;
+
+    // 2) coordinate descent: refine each year's split, a couple of passes
+    var steps = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < years.length; i++) {
+        var keep = years[i].allocPension;
+        var kScore = scoreOf(evalYears(years));
+        for (var k = 0; k < steps.length; k++) {
+          years[i].allocPension = steps[k];
+          var sc2 = scoreOf(evalYears(years));
+          if (sc2 < kScore - 1e-9) { kScore = sc2; keep = steps[k]; }
+        }
+        years[i].allocPension = keep;
+      }
+    }
+
+    // 2b) smoothing: carry the previous year's split forward whenever doing so
+    // doesn't push the optionality age later — turns equivalent-but-jagged
+    // allocations into clean, contiguous periods.
+    for (var m = 1; m < years.length; m++) {
+      var curAge = evalYears(years).age;
+      var savedAlloc = years[m].allocPension;
+      years[m].allocPension = years[m - 1].allocPension;
+      if (evalYears(years).age > curAge + 1e-9) years[m].allocPension = savedAlloc;
+    }
+
+    // 3) collapse identical consecutive years into periods; drop years past the stop
+    work.savingsPlan = years;
+    var achieved = findOptionalityAge(work);
+    var lastRelevant = (achieved == null) ? years.length : Math.min(years.length - 1, Math.ceil(achieved - startAge));
+    var plan = [];
+    for (var j = 0; j < years.length; j++) {
+      if (j > lastRelevant) break;
+      var y = years[j];
+      var prev = plan[plan.length - 1];
+      if (prev && prev.amount === y.amount && Math.abs(prev.allocPension - y.allocPension) < 1e-9) continue;
+      plan.push({ fromYear: y.fromYear, amount: y.amount, allocPension: Math.round(y.allocPension * 100) / 100 });
+    }
+    if (!plan.length) plan.push({ fromYear: 0, amount: years[0].amount, allocPension: bestConst });
+    return { savingsPlan: plan, optionalityAge: achieved, baselineAge: baseAge, changed: true };
+  }
+
+  // ---- Recommendation engine (this year's split by strategy) ----------
+  function splitThreeWays(amount, allocPension) {
+    var pension = amount * allocPension;
+    var accessible = amount - pension;
+    var isa = Math.min(20000, accessible);
+    var gia = Math.max(0, accessible - isa);
+    return { pension: Math.round(pension), isa: Math.round(isa), gia: Math.round(gia) };
+  }
+  function firstPeriodIdx(plan) { var idx = 0; for (var i = 1; i < plan.length; i++) if ((plan[i].fromYear || 0) < (plan[idx].fromYear || 0)) idx = i; return idx; }
+  function ageLegacyForAlloc(inp, allocP) {
+    var x = JSON.parse(JSON.stringify(inp));
+    var plan = normalisePlan(x).map(function (s) { return { fromYear: s.fromYear || 0, amount: s.amount, allocPension: s.allocPension }; });
+    plan[firstPeriodIdx(plan)].allocPension = allocP;
+    x.savingsPlan = plan; x.plannedStopAge = null;
+    var age = findOptionalityAge(x);
+    if (age == null) return { age: null, legacy: -1e18 };
+    var sim = simulate(x, age);
+    return { age: age, legacy: sim.endWorth };
+  }
+  // Returns the recommended this-year split for four strategies.
+  function recommendation(inp) {
+    var plan = normalisePlan(inp);
+    var amount = plan[firstPeriodIdx(plan)].amount || 0;
+    // one sweep gives freedom-min and legacy-max points; 0.5 and 1.0 land on grid
+    var grid = {};
+    var freedomAlloc = 0.30, bestAge = 1e9;
+    for (var s = 0; s <= 100; s += 5) {
+      var r = ageLegacyForAlloc(inp, s / 100); grid[s] = r;
+      if (r.age != null && r.age < bestAge - 1e-9) { bestAge = r.age; freedomAlloc = s / 100; }
+    }
+    // Lowest Risk = biggest safety buffer WHILE keeping Freedom within ~2 years
+    // of the earliest (otherwise "lowest risk" just becomes "retire much later").
+    var riskAlloc = freedomAlloc, bestLegacy = -1e18;
+    for (var s2 = 0; s2 <= 100; s2 += 5) {
+      var g = grid[s2];
+      if (g.age != null && g.age <= bestAge + 2 && g.legacy > bestLegacy + 1e-6) { bestLegacy = g.legacy; riskAlloc = s2 / 100; }
+    }
+    function pack(key, label, alloc, blurb) {
+      var g = grid[Math.round(alloc * 100)] || ageLegacyForAlloc(inp, alloc);
+      return { key: key, label: label, allocPension: alloc, split: splitThreeWays(amount, alloc), age: g.age, legacy: g.legacy, blurb: blurb };
+    }
+    var strategies = [
+      pack('freedom', 'Maximise Freedom', freedomAlloc, 'Earliest Freedom Age.'),
+      pack('balanced', 'Balanced', 0.50, 'Even split of pension and accessible.'),
+      pack('pension', 'Maximise Pension', 1.00, 'Biggest long-term pension pot.'),
+      pack('lowrisk', 'Lowest Risk', riskAlloc, 'Largest safety buffer at life expectancy.')
+    ];
+    return { amount: amount, strategies: strategies, recommendedKey: 'freedom' };
+  }
+
+  // ---- Freedom buffer: how much headroom before the Freedom Age slips -----
+  function freedomBuffer(inp) {
+    var base = findOptionalityAge(inp);
+    if (base === null) return null;
+    var tol = 1.0; // headroom before the Freedom Age slips by a whole year
+    function ageSpend(d) { return findOptionalityAge(withPatch(inp, { bridgeSpending: inp.bridgeSpending + d, retirementSpending: inp.retirementSpending + d })); }
+    var lo = 0, hi = Math.max(inp.retirementSpending, 50000) + 100000, g = 0;
+    while (g < 12) { var ah = ageSpend(hi); if (ah != null && ah <= base + tol) { hi *= 1.7; g++; } else break; }
+    for (var i = 0; i < 22; i++) { var m = (lo + hi) / 2; var a = ageSpend(m); if (a != null && a <= base + tol) lo = m; else hi = m; }
+    var spendHeadroom = lo;
+    function ageRet(d) { return findOptionalityAge(withPatch(inp, { pensionReturn: inp.pensionReturn - d, isaReturn: inp.isaReturn - d, giaReturn: inp.giaReturn - d, bridgeReturn: inp.bridgeReturn - d })); }
+    var rlo = 0, rhi = 0.12, g2 = 0;
+    while (g2 < 8) { var rah = ageRet(rhi); if (rah != null && rah <= base + tol) { rhi += 0.04; g2++; } else break; }
+    for (var j = 0; j < 22; j++) { var rm = (rlo + rhi) / 2; var ra = ageRet(rm); if (ra != null && ra <= base + tol) rlo = rm; else rhi = rm; }
+    return { spendHeadroom: Math.max(0, spendHeadroom), returnHeadroom: Math.max(0, rlo), baseAge: base };
+  }
+
+  // ---- Decision comparator: "I've got £X — where should it go?" ----------
+  function decisionComparator(inp, amount) {
+    var dests = [
+      { key: 'pension', label: 'Into pension' },
+      { key: 'isa', label: 'Into ISA' },
+      { key: 'gia', label: 'Into GIA' },
+      { key: 'cash', label: 'Keep as cash' }
+    ];
+    if ((inp.mortgage || 0) > 0) dests.push({ key: 'mortgage', label: 'Overpay mortgage' });
+    var out = [];
+    for (var i = 0; i < dests.length; i++) {
+      var x = JSON.parse(JSON.stringify(inp));
+      if (dests[i].key === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); }
+      else { x.cashEvents = (x.cashEvents || []).concat([{ name: 'Lump sum', amount: amount, yearsFromNow: 0, direction: 'in', account: dests[i].key }]); }
+      var r = compute(x);
+      out.push({ key: dests[i].key, label: dests[i].label, freedomAge: r.optionalityAge, survives: r.planSurvives,
+        pension: r.pension.atAccess, bridge: r.accessible.atOptionality, income: r.retirement.sustainableIncome, legacy: r.endWorth });
+    }
+    out.sort(function (a, b) { var aa = a.freedomAge == null ? 1e6 : a.freedomAge, bb = b.freedomAge == null ? 1e6 : b.freedomAge; if (Math.abs(aa - bb) > 0.05) return aa - bb; return b.income - a.income; });
+    if (out.length) out[0].best = true;
+    return out;
+  }
+
+  // ---- Life milestones for the timeline -------------------------------
+  function milestones(inp, result) {
+    var m = [];
+    m.push({ age: inp.currentAge, key: 'today', label: 'Today', section: 'personal' });
+    (inp.cashEvents || []).forEach(function (e) {
+      var evAge = (e.yearsFromNow != null) ? inp.currentAge + e.yearsFromNow : e.age;
+      if (evAge != null && evAge >= inp.currentAge) m.push({ age: evAge, key: 'event', label: e.name, section: 'events' });
+    });
+    var coast = coastFireAge(inp);
+    if (coast != null && coast >= inp.currentAge) m.push({ age: coast, key: 'coast', label: 'Coast FIRE', section: 'pension' });
+    if (result && result.optionalityAge != null) m.push({ age: result.effectiveStop, key: 'freedom', label: 'Freedom Age', section: 'personal', highlight: true });
+    m.push({ age: inp.pensionAccessAge, key: 'access', label: 'Pension access', section: 'personal' });
+    if (inp.statePensionIncluded) m.push({ age: inp.statePensionAge, key: 'statepension', label: 'State Pension', section: 'personal' });
+    m.push({ age: inp.lifeExpectancy, key: 'life', label: 'Life expectancy', section: 'personal' });
+    m.sort(function (a, b) { return a.age - b.age; });
+    return m;
+  }
+
+  var Engine = {
+    DEFAULTS: DEFAULTS,
+    simulate: simulate,
+    findOptionalityAge: findOptionalityAge,
+    compute: compute,
+    opportunities: opportunities,
+    risks: risks,
+    optimisePlan: optimisePlan,
+    recommendation: recommendation,
+    freedomBuffer: freedomBuffer,
+    decisionComparator: decisionComparator,
+    milestones: milestones,
+    requiredPensionAtAccess: requiredPensionAtAccess,
+    requiredBridgeValue: requiredBridgeValue,
+    coastFireAge: coastFireAge
+  };
+
+  root.Engine = Engine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = Engine;
+})(typeof window !== 'undefined' ? window : this);
+</script>
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useRef } = React;
+const R = window.Recharts || {};
+const { ResponsiveContainer, LineChart, Line, AreaChart, Area, ComposedChart, Bar,
+        XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell } = R;
+
+/* ---------- formatting helpers ---------- */
+const gbp = (x, dp) => {
+  if (x == null || isNaN(x)) return '—';
+  return new Intl.NumberFormat('en-GB', { style:'currency', currency:'GBP',
+    minimumFractionDigits: dp||0, maximumFractionDigits: dp||0 }).format(x);
+};
+const gbpC = (x) => {
+  if (x == null || isNaN(x)) return '—';
+  const a = Math.abs(x);
+  if (a >= 1e6) return '£' + (x/1e6).toFixed(2).replace(/\.00$/,'') + 'M';
+  if (a >= 1e3) return '£' + Math.round(x/1e3) + 'k';
+  return '£' + Math.round(x);
+};
+const ageStr = (a) => a == null ? '—' : a.toFixed(1);
+const monthsStr = (m) => {
+  const s = Math.round(Math.abs(m)); const y = Math.floor(s/12); const mo = s%12;
+  if (y === 0) return mo + ' month' + (mo===1?'':'s');
+  if (mo === 0) return y + ' year' + (y===1?'':'s');
+  return y + 'y ' + mo + 'm';
+};
+
+/* ---------- theme-aware chart colours ---------- */
+function useColors() {
+  const read = () => {
+    const cs = getComputedStyle(document.documentElement);
+    const g = (n) => cs.getPropertyValue(n).trim();
+    return {
+      pension:g('--series-pension'), isa:g('--series-isa'), gia:g('--series-gia'),
+      cash:g('--series-cash'), home:g('--series-home'), red:g('--series-red'),
+      grid:g('--grid'), axis:g('--muted'), baseline:g('--baseline'),
+      good:g('--good'), text:g('--text-secondary')
+    };
+  };
+  const [c, setC] = useState(read);
+  useEffect(() => {
+    const obs = new MutationObserver(() => setC(read()));
+    obs.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+    return () => obs.disconnect();
+  }, []);
+  return c;
+}
+
+/* ---------- robust number input ----------
+   Keeps a local text buffer and selects-all on focus, so typing a new
+   number always REPLACES the old one (no stray leading zero) while the
+   dashboard still recalculates live on every keystroke. */
+function NumInput({ value, onChange, step, min, className, style, title, ariaLabel }) {
+  const [txt, setTxt] = useState(value == null ? '' : String(value));
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setTxt(value == null ? '' : String(value)); }, [value]);
+  const handle = (raw) => {
+    setTxt(raw);
+    if (raw === '' || raw === '-' || raw === '.') { onChange(0); return; }
+    const n = parseFloat(raw);
+    if (!isNaN(n)) onChange(n);
+  };
+  return (
+    <input type="number" className={className} style={style} step={step || 'any'} min={min}
+      title={title} aria-label={ariaLabel} value={txt} inputMode="decimal"
+      onFocus={e => { focused.current = true; e.target.select(); }}
+      onBlur={() => { focused.current = false; let n = parseFloat(txt); if (isNaN(n)) n = 0; if (min != null) n = Math.max(min, n); setTxt(String(n)); onChange(n); }}
+      onChange={e => handle(e.target.value)} />
+  );
+}
+
+/* ---------- small input components ---------- */
+function Num({ label, value, onChange, step, prefix, suffix, min }) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="row">
+        {prefix && <span className="muted" style={{fontSize:13}}>{prefix}</span>}
+        <NumInput value={value} onChange={onChange} step={step} min={min != null ? min : 0} ariaLabel={label} />
+        {suffix && <span className="muted" style={{fontSize:13}}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+function Pct({ label, value, onChange }) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="row">
+        <NumInput value={+(value*100).toFixed(2)} step="0.1" onChange={v => onChange((v||0)/100)} ariaLabel={label} />
+        <span className="muted" style={{fontSize:13}}>%</span>
+      </div>
+    </div>
+  );
+}
+function Section({ title, children, open, span, id }) {
+  return (
+    <details className={'acc' + (span ? ' span-all' : '')} open={open} id={id}>
+      <summary>{title}<span className="chev">▶</span></summary>
+      <div className="body">{children}</div>
+    </details>
+  );
+}
+
+/* ---------- KPI card ---------- */
+function StatusTag({ s }) {
+  const map = { ahead:'Ahead', ontrack:'On track', behind:'Behind' };
+  return <span className={'tag '+s}>{map[s]}</span>;
+}
+function KpiCard({ title, main, rows, status, reason }) {
+  return (
+    <div className="card">
+      <h3>{title}{status && <StatusTag s={status} />}</h3>
+      <div className="v tnum">{main}</div>
+      {reason && <div className={'kpi-reason '+(reason.good?'good':'bad')}>{reason.text}</div>}
+      {rows.map((r,i) => (
+        <div className="kv" key={i}><span className="k">{r[0]}</span><span className="val tnum">{r[1]}</span></div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- custom tooltip ---------- */
+function ChartTip({ active, payload, label, fmt }) {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="tooltip">
+      <div className="t-age">Age {label}</div>
+      {payload.filter(p => p.value != null).map((p,i) => (
+        <div className="t-row" key={i}>
+          <span className="nm"><span className="sw" style={{background:p.color||p.stroke}}></span>{p.name}</span>
+          <span className="amt">{(fmt||gbpC)(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ============================================================= */
+function App() {
+  const C = useColors();
+  const [inputs, setInputs] = useState(() => {
+    let base = JSON.parse(JSON.stringify(Engine.DEFAULTS));
+    try { const s = localStorage.getItem('optionality.inputs');
+      if (s) base = Object.assign({}, JSON.parse(JSON.stringify(Engine.DEFAULTS)), JSON.parse(s)); } catch(e){}
+    if (!Array.isArray(base.savingsPlan) || !base.savingsPlan.length) {
+      base.savingsPlan = [{ fromYear:0, amount: base.annualSavings != null ? base.annualSavings : 10000,
+        allocPension: base.allocPension != null ? base.allocPension : 0.30 }];
+    }
+    return base;
+  });
+  const [dark, setDark] = useState(() => {
+    try { return localStorage.getItem('optionality.dark') === '1'; } catch(e){ return false; }
+  });
+  const [showAllRows, setShowAllRows] = useState(false);
+  const [realTerms, setRealTerms] = useState(() => {
+    try { const v = localStorage.getItem('optionality.realTerms'); return v==null ? true : v==='1'; } catch(e){ return true; }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    try { localStorage.setItem('optionality.dark', dark ? '1':'0'); } catch(e){}
+  }, [dark]);
+  useEffect(() => { try { localStorage.setItem('optionality.realTerms', realTerms?'1':'0'); } catch(e){} }, [realTerms]);
+  useEffect(() => {
+    try { localStorage.setItem('optionality.inputs', JSON.stringify(inputs)); } catch(e){}
+  }, [inputs]);
+
+  const [optMsg, setOptMsg] = useState(null);
+  const set = (patch) => { setOptMsg(null); setInputs(prev => Object.assign({}, prev, patch)); };
+
+  const optimiseSavings = () => {
+    const res = Engine.optimisePlan(inputs);
+    if (!res.changed) { setOptMsg({ ok:false, text:'Add some annual savings first, then I can optimise the split.' }); return; }
+    const before = res.baselineAge, after = res.optionalityAge;
+    setInputs(prev => Object.assign({}, prev, { savingsPlan: res.savingsPlan, plannedStopAge: null }));
+    if (before != null && after != null && before - after > 0.05) {
+      setOptMsg({ ok:true, text:'Optimised — earliest optionality age '+ageStr(before)+' → '+ageStr(after)+' ('+monthsStr(Math.round((before-after)*12))+' earlier). Applied the split year by year below.' });
+    } else if (after != null) {
+      setOptMsg({ ok:true, text:'Your allocation is already about optimal for the earliest age ('+ageStr(after)+'). I tidied the split below.' });
+    } else {
+      setOptMsg({ ok:false, text:'Even the best split can’t reach optionality with these assumptions — try saving more or spending less.' });
+    }
+  };
+
+  const result = useMemo(() => Engine.compute(inputs), [inputs]);
+  const opps = useMemo(() => Engine.opportunities(inputs), [inputs]);
+  const rks = useMemo(() => Engine.risks(inputs), [inputs]);
+  const rec = useMemo(() => Engine.recommendation(inputs), [inputs]);
+  const buffer = useMemo(() => Engine.freedomBuffer(inputs), [inputs]);
+  const [strategy, setStrategy] = useState('freedom');
+  const [compareAmount, setCompareAmount] = useState(100000);
+  const comparison = useMemo(() => Engine.decisionComparator(inputs, compareAmount), [inputs, compareAmount]);
+  const chosenStrat = rec.strategies.find(s => s.key === strategy) || rec.strategies[0];
+  const mstones = useMemo(() => Engine.milestones(inputs, result), [inputs, result]);
+  const applyPatch = (patch) => set(Object.assign({}, patch));
+  const applyStrategy = (allocP) => {
+    const p = (inputs.savingsPlan && inputs.savingsPlan.length) ? inputs.savingsPlan : [{fromYear:0,amount:0,allocPension:0.30}];
+    let idx=0; p.forEach((s,i)=>{ if((s.fromYear||0)<(p[idx].fromYear||0)) idx=i; });
+    set({ savingsPlan: p.map((s,i)=> i===idx ? Object.assign({},s,{allocPension:allocP}) : s) });
+  };
+  const nextEvent = useMemo(() => {
+    const evs = (inputs.cashEvents||[]).map(e => {
+      const yrs = e.yearsFromNow!=null ? e.yearsFromNow : (e.age!=null ? e.age-inputs.currentAge : null);
+      return yrs!=null ? { name:e.name, amount:e.amount, direction:e.direction||'in', yrs } : null;
+    }).filter(e=>e && e.yrs>0.01 && e.direction==='in').sort((a,b)=>a.yrs-b.yrs);
+    if (!evs.length) return null;
+    return { name:evs[0].name, amount:evs[0].amount, inMonths: Math.max(1, Math.round(evs[0].yrs*12)) };
+  }, [inputs]);
+  const openSection = (key) => {
+    const map = { personal:'sec-personal', pension:'sec-pension', events:'sec-events' };
+    const el = document.getElementById(map[key]);
+    if (el) { el.open = true; el.scrollIntoView({behavior:'smooth', block:'center'}); }
+  };
+
+  const rows = result.rows;
+  const nw = result.netWorth;
+  const totalNW = nw.total + nw.homeEquity;
+
+  /* chart data */
+  // real-terms deflator: express future £ in today's money when realTerms is on
+  const rf = (age) => realTerms ? 1 / Math.pow(1 + inputs.inflation, (age||inputs.currentAge) - inputs.currentAge) : 1;
+  const money = (v, age) => gbpC(v * rf(age));
+  const reqLine = realTerms ? result.pension.required * rf(inputs.pensionAccessAge) : result.pension.required;
+
+  const chartData = rows.map(r => ({
+    age: r.age, pension: r.pensionEnd * rf(r.age), required: reqLine,
+    isa: r.isa * rf(r.age), gia: r.gia * rf(r.age), cash: r.cash * rf(r.age),
+    home: nw.homeEquity * rf(r.age), net: (r.netWorth + nw.homeEquity) * rf(r.age),
+    contributions: r.contributions * rf(r.age),
+    withdrawals: -r.withdrawals * rf(r.age), pensionWithdrawals: -r.pensionWithdraw * rf(r.age)
+  }));
+
+  const confMap = { high:['good','High confidence'], medium:['med','Medium confidence'], low:['low','Low confidence'] };
+  const conf = confMap[result.confidence];
+  // headline age: the chosen (overridden) stop age, else the earliest achievable
+  const heroAge = result.overridden ? result.effectiveStop : (result.achievable ? result.optionalityAge : null);
+
+  // plain-language reason behind the confidence rating
+  const legacy = result.endWorth;
+  const legacyYears = inputs.retirementSpending > 0 ? legacy / inputs.retirementSpending : 0;
+  const yearsClause = (legacyYears >= 1 && legacyYears <= 60) ? ' (≈' + Math.round(legacyYears) + ' years of spending)' : '';
+  let confidenceWhy;
+  if (!result.planSurvives && result.failPhase === 'bridge')
+    confidenceWhy = 'You end with about ' + gbpC(legacy) + ' at age ' + inputs.lifeExpectancy + ', but most is locked in your pension until age ' + inputs.pensionAccessAge + '. Your accessible savings (ISA/GIA/cash) run dry around age ' + (result.failAge!=null?Math.floor(result.failAge):'—') + ', so you can’t fund the bridge to pension access — you’re about ' + gbpC(result.bridgeShortfall) + ' short of accessible savings. Fix it with a later stop age, more outside your pension, or an earlier access age — not by saving more into the pension.';
+  else if (!result.planSurvives)
+    confidenceWhy = 'The plan genuinely runs out of money around age ' + (result.failAge!=null?Math.floor(result.failAge):inputs.lifeExpectancy) + ' — spending outpaces what your savings and pensions can cover. Stop later, save more, or trim spending.';
+  else if (result.confidence === 'high')
+    confidenceWhy = 'Roomy cushion — about ' + gbpC(legacy) + ' left at age ' + inputs.lifeExpectancy + yearsClause + ', so the plan absorbs weaker returns or higher costs.';
+  else if (result.confidence === 'medium')
+    confidenceWhy = (!result.overridden
+      ? 'This is the earliest age the plan just survives, so there’s little spare by design (~' + gbpC(legacy) + ' left at ' + inputs.lifeExpectancy + '). Push the stop age later or save more to build a buffer.'
+      : 'Some cushion — about ' + gbpC(legacy) + ' left at age ' + inputs.lifeExpectancy + yearsClause + '.');
+  else
+    confidenceWhy = 'Very tight — almost nothing left at age ' + inputs.lifeExpectancy + '. Small changes in returns, inflation or spending could break the plan.';
+
+  /* CSV export (nominal £, full precision) */
+  const exportCsv = () => {
+    const head = ['Age','Phase','Pension Start','Pension In','Pension Out','Pension Growth','Pension End',
+      'ISA/GIA Start','ISA/GIA In','ISA/GIA Out','ISA/GIA Growth','ISA/GIA End','State Pension','Net Worth','Notes'];
+    const lines = [head.join(',')].concat(rows.map(r => [
+      r.age, r.phase, r.pensionStart, r.pensionIn, r.pensionWithdraw, r.pensionGrowth, r.pensionEnd,
+      r.accessStart, r.accessIn, r.accessOut, r.growth, r.accessEnd, r.statePension, r.netWorth,
+      '"'+(r.notes||'')+'"'].join(',')));
+    const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='optionality-cashflow.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const reset = () => { if (confirm('Reset all inputs to defaults?')) setInputs(JSON.parse(JSON.stringify(Engine.DEFAULTS))); };
+
+  /* cash events */
+  const updEvent = (i, patch) => {
+    const ev = inputs.cashEvents.map((e,idx) => idx===i ? Object.assign({},e,patch) : e);
+    set({ cashEvents: ev });
+  };
+  const addEvent = () => set({ cashEvents: inputs.cashEvents.concat([{ name:'New event', amount:10000, yearsFromNow:5, direction:'in', account:'gia', destination:'gia' }]) });
+
+  /* savings plan */
+  const plan = (inputs.savingsPlan && inputs.savingsPlan.length) ? inputs.savingsPlan : [{fromYear:0,amount:0,allocPension:0.30}];
+  let earliestIdx = 0; plan.forEach((s,i)=>{ if ((s.fromYear||0) < (plan[earliestIdx].fromYear||0)) earliestIdx = i; });
+  const seg0 = plan[earliestIdx];
+  const seg0alloc = seg0.allocPension != null ? seg0.allocPension : 0.30;
+  const updSeg = (i, patch) => set({ savingsPlan: plan.map((s,idx)=> idx===i ? Object.assign({},s,patch) : s) });
+  const addSeg = () => { const last = plan[plan.length-1]; set({ savingsPlan: plan.concat([{ fromYear:(last.fromYear||0)+1, amount:last.amount, allocPension:last.allocPension }]) }); };
+  const delSeg = (i) => { if (plan.length<=1) return; set({ savingsPlan: plan.filter((_,idx)=>idx!==i) }); };
+  const delEvent = (i) => set({ cashEvents: inputs.cashEvents.filter((_,idx)=>idx!==i) });
+
+  /* success lights */
+  const lightFor = (s) => s==='ahead' ? 'g' : s==='ontrack' ? 'g' : 'r';
+  const overall = (result.planSurvives && result.achievable) ? (result.confidence==='high'?'g':result.confidence==='medium'?'a':'r') : 'r';
+
+  const visibleRows = showAllRows ? rows : rows.filter((r,i) => i < 3 || r.phase!=='accumulation' || rows[i+1] && rows[i+1].phase!=='accumulation' || i%2===0).slice(0, 40);
+
+  return (
+    <div className="wrap">
+      {/* top bar */}
+      <div className="topbar">
+        <div className="brand"><span className="dot"></span><h1>Financial Optionality</h1>
+          <span className="muted" style={{fontSize:13}}>personal CFO dashboard</span></div>
+        <div className="toolbar">
+          <button className="btn" onClick={()=>setRealTerms(!realTerms)} title="Switch tables and charts between today's money (real terms) and future pounds (nominal)">{realTerms?'£ Today’s money':'£ Future (nominal)'}</button>
+          <button className="btn" onClick={()=>setDark(!dark)}>{dark?'☀ Light':'☾ Dark'}</button>
+          <button className="btn" onClick={exportCsv}>⬇ CSV</button>
+          <button className="btn" onClick={()=>window.print()}>⎙ Print</button>
+          <button className="btn" onClick={reset}>↺ Reset</button>
+        </div>
+      </div>
+
+      {/* HERO */}
+      <div className="hero">
+        <div>
+          <div className="lbl">🎯 Freedom Age {result.overridden && <span className="manual-tag">manual</span>}</div>
+          <div className="big tnum">{heroAge != null ? ageStr(heroAge) : 'Not yet'}
+            {heroAge != null && <span className="yrs"> years</span>}</div>
+          <div className="sub">{
+            result.overridden
+              ? (result.planSurvives
+                  ? 'Your chosen stop age — funds your lifestyle to age '+inputs.lifeExpectancy+'. Earliest possible is '+ageStr(result.optionalityAge)+'.'
+                  : (result.failPhase==='bridge'
+                      ? '⚠ Can’t bridge to pension access at this age — your accessible savings run dry near age '+(result.failAge!=null?Math.floor(result.failAge):'—')+' (pension is locked until '+inputs.pensionAccessAge+'). Earliest workable age is '+(result.achievable?ageStr(result.optionalityAge):'later')+'.'
+                      : '⚠ Stopping this early runs out of money near age '+(result.failAge!=null?Math.floor(result.failAge):inputs.lifeExpectancy)+'. Earliest sustainable age is '+(result.achievable?ageStr(result.optionalityAge):'later than shown')+'.'))
+              : (result.achievable
+                  ? 'The earliest age you can stop working permanently and keep your lifestyle to age '+inputs.lifeExpectancy+'.'
+                  : 'On current assumptions the plan never fully funds age '+inputs.lifeExpectancy+'. Adjust savings, spending or returns below.')
+          }</div>
+          <div className="hero-plan">
+            <span className="hp-lbl">Plan to stop at</span>
+            <NumInput className="inline-num" style={{width:70,padding:'5px 8px',fontSize:15,textAlign:'center'}} min={0} step="0.1"
+              value={result.effectiveStop} ariaLabel="Planned stop age"
+              onChange={v => set({ plannedStopAge: v })} />
+            <button className="btn primary" onClick={()=>set({ plannedStopAge: null })} title="Snap to the earliest achievable age">⚡ Optimise</button>
+            {result.overridden && result.achievable &&
+              <span className="hp-ref">earliest possible <b>{ageStr(result.optionalityAge)}</b></span>}
+          </div>
+        </div>
+        <div className="hero-right">
+          <span className={'pill '+conf[0]} title={confidenceWhy}><span className="ic"></span>{conf[1]}</span>
+          <div className="conf-why">{confidenceWhy}</div>
+          <div className="hero-target">Target age{' '}
+            <NumInput className="inline-num" style={{width:62,padding:'3px 7px',fontSize:14,textAlign:'center'}} min={0}
+              value={inputs.targetOptionalityAge} ariaLabel="Target optionality age"
+              onChange={v => set({ targetOptionalityAge: v })} />
+            {result.achievable && inputs.targetOptionalityAge ? <span> ·{' '}
+              {result.yearsEarlyLate >= 0
+                ? <b style={{color:'var(--good-text)'}}>{monthsStr(result.yearsEarlyLate*12)} early</b>
+                : <b style={{color:'var(--critical)'}}>{monthsStr(result.yearsEarlyLate*12)} late</b>}</span> : null}
+          </div>
+        </div>
+      </div>
+
+      {/* LIFE TIMELINE */}
+      <div className="panel timeline-panel">
+        <div className="chart-h" style={{marginBottom:12}}><h2>Life timeline</h2>
+          <span className="muted" style={{fontSize:12}}>your plan's key milestones · click to jump to its inputs</span></div>
+        <div className="timeline">
+          <div className="tl-line"></div>
+          {mstones.map((m,i) => (
+            <button className={'tl-node '+(m.highlight?'hi':'')+' tl-'+m.key} key={i}
+              onClick={()=>openSection(m.section)} title={m.label+' — age '+ageStr(m.age)}>
+              <span className="tl-dot"></span>
+              <span className="tl-age">{Math.round(m.age)}</span>
+              <span className="tl-lbl">{m.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* THIS YEAR'S ACTIONS + RECOMMENDATION */}
+      <div className="grid2 actions-grid">
+        <div className="panel action-panel">
+          <div className="chart-h" style={{marginBottom:4}}><h2>⭐ What should I do this year?</h2></div>
+          <div className="desc">Recommended home for this year's savings of <b style={{color:'var(--text-primary)'}}>{gbp(rec.amount)}</b>.</div>
+          <div className="strat-tabs">
+            {rec.strategies.map(s => (
+              <button key={s.key} className={'strat-tab'+(strategy===s.key?' on':'')} onClick={()=>setStrategy(s.key)}>{s.label}</button>
+            ))}
+          </div>
+          <div className="alloc-row">
+            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-pension)'}}>Pension</div><div className="ac-v tnum">{gbp(chosenStrat.split.pension)}</div></div>
+            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-isa)'}}>ISA</div><div className="ac-v tnum">{gbp(chosenStrat.split.isa)}</div></div>
+            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-gia)'}}>GIA</div><div className="ac-v tnum">{gbp(chosenStrat.split.gia)}</div></div>
+          </div>
+          <div className="alloc-why">{
+            chosenStrat.age!=null
+              ? (chosenStrat.key==='freedom' ? 'Reaches Freedom Age '+ageStr(chosenStrat.age)+' — the earliest achievable with this year’s savings.'
+                : chosenStrat.key==='pension' ? 'Biggest long-term pension pot; Freedom Age '+ageStr(chosenStrat.age)+' (later, but ~'+gbpC(chosenStrat.legacy)+' legacy).'
+                : chosenStrat.key==='lowrisk' ? 'Keeps Freedom near the earliest ('+ageStr(chosenStrat.age)+') while building the biggest safety buffer (~'+gbpC(chosenStrat.legacy)+' at '+inputs.lifeExpectancy+').'
+                : 'An even split — Freedom Age '+ageStr(chosenStrat.age)+', ~'+gbpC(chosenStrat.legacy)+' legacy.')
+              : 'Not achievable with these assumptions.'
+          }</div>
+          <button className="btn primary" style={{marginTop:12}} onClick={()=>applyStrategy(chosenStrat.allocPension)}>Apply this allocation →</button>
+          <div className="checklist">
+            {rec.amount>0 && <div className="chk"><span className="ck">✓</span> Use pension allowance: <b>{gbp(chosenStrat.split.pension)}</b>{chosenStrat.split.pension>=60000?' (annual limit)':''}</div>}
+            {chosenStrat.split.isa>0 && <div className="chk"><span className="ck">✓</span> Fund ISA: <b>{gbp(chosenStrat.split.isa)}</b>{chosenStrat.split.isa>=20000?' (£20k allowance maxed)':''}</div>}
+            {chosenStrat.split.gia>0 && <div className="chk"><span className="ck">✓</span> Invest remainder in GIA: <b>{gbp(chosenStrat.split.gia)}</b></div>}
+            {inputs.mortgage>0 && <div className="chk"><span className="ck">○</span> Mortgage overpay isn’t recommended for Freedom Age (home equity isn’t drawn on).</div>}
+            {nextEvent && <div className="chk"><span className="ck">◷</span> {nextEvent.name} expected in {nextEvent.inMonths} month{nextEvent.inMonths===1?'':'s'} ({gbpC(nextEvent.amount)}).</div>}
+            {result.achievable && inputs.targetOptionalityAge ? <div className="chk"><span className="ck">{result.yearsEarlyLate>=0?'✓':'!'}</span> You’re <b style={{color:result.yearsEarlyLate>=0?'var(--good-text)':'var(--critical)'}}>{monthsStr(result.yearsEarlyLate*12)} {result.yearsEarlyLate>=0?'ahead of':'behind'}</b> your target age {inputs.targetOptionalityAge}.</div> : null}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="chart-h" style={{marginBottom:4}}><h2>Headline metrics</h2></div>
+          <div className="desc">The numbers that tell you how free — and how robust — your plan is.</div>
+          <div className="headline-tiles">
+            <div className="htile"><div className="ht-k">Coast Pension Age</div><div className="ht-v tnum">{result.pension.coastFireAge!=null?ageStr(result.pension.coastFireAge):'—'}</div>
+              <div className="ht-s">{result.pension.coastFireAge!=null?'From here your pension needs no more contributions to hit target.':'Your pension still needs contributions to reach target.'}</div></div>
+            <div className="htile"><div className="ht-k">Spending buffer</div><div className="ht-v tnum" style={{color:'var(--good-text)'}}>{buffer?('+'+gbpC(buffer.spendHeadroom)):'—'}</div>
+              <div className="ht-s">Extra you could spend each year before your Freedom Age slips by a year.</div></div>
+            <div className="htile"><div className="ht-k">Returns buffer</div><div className="ht-v tnum" style={{color:'var(--good-text)'}}>{buffer?('−'+(buffer.returnHeadroom*100).toFixed(1)+'%'):'—'}</div>
+              <div className="ht-s">How far returns could fall (p.a.) before your Freedom Age slips by a year.</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI CARDS */}
+      <div className="kpis">
+        <KpiCard title="Pension" status={result.pension.status}
+          main={gbpC(result.pension.atAccess)}
+          reason={{good: result.pension.difference>=0, text:(result.pension.difference>=0?'+':'−')+gbpC(Math.abs(result.pension.difference))+(result.pension.difference>=0?' ahead of target':' short of target')}}
+          rows={[['Projected @ '+inputs.pensionAccessAge, gbpC(result.pension.atAccess)],
+                 ['Need', gbpC(result.pension.required)],
+                 ['Coast Pension age', result.pension.coastFireAge==null?'—':ageStr(result.pension.coastFireAge)]]} />
+        <KpiCard title="Bridge Fund" status={result.accessible.status}
+          main={gbpC(result.accessible.atOptionality)}
+          reason={{good: result.accessible.difference>=0, text:(result.accessible.difference>=0?'+':'−')+gbpC(Math.abs(result.accessible.difference))+(result.accessible.difference>=0?' surplus':' short of bridge')}}
+          rows={[['Need to bridge to '+inputs.pensionAccessAge, gbpC(result.accessible.requiredBridge)],
+                 ['ISA/GIA now', gbpC(result.accessible.current)],
+                 ['Left @ access', gbpC(result.accessible.remainingAtAccess)]]} />
+        <KpiCard title="Lifetime Income" status={result.retirement.status}
+          main={gbpC(result.retirement.sustainableIncome)+'/yr'}
+          reason={{good: result.retirement.sustainableIncome>=result.retirement.target, text:(result.retirement.sustainableIncome>=result.retirement.target?'+':'−')+gbpC(Math.abs(result.retirement.sustainableIncome-result.retirement.target))+'/yr vs target'}}
+          rows={[['Target spend', gbpC(result.retirement.target)+'/yr'],
+                 ['State pension', gbpC(result.retirement.statePension)+'/yr'],
+                 ['Est. legacy @ '+inputs.lifeExpectancy, gbpC(result.retirement.legacy)]]} />
+        <KpiCard title="Investable net worth"
+          main={gbpC(nw.total)}
+          rows={[['Pension', gbpC(nw.pension)],
+                 ['ISA / GIA', gbpC(nw.isa+nw.gia)],
+                 ['Cash', gbpC(nw.cash)]].concat(nw.homeEquity>0?[['+ Home equity', gbpC(nw.homeEquity)]]:[])} />
+      </div>
+
+      {/* DECISION COMPARATOR */}
+      <div className="panel comparator" style={{marginBottom:16}}>
+        <div className="chart-h" style={{marginBottom:4}}><h2>💡 I’ve got a lump sum — where should it go?</h2></div>
+        <div className="desc" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>Compare putting
+          <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
+            <span style={{position:'absolute',left:9,color:'var(--muted)',fontSize:13,pointerEvents:'none'}}>£</span>
+            <NumInput className="inline-num" style={{paddingLeft:18,width:120}} step={5000} min={0} value={compareAmount} ariaLabel="Lump sum amount" onChange={v=>setCompareAmount(v)} />
+          </span>
+          across your options — ranked by the earliest Freedom Age.</div>
+        <div className="tablewrap">
+          <table className="cmp-table">
+            <thead><tr><th>Put it…</th><th>Freedom Age</th><th>Pension @ access</th><th>Bridge Fund</th><th>Lifetime income</th></tr></thead>
+            <tbody>
+              {comparison.map((d,i)=>(
+                <tr key={i} className={d.best?'cmp-best':''}>
+                  <td style={{textAlign:'left'}}>{d.label}{d.best && <span className="best-tag">best for freedom</span>}</td>
+                  <td className="tnum">{d.freedomAge!=null?ageStr(d.freedomAge):'—'}</td>
+                  <td className="tnum">{gbpC(d.pension)}</td>
+                  <td className="tnum">{gbpC(d.bridge)}</td>
+                  <td className="tnum">{gbpC(d.income)}/yr</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {comparison.length>0 && (() => {
+          const best = comparison[0];
+          const penOpt = comparison.find(d=>d.key==='pension');
+          const bestIsAccessible = best.key==='isa'||best.key==='gia'||best.key==='cash';
+          return <div className="cmp-rec">
+            <b>Recommendation:</b> {bestIsAccessible
+              ? gbp(compareAmount)+' into your '+(best.key==='cash'?'cash':best.key.toUpperCase())+' reaches Freedom Age '+ageStr(best.freedomAge)+(penOpt&&penOpt.freedomAge!=null&&penOpt.freedomAge>best.freedomAge?' — '+monthsStr(Math.round((penOpt.freedomAge-best.freedomAge)*12))+' sooner than into pension':'')+'. Accessible money funds the bridge to pension access, which pension (locked until '+inputs.pensionAccessAge+') can’t — though pension would build a bigger pot and higher lifetime income for later.'
+              : best.label+' gives the earliest Freedom Age ('+ageStr(best.freedomAge)+') here.'}
+          </div>;
+        })()}
+      </div>
+
+      {/* QUICK-EDIT CURRENT POSITION */}
+      <div className="qedit">
+        <h2>Your current position</h2>
+        <div className="desc">Edit your assets and savings here — everything updates instantly.</div>
+        <div className="qgrid">
+          <div className="qcell"><label>Pension</label>
+            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.pensionCurrent} ariaLabel="Current pension" onChange={v=>set({pensionCurrent:v})} /></div></div>
+          <div className="qcell"><label>ISA</label>
+            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.isaCurrent} ariaLabel="Current ISA" onChange={v=>set({isaCurrent:v})} /></div></div>
+          <div className="qcell"><label>GIA</label>
+            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.giaCurrent} ariaLabel="Current GIA" onChange={v=>set({giaCurrent:v})} /></div></div>
+          <div className="qcell"><label>Cash</label>
+            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.cashCurrent} ariaLabel="Current cash" onChange={v=>set({cashCurrent:v})} /></div></div>
+          <div className="qcell savings"><label>Savings / yr</label>
+            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={seg0.amount} ariaLabel="Annual savings" onChange={v=>updSeg(earliestIdx,{amount:v})} /></div></div>
+        </div>
+      </div>
+
+      {/* ===== OUTPUTS (rendered below inputs via flex order) ===== */}
+      <div className="outputs-block">
+      {/* OPPORTUNITY + RISK */}
+      <div className="grid2">
+        <div className="panel">
+          <h2>⭐ Biggest opportunities</h2>
+          <div className="desc">The levers that move your Freedom Age forward most — click any to apply it.</div>
+          {opps.length===0 && <div className="muted">Set an achievable plan to see opportunities.</div>}
+          {opps.map((o,i) => (
+            <button className="oppitem clickable" key={i} onClick={()=>applyPatch(o.patch)} title="Apply this change to your plan">
+              <span className="lab">{o.label}</span>
+              <span className={'delta '+(o.deltaMonths>0?'pos':'neg')}>{o.deltaMonths>0?'▲ '+monthsStr(o.deltaMonths)+' earlier':o.deltaMonths<0?'▼ later':'≈ no change'} <span className="apply-hint">apply →</span></span>
+            </button>
+          ))}
+        </div>
+        <div className="panel">
+          <h2>⚠ Biggest risks</h2>
+          <div className="desc">What pushes your Freedom Age back most — click to stress-test your plan against it.</div>
+          {rks.map((o,i) => (
+            <button className="oppitem clickable" key={i} onClick={()=>applyPatch(o.patch)} title="Apply this scenario to stress-test your plan">
+              <span className="lab">{o.label}</span>
+              <span className="delta neg">{o.breaks?'✕ plan fails':'▼ '+monthsStr(o.deltaMonths)+' later'} <span className="apply-hint">apply →</span></span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* SUCCESS LIGHTS */}
+      <div className="panel" style={{marginBottom:16}}>
+        <h2 style={{marginBottom:4}}>Success indicators</h2>
+        <div className="desc">The three pillars of the plan — plus overall. Green means the projection meets what that pillar needs; red means a shortfall. Each shows the figures behind it.</div>
+        <div className="lights">
+          <div className="light" title={'Projected pension £'+Math.round(result.pension.atAccess).toLocaleString('en-GB')+' at access vs £'+Math.round(result.pension.required).toLocaleString('en-GB')+' required.'}>
+            <span className={'ld '+lightFor(result.pension.status)}></span>
+            <span className="name">Pension</span>
+            <span className="st">{result.pension.status==='behind'?'Behind target':'On track'}</span>
+            <span className="lsub">{gbpC(result.pension.atAccess)} vs {gbpC(result.pension.required)} needed at {inputs.pensionAccessAge}</span></div>
+          <div className="light" title={'Accessible £'+Math.round(result.accessible.atOptionality).toLocaleString('en-GB')+' at optionality vs £'+Math.round(result.accessible.requiredBridge).toLocaleString('en-GB')+' needed to bridge to pension access.'}>
+            <span className={'ld '+(((!result.planSurvives&&result.failPhase==='bridge')||result.accessible.status==='behind')?'r':'g')}></span>
+            <span className="name">Bridge</span>
+            <span className="st">{((!result.planSurvives&&result.failPhase==='bridge')||result.accessible.status==='behind')?'Underfunded':'Fully funded'}</span>
+            <span className="lsub">{gbpC(result.accessible.atOptionality)} vs {gbpC(result.accessible.requiredBridge)} to reach age {inputs.pensionAccessAge}</span></div>
+          <div className="light" title={'Sustainable retirement income £'+Math.round(result.retirement.sustainableIncome).toLocaleString('en-GB')+'/yr vs £'+Math.round(result.retirement.target).toLocaleString('en-GB')+'/yr target.'}>
+            <span className={'ld '+lightFor(result.retirement.status)}></span>
+            <span className="name">Retirement</span>
+            <span className="st">{result.retirement.status==='behind'?'Below target':'Target income'}</span>
+            <span className="lsub">{gbpC(result.retirement.sustainableIncome)}/yr vs {gbpC(result.retirement.target)}/yr target</span></div>
+          <div className="light" title={confidenceWhy}>
+            <span className={'ld '+overall}></span>
+            <span className="name">Overall</span>
+            <span className="st">{
+              (!result.planSurvives && result.failPhase==='bridge') ? 'Bridge shortfall'
+              : !result.planSurvives ? 'Plan runs short'
+              : result.overridden ? 'Optional at '+Math.round(result.effectiveStop)
+              : result.achievable ? 'Optional by '+Math.round(result.optionalityAge)
+              : 'Not yet optional'}</span>
+            <span className="lsub">{
+              (!result.planSurvives && result.failPhase==='bridge') ? 'accessible runs dry ~age '+(result.failAge!=null?Math.floor(result.failAge):'—')+'; ≈'+gbpC(result.endWorth)+' locked in pension'
+              : !result.planSurvives ? 'runs out ~age '+(result.failAge!=null?Math.floor(result.failAge):inputs.lifeExpectancy)
+              : '≈'+gbpC(result.endWorth)+' left at age '+inputs.lifeExpectancy}</span></div>
+        </div>
+      </div>
+
+      {/* CHARTS */}
+      <div className="section-title">Projections</div>
+      <div className="grid2">
+        <div className="panel">
+          <div className="chart-h"><h2>Pension vs target</h2><span className="terms-tag">{realTerms?'today’s money':'future £'}</span></div>
+          <div className="desc">Projected pot against the value needed at access age {inputs.pensionAccessAge}.</div>
+          {ResponsiveContainer ? (
+          <ResponsiveContainer width="100%" height={230}>
+            <LineChart data={chartData} margin={{top:6,right:12,left:4,bottom:0}}>
+              <CartesianGrid stroke={C.grid} vertical={false} />
+              <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
+              <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={44} />
+              <Tooltip content={<ChartTip/>} />
+              <ReferenceLine x={inputs.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" />
+              <Line type="monotone" dataKey="required" name="Target" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
+              <Line type="monotone" dataKey="pension" name="Projected" stroke={C.pension} strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+          <div className="legend-row">
+            <span><span className="sw" style={{background:C.pension}}></span>Projected pension</span>
+            <span><span className="sw" style={{background:C.red}}></span>Required at access</span>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="chart-h"><h2>Combined net worth</h2><span className="terms-tag">{realTerms?'today’s money':'future £'}</span></div>
+          <div className="desc">Pension, ISA, GIA, cash{nw.homeEquity>0?' and home equity':''} over time.</div>
+          {ResponsiveContainer ? (
+          <ResponsiveContainer width="100%" height={230}>
+            <AreaChart data={chartData} margin={{top:6,right:12,left:4,bottom:0}}>
+              <CartesianGrid stroke={C.grid} vertical={false} />
+              <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
+              <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={44} />
+              <Tooltip content={<ChartTip/>} />
+              <ReferenceLine x={inputs.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" />
+              {nw.homeEquity>0 && <Area type="monotone" dataKey="home" name="Home equity" stackId="1" stroke={C.home} fill={C.home} fillOpacity={0.5} />}
+              <Area type="monotone" dataKey="cash" name="Cash" stackId="1" stroke={C.cash} fill={C.cash} fillOpacity={0.5} />
+              <Area type="monotone" dataKey="gia" name="GIA" stackId="1" stroke={C.gia} fill={C.gia} fillOpacity={0.5} />
+              <Area type="monotone" dataKey="isa" name="ISA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
+              <Area type="monotone" dataKey="pension" name="Pension" stackId="1" stroke={C.pension} fill={C.pension} fillOpacity={0.5} />
+            </AreaChart>
+          </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+          <div className="legend-row">
+            <span><span className="sw" style={{background:C.pension}}></span>Pension</span>
+            <span><span className="sw" style={{background:C.isa}}></span>ISA</span>
+            <span><span className="sw" style={{background:C.gia}}></span>GIA</span>
+            <span><span className="sw" style={{background:C.cash}}></span>Cash</span>
+            {nw.homeEquity>0 && <span><span className="sw" style={{background:C.home}}></span>Home</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className="panel" style={{marginBottom:16}}>
+        <div className="chart-h"><h2>Annual cash flow</h2><span className="terms-tag">{realTerms?'today’s money':'future £'}</span></div>
+        <div className="desc">Contributions in (positive) and withdrawals out (negative), split by where the money comes from.</div>
+        {ResponsiveContainer ? (
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={chartData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
+            <CartesianGrid stroke={C.grid} vertical={false} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
+            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={44} />
+            <Tooltip content={<ChartTip/>} />
+            <ReferenceLine y={0} stroke={C.baseline} />
+            <Bar dataKey="contributions" name="Contributions" fill={C.isa} radius={[3,3,0,0]} maxBarSize={18} stackId="cf" />
+            <Bar dataKey="withdrawals" name="ISA/GIA withdrawals" fill={C.red} radius={[0,0,0,0]} maxBarSize={18} stackId="cf" />
+            <Bar dataKey="pensionWithdrawals" name="Pension withdrawals" fill={C.gia} radius={[0,0,3,3]} maxBarSize={18} stackId="cf" />
+          </ComposedChart>
+        </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+        <div className="legend-row">
+          <span><span className="sw" style={{background:C.isa}}></span>Contributions in</span>
+          <span><span className="sw" style={{background:C.red}}></span>ISA/GIA withdrawals</span>
+          <span><span className="sw" style={{background:C.gia}}></span>Pension withdrawals</span>
+        </div>
+      </div>
+
+      {/* YEAR BY YEAR TABLE */}
+      <div className="section-title">Year-by-year cash flow</div>
+      <div className="panel" style={{marginBottom:16}}>
+        <div className="chart-h" style={{marginBottom:10}}>
+          <div className="legend-row" style={{margin:0}}>
+            <span><span className="sw" style={{background:'var(--series-pension)'}}></span>Accumulation</span>
+            <span><span className="sw" style={{background:'var(--warning)'}}></span>Bridge</span>
+            <span><span className="sw" style={{background:'var(--series-isa)'}}></span>Retirement</span>
+            <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
+          </div>
+          <button className="btn" onClick={()=>setShowAllRows(!showAllRows)}>{showAllRows?'Collapse':'Show all years'}</button>
+        </div>
+        <div className="desc" style={{marginTop:0,marginBottom:10}}>“Out” shows where each year’s spending is drawn from — ISA/GIA/cash during the bridge, then your pension once you can access it. {realTerms?'Figures are in today’s money.':'Figures are future (nominal) pounds — toggle “Today’s money” in the toolbar to see them in today’s terms.'}</div>
+        <div className="tablewrap" style={{maxHeight:showAllRows?520:'auto'}}>
+          <table>
+            <thead>
+              <tr className="grouprow">
+                <th></th><th colSpan={5} className="grp grp-p">Pension</th><th colSpan={5} className="grp grp-a">ISA / GIA / cash</th><th></th>
+              </tr>
+              <tr>
+                <th>Age</th>
+                <th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th>
+                <th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(showAllRows?rows:rows.filter((r,i)=> i%2===0 || r.phase!=='accumulation')).map((r,i) => (
+                <tr key={i} className={r.phase}>
+                  <td>{r.age}</td>
+                  <td>{money(r.pensionStart, r.age)}</td>
+                  <td>{r.pensionIn?money(r.pensionIn, r.age):'—'}</td>
+                  <td>{r.pensionWithdraw?<span style={{color:'var(--critical)'}}>{money(-r.pensionWithdraw, r.age)}</span>:'—'}</td>
+                  <td>{money(r.pensionGrowth, r.age)}</td>
+                  <td>{money(r.pensionEnd, r.age)}</td>
+                  <td>{money(r.accessStart, r.age)}</td>
+                  <td>{r.accessIn?money(r.accessIn, r.age):'—'}</td>
+                  <td>{r.accessOut?<span style={{color:'var(--critical)'}}>{money(-r.accessOut, r.age)}</span>:'—'}</td>
+                  <td>{money(r.growth, r.age)}</td>
+                  <td>{money(r.accessEnd, r.age)}</td>
+                  <td className="notecell">{r.notes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!showAllRows && <div className="note">Showing a sample of years — “Show all years” for the full schedule. Export the complete table with the CSV button.</div>}
+      </div>
+      </div>{/* end outputs-block */}
+
+      {/* ===== INPUTS (pulled to top via flex order) ===== */}
+      <div className="inputs-block">
+      <div className="section-title">Assumptions &amp; inputs — edit anything here</div>
+      <div className="inputs-grid">
+        <Section title="Personal" open id="sec-personal">
+          <Num label="Current age" value={inputs.currentAge} onChange={v=>set({currentAge:v})} />
+          <Num label="Desired optionality age (target)" value={inputs.targetOptionalityAge} onChange={v=>set({targetOptionalityAge:v})} />
+          <Num label="Pension access age" value={inputs.pensionAccessAge} onChange={v=>set({pensionAccessAge:v})} />
+          <Num label="Life expectancy" value={inputs.lifeExpectancy} onChange={v=>set({lifeExpectancy:v})} />
+          <Num label="State Pension age" value={inputs.statePensionAge} onChange={v=>set({statePensionAge:v})} />
+          <label className="switch"><input type="checkbox" checked={inputs.statePensionIncluded} onChange={e=>set({statePensionIncluded:e.target.checked})} />Include State Pension</label>
+          {inputs.statePensionIncluded && <Num label="State Pension (annual, today's £)" value={inputs.statePensionAmount} onChange={v=>set({statePensionAmount:v})} prefix="£" />}
+        </Section>
+
+        <Section title="Pension" id="sec-pension">
+          <Num label="Current pension value" value={inputs.pensionCurrent} onChange={v=>set({pensionCurrent:v})} prefix="£" />
+          <Num label="Employer contribution (annual)" value={inputs.employerContribution} onChange={v=>set({employerContribution:v})} prefix="£" />
+          <Pct label="Expected annual return" value={inputs.pensionReturn} onChange={v=>set({pensionReturn:v})} />
+          <Pct label="Annual fee" value={inputs.pensionFee} onChange={v=>set({pensionFee:v})} />
+          <Pct label="Target withdrawal rate" value={inputs.withdrawalRate} onChange={v=>set({withdrawalRate:v})} />
+        </Section>
+
+        <Section title="Savings plan ⭐" open span>
+          <div className="note" style={{marginTop:0,marginBottom:8}}>How much you save each year and the pension / ISA-GIA split. Each period applies <b>from that year</b> until the next one starts — so you can change contributions and allocation over time (e.g. £60k all-pension this year, then £40k split 50/50 from next year). Savings stop when you stop working. Adjust the split to see where the next pound is best spent — the impact below updates instantly.</div>
+          <div className="opt-out" style={{marginBottom:14}}>
+            <div className="mini"><div className="k">Optionality age</div><div className="val tnum" style={{color:'var(--accent)'}}>{result.achievable?ageStr(result.optionalityAge):'—'}</div></div>
+            <div className="mini"><div className="k">Pension @ access</div><div className="val tnum">{gbpC(result.pension.atAccess)}</div></div>
+            <div className="mini"><div className="k">ISA/GIA @ optionality</div><div className="val tnum">{gbpC(result.accessible.atOptionality)}</div></div>
+            <div className="mini"><div className="k">Left @ access</div><div className="val tnum">{gbpC(result.accessible.remainingAtAccess)}</div></div>
+            <div className="mini"><div className="k">Retirement income</div><div className="val tnum">{gbpC(result.retirement.sustainableIncome)}</div></div>
+          </div>
+          <div className="opt-bar">
+            <button className="btn primary" onClick={optimiseSavings} title="Keep your yearly savings amounts, find the split that reaches optionality earliest">⚡ Optimise allocation</button>
+            <span className="opt-bar-note">Keeps how much you save each year — finds the pension / ISA-GIA split, year by year, that brings your optionality age earliest.</span>
+          </div>
+          {optMsg && <div className={'opt-msg '+(optMsg.ok?'ok':'bad')}>{optMsg.text}</div>}
+          <div className="plan-row plan-head">
+            <span className="evh">From year</span><span className="evh">Annual £</span><span className="evh">To pension</span><span className="evh">Split (P · ISA/GIA)</span><span></span>
+          </div>
+          {plan.map((s,i) => {
+            const al = s.allocPension != null ? s.allocPension : 0.30;
+            return (
+            <div className="plan-row" key={i}>
+              <div style={{position:'relative',display:'flex',alignItems:'center'}}>
+                <NumInput value={s.fromYear||0} min={0} onChange={v=>updSeg(i,{fromYear:Math.max(0,Math.round(v))})} ariaLabel="From year" style={{paddingRight:24}} />
+                <span style={{position:'absolute',right:6,fontSize:11,color:'var(--muted)',pointerEvents:'none'}}>yr</span>
+              </div>
+              <NumInput value={s.amount} min={0} step={1000} onChange={v=>updSeg(i,{amount:Math.max(0,v)})} ariaLabel="Annual amount" />
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <input type="range" min="0" max="100" value={Math.round(al*100)} onChange={e=>updSeg(i,{allocPension:parseInt(e.target.value)/100})} style={{flex:1,minWidth:60}} />
+                <span className="tnum" style={{width:38,textAlign:'right',fontWeight:600,fontSize:13}}>{Math.round(al*100)}%</span>
+              </div>
+              <span className="plan-split muted tnum">{gbpC(s.amount*al)} · {gbpC(s.amount*(1-al))}</span>
+              <button className="icon-btn" onClick={()=>delSeg(i)} disabled={plan.length<=1} title="Remove period">✕</button>
+            </div>
+            );
+          })}
+          <button className="add-link" onClick={addSeg}>+ Add savings period</button>
+          <div className="note">New savings fill your ISA up to £20k/yr, then flow to the GIA. Your current-year savings amount is also editable in “Your current position” at the top.</div>
+        </Section>
+
+        <Section title="ISA">
+          <Num label="Current ISA value" value={inputs.isaCurrent} onChange={v=>set({isaCurrent:v})} prefix="£" />
+          <Pct label="Expected return" value={inputs.isaReturn} onChange={v=>set({isaReturn:v})} />
+        </Section>
+
+        <Section title="GIA">
+          <Num label="Current GIA value" value={inputs.giaCurrent} onChange={v=>set({giaCurrent:v})} prefix="£" />
+          <Pct label="Expected return" value={inputs.giaReturn} onChange={v=>set({giaReturn:v})} />
+          <Pct label="Tax drag" value={inputs.giaTaxDrag} onChange={v=>set({giaTaxDrag:v})} />
+          <Num label="Current cash" value={inputs.cashCurrent} onChange={v=>set({cashCurrent:v})} prefix="£" />
+        </Section>
+
+        <Section title="Spending">
+          <Num label="Annual spending — bridge (before access)" value={inputs.bridgeSpending} onChange={v=>set({bridgeSpending:v})} prefix="£" />
+          <Num label="Annual spending — retirement (after access)" value={inputs.retirementSpending} onChange={v=>set({retirementSpending:v})} prefix="£" />
+          <Pct label="Expected return during bridge" value={inputs.bridgeReturn} onChange={v=>set({bridgeReturn:v})} />
+          <Pct label="Inflation" value={inputs.inflation} onChange={v=>set({inflation:v})} />
+          <label className="switch"><input type="checkbox" checked={inputs.spendingInflationLinked} onChange={e=>set({spendingInflationLinked:e.target.checked})} />Spending inflation-linked</label>
+        </Section>
+
+        <Section title="Property (optional)">
+          <Num label="Home value" value={inputs.homeValue} onChange={v=>set({homeValue:v})} prefix="£" />
+          <Num label="Mortgage outstanding" value={inputs.mortgage} onChange={v=>set({mortgage:v})} prefix="£" />
+          <div className="note">Home equity is shown in net worth but not drawn on to fund optionality.</div>
+        </Section>
+
+        <Section title="Future cash events" open span id="sec-events">
+          <div className="note" style={{marginTop:0,marginBottom:8}}>Money <b>in</b> — earn-out, inheritance, house sale, bonus. Or one-off <b>hits (out)</b> — house purchase, school fees, new car, tax bill.
+            Timed in <b>years from now</b>: e.g. a £100k lump sum in 5 years → set amount 100000, In, 5&nbsp;yrs.</div>
+          <div className="event-row" style={{marginBottom:2}}>
+            <span className="evh">Name</span><span className="evh">In / out</span><span className="evh">Amount £</span>
+            <span className="evh">In (yrs)</span><span className="evh">Account</span><span></span>
+          </div>
+          {inputs.cashEvents.map((ev,i) => {
+            const dir = ev.direction || 'in';
+            const acct = ev.account || ev.destination || 'gia';
+            const yrs = ev.yearsFromNow != null ? ev.yearsFromNow
+              : (ev.age != null ? Math.max(0, Math.round(ev.age - inputs.currentAge)) : 0);
+            return (
+            <div className="event-row" key={i}>
+              <input type="text" value={ev.name} onChange={e=>updEvent(i,{name:e.target.value})} title="Name" />
+              <select value={dir} onChange={e=>updEvent(i,{direction:e.target.value})} title="Direction"
+                style={dir==='out'?{color:'var(--critical)',fontWeight:600}:{color:'var(--good-text)',fontWeight:600}}>
+                <option value="in">In +</option><option value="out">Out −</option>
+              </select>
+              <NumInput value={ev.amount} min={0} onChange={v=>updEvent(i,{amount:Math.abs(v)})} title="Amount" ariaLabel="Amount" />
+              <div style={{position:'relative',display:'flex',alignItems:'center'}}>
+                <NumInput value={yrs} min={0} style={{paddingRight:26}}
+                  onChange={v=>updEvent(i,{yearsFromNow:Math.max(0,v)})}
+                  title={'In how many years from now (→ age '+(inputs.currentAge+yrs)+')'} ariaLabel="Years from now" />
+                <span style={{position:'absolute',right:7,fontSize:11,color:'var(--muted)',pointerEvents:'none'}}>yrs</span>
+              </div>
+              <select value={acct} onChange={e=>updEvent(i,{account:e.target.value,destination:e.target.value})} title={dir==='out'?'Paid from':'Paid into'}>
+                <option value="pension">Pension</option><option value="isa">ISA</option>
+                <option value="gia">GIA</option><option value="cash">Cash</option>
+              </select>
+              <button className="icon-btn" onClick={()=>delEvent(i)} title="Remove">✕</button>
+            </div>
+            );
+          })}
+          <button className="add-link" onClick={addEvent}>+ Add cash event</button>
+        </Section>
+      </div>
+      </div>{/* end inputs-block */}
+
+      <div className="foot-block">
+      <div className="assumptions">
+        <b>How the optionality age is calculated.</b> The engine finds the earliest age at which you can stop
+        earning permanently and still fund spending every year to age {inputs.lifeExpectancy}, drawing on
+        accessible wealth (ISA/GIA/cash) during the bridge to age {inputs.pensionAccessAge}, then pension plus
+        any remainder — with the State Pension from age {inputs.statePensionAge}{inputs.statePensionIncluded?'':' (excluded)'}.
+        Figures are nominal £; spending {inputs.spendingInflationLinked?'rises with inflation':'is held flat in nominal terms'}.
+        This is a planning model, not financial advice — sense-check the assumptions against your own circumstances and tax position.
+      </div>
+
+      <div className="note" style={{textAlign:'center',marginTop:24}}>Inputs auto-save to this browser. Financial Optionality Dashboard.</div>
+      </div>{/* end foot-block */}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

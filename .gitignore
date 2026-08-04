@@ -1,0 +1,7 @@
+# build output is committed (index.html) so GitHub Pages can serve it directly.
+# Ignore local scratch, deps and test artifacts:
+node_modules/
+vendor/
+*.png
+test-local.html
+.DS_Store
