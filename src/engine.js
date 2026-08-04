@@ -415,7 +415,14 @@
     var maxRet = maxSustainableRetirement(inp, effectiveStop);
 
     var pensionDiff = sim.pensionAtAccess - reqPension;
-    var accessDiff = sim.accessibleAtOptionality - reqBridge;
+    // Bridge adequacy from the ACTUAL simulation (not the PV estimate): if the
+    // plan survives, the bridge held — the true surplus is what's left in
+    // accessible accounts when the pension unlocks. Only when the bridge itself
+    // fails do we fall back to the PV shortfall estimate.
+    var bridgeHolds = planSurvives;
+    var bridgeConsumed = Math.max(0, sim.accessibleAtOptionality - sim.accessibleAtAccess);
+    var accessDiff = bridgeHolds ? sim.accessibleAtAccess : (sim.accessibleAtOptionality - reqBridge);
+    var bridgeNeed = bridgeHolds ? bridgeConsumed : reqBridge;
 
     // status helpers
     function status(diff, base) {
@@ -471,10 +478,10 @@
       accessible: {
         current: inp.isaCurrent + inp.giaCurrent + inp.cashCurrent,
         atOptionality: sim.accessibleAtOptionality,
-        requiredBridge: reqBridge,
+        requiredBridge: bridgeNeed,
         difference: accessDiff,
         remainingAtAccess: sim.accessibleAtAccess,
-        status: status(accessDiff, reqBridge)
+        status: !bridgeHolds ? 'behind' : (accessDiff > inp.bridgeSpending ? 'ahead' : 'ontrack')
       },
       retirement: {
         sustainableIncome: maxRet,

@@ -44,11 +44,34 @@ body{
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 80px;display:flex;flex-direction:column}
-/* editable inputs pulled above the read-only outputs via flex order */
-.inputs-block{order:0}
-.outputs-block{order:1}
-.foot-block{order:2}
+.wrap{max-width:1340px;margin:0 auto;padding:18px 20px 70px}
+/* two-column app layout: inputs sidebar (left / on top when narrow) + results main */
+.layout{display:flex;gap:22px;align-items:flex-start}
+.main{flex:1 1 0;min-width:0}
+.sidebar{order:-1;flex:0 0 346px;position:sticky;top:14px;max-height:calc(100vh - 24px);overflow-y:auto;overflow-x:hidden}
+.sb-inner{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:16px 15px;box-shadow:var(--shadow)}
+.sb-head{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.sb-note{font-size:12px;color:var(--muted);line-height:1.5;margin:5px 0 14px}
+.sb-sec{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:0 0 8px}
+.sb-block{margin-bottom:12px}
+.sidebar .qedit{background:none;border:none;box-shadow:none;padding:0;margin-bottom:14px}
+.sidebar .inputs-block{margin:0}
+.sidebar .inputs-grid{grid-template-columns:1fr;gap:10px;margin:0}
+.sidebar .qgrid{grid-template-columns:1fr 1fr;gap:10px}
+.sidebar .qcell.savings{border-left:none;padding-left:0}
+.sidebar .acc.span-all{grid-column:auto}
+.sidebar .event-row{grid-template-columns:1fr 1fr;gap:6px}
+.sidebar .foot-block .assumptions{margin-top:14px}
+.sidebar .foot-block .note{text-align:left;margin-top:12px}
+/* scrollbar in sidebar */
+.sidebar::-webkit-scrollbar{width:8px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--baseline);border-radius:8px}
+@media (max-width:1040px){
+  .layout{flex-direction:column}
+  .sidebar{flex-basis:auto;width:100%;position:static;max-height:none;overflow:visible}
+  .sidebar .inputs-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:620px){ .sidebar .inputs-grid{grid-template-columns:1fr} }
 a{color:var(--accent)}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-0.01em}
 .muted{color:var(--muted)}

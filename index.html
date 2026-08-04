@@ -44,11 +44,34 @@ body{
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 80px;display:flex;flex-direction:column}
-/* editable inputs pulled above the read-only outputs via flex order */
-.inputs-block{order:0}
-.outputs-block{order:1}
-.foot-block{order:2}
+.wrap{max-width:1340px;margin:0 auto;padding:18px 20px 70px}
+/* two-column app layout: inputs sidebar (left / on top when narrow) + results main */
+.layout{display:flex;gap:22px;align-items:flex-start}
+.main{flex:1 1 0;min-width:0}
+.sidebar{order:-1;flex:0 0 346px;position:sticky;top:14px;max-height:calc(100vh - 24px);overflow-y:auto;overflow-x:hidden}
+.sb-inner{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:16px 15px;box-shadow:var(--shadow)}
+.sb-head{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.sb-note{font-size:12px;color:var(--muted);line-height:1.5;margin:5px 0 14px}
+.sb-sec{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin:0 0 8px}
+.sb-block{margin-bottom:12px}
+.sidebar .qedit{background:none;border:none;box-shadow:none;padding:0;margin-bottom:14px}
+.sidebar .inputs-block{margin:0}
+.sidebar .inputs-grid{grid-template-columns:1fr;gap:10px;margin:0}
+.sidebar .qgrid{grid-template-columns:1fr 1fr;gap:10px}
+.sidebar .qcell.savings{border-left:none;padding-left:0}
+.sidebar .acc.span-all{grid-column:auto}
+.sidebar .event-row{grid-template-columns:1fr 1fr;gap:6px}
+.sidebar .foot-block .assumptions{margin-top:14px}
+.sidebar .foot-block .note{text-align:left;margin-top:12px}
+/* scrollbar in sidebar */
+.sidebar::-webkit-scrollbar{width:8px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--baseline);border-radius:8px}
+@media (max-width:1040px){
+  .layout{flex-direction:column}
+  .sidebar{flex-basis:auto;width:100%;position:static;max-height:none;overflow:visible}
+  .sidebar .inputs-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:620px){ .sidebar .inputs-grid{grid-template-columns:1fr} }
 a{color:var(--accent)}
 h1,h2,h3{margin:0;font-weight:600;letter-spacing:-0.01em}
 .muted{color:var(--muted)}
@@ -822,7 +845,14 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
     var maxRet = maxSustainableRetirement(inp, effectiveStop);
 
     var pensionDiff = sim.pensionAtAccess - reqPension;
-    var accessDiff = sim.accessibleAtOptionality - reqBridge;
+    // Bridge adequacy from the ACTUAL simulation (not the PV estimate): if the
+    // plan survives, the bridge held — the true surplus is what's left in
+    // accessible accounts when the pension unlocks. Only when the bridge itself
+    // fails do we fall back to the PV shortfall estimate.
+    var bridgeHolds = planSurvives;
+    var bridgeConsumed = Math.max(0, sim.accessibleAtOptionality - sim.accessibleAtAccess);
+    var accessDiff = bridgeHolds ? sim.accessibleAtAccess : (sim.accessibleAtOptionality - reqBridge);
+    var bridgeNeed = bridgeHolds ? bridgeConsumed : reqBridge;
 
     // status helpers
     function status(diff, base) {
@@ -878,10 +908,10 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
       accessible: {
         current: inp.isaCurrent + inp.giaCurrent + inp.cashCurrent,
         atOptionality: sim.accessibleAtOptionality,
-        requiredBridge: reqBridge,
+        requiredBridge: bridgeNeed,
         difference: accessDiff,
         remainingAtAccess: sim.accessibleAtAccess,
-        status: status(accessDiff, reqBridge)
+        status: !bridgeHolds ? 'behind' : (accessDiff > inp.bridgeSpending ? 'ahead' : 'ontrack')
       },
       retirement: {
         sustainableIncome: maxRet,
@@ -1478,6 +1508,9 @@ function App() {
         </div>
       </div>
 
+      <div className="layout">
+      <main className="main">
+
       {/* HERO — when can I go optional · when can I stop paying into pension · how solid */}
       <div className="hero">
         <div className="hero-main">
@@ -1545,42 +1578,8 @@ function App() {
         </div>
       </div>
 
-      {/* ===== BEST USE OF YOUR SAVINGS (Q3) ===== */}
+      {/* ===== BEST USE OF YOUR SAVINGS — the savings plan leads ===== */}
       <div className="section-title">Best use of your savings</div>
-      <div className="panel action-panel">
-        <div className="chart-h" style={{marginBottom:4}}><h2>⭐ What should I do this year?</h2>
-          <span className="muted" style={{fontSize:13}}>this year’s savings of <b style={{color:'var(--text-primary)'}}>{gbp(rec.amount)}</b></span></div>
-        <div className="strat-tabs">
-          {rec.strategies.map(s => (
-            <button key={s.key} className={'strat-tab'+(strategy===s.key?' on':'')} onClick={()=>setStrategy(s.key)}>{s.label}</button>
-          ))}
-        </div>
-        <div className="rec-body">
-          <div className="alloc-row">
-            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-pension)'}}>Pension</div><div className="ac-v tnum">{gbp(chosenStrat.split.pension)}</div></div>
-            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-isa)'}}>ISA</div><div className="ac-v tnum">{gbp(chosenStrat.split.isa)}</div></div>
-            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-gia)'}}>GIA</div><div className="ac-v tnum">{gbp(chosenStrat.split.gia)}</div></div>
-          </div>
-          <div className="rec-side">
-            <div className="alloc-why">{
-              chosenStrat.age!=null
-                ? (chosenStrat.key==='freedom' ? 'Reaches Freedom Age '+ageStr(chosenStrat.age)+' — the earliest achievable with this year’s savings.'
-                  : chosenStrat.key==='pension' ? 'Biggest long-term pension pot; Freedom Age '+ageStr(chosenStrat.age)+' (later, but ~'+gbpC(chosenStrat.legacy)+' legacy).'
-                  : chosenStrat.key==='lowrisk' ? 'Keeps Freedom near the earliest ('+ageStr(chosenStrat.age)+') while building the biggest safety buffer (~'+gbpC(chosenStrat.legacy)+' at '+inputs.lifeExpectancy+').'
-                  : 'An even split — Freedom Age '+ageStr(chosenStrat.age)+', ~'+gbpC(chosenStrat.legacy)+' legacy.')
-                : 'Not achievable with these assumptions.'
-            }</div>
-            <button className="btn primary" onClick={()=>applyStrategy(chosenStrat.allocPension)}>Apply to my plan →</button>
-          </div>
-        </div>
-        <div className="checklist">
-          {rec.amount>0 && <div className="chk"><span className="ck">✓</span> Pension: <b>{gbp(chosenStrat.split.pension)}</b>{chosenStrat.split.pension>=60000?' (annual limit)':''}</div>}
-          {chosenStrat.split.isa>0 && <div className="chk"><span className="ck">✓</span> ISA: <b>{gbp(chosenStrat.split.isa)}</b>{chosenStrat.split.isa>=20000?' (£20k maxed)':''}</div>}
-          {chosenStrat.split.gia>0 && <div className="chk"><span className="ck">✓</span> GIA: <b>{gbp(chosenStrat.split.gia)}</b></div>}
-          {nextEvent && <div className="chk"><span className="ck">◷</span> {nextEvent.name} in {nextEvent.inMonths} month{nextEvent.inMonths===1?'':'s'} ({gbpC(nextEvent.amount)})</div>}
-          {inputs.mortgage>0 && <div className="chk"><span className="ck">○</span> Mortgage overpay won’t move your Freedom Age (home equity isn’t drawn on)</div>}
-        </div>
-      </div>
 
       {/* SAVINGS PLAN — the core interactive panel */}
       <div className="panel savings-panel">
@@ -1664,6 +1663,43 @@ function App() {
                  ['Cash', gbpC(nw.cash)]].concat(nw.homeEquity>0?[['+ Home equity', gbpC(nw.homeEquity)]]:[])} />
       </div>
 
+      {/* ===== DECISION TOOLS (optional add-ons) ===== */}
+      <div className="section-title">Decision tools</div>
+      <div className="panel action-panel">
+        <div className="chart-h" style={{marginBottom:4}}><h2>⭐ What should I do this year?</h2>
+          <span className="muted" style={{fontSize:13}}>this year’s savings of <b style={{color:'var(--text-primary)'}}>{gbp(rec.amount)}</b></span></div>
+        <div className="strat-tabs">
+          {rec.strategies.map(s => (
+            <button key={s.key} className={'strat-tab'+(strategy===s.key?' on':'')} onClick={()=>setStrategy(s.key)}>{s.label}</button>
+          ))}
+        </div>
+        <div className="rec-body">
+          <div className="alloc-row">
+            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-pension)'}}>Pension</div><div className="ac-v tnum">{gbp(chosenStrat.split.pension)}</div></div>
+            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-isa)'}}>ISA</div><div className="ac-v tnum">{gbp(chosenStrat.split.isa)}</div></div>
+            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-gia)'}}>GIA</div><div className="ac-v tnum">{gbp(chosenStrat.split.gia)}</div></div>
+          </div>
+          <div className="rec-side">
+            <div className="alloc-why">{
+              chosenStrat.age!=null
+                ? (chosenStrat.key==='freedom' ? 'Reaches Freedom Age '+ageStr(chosenStrat.age)+' — the earliest achievable with this year’s savings.'
+                  : chosenStrat.key==='pension' ? 'Biggest long-term pension pot; Freedom Age '+ageStr(chosenStrat.age)+' (later, but ~'+gbpC(chosenStrat.legacy)+' legacy).'
+                  : chosenStrat.key==='lowrisk' ? 'Keeps Freedom near the earliest ('+ageStr(chosenStrat.age)+') while building the biggest safety buffer (~'+gbpC(chosenStrat.legacy)+' at '+inputs.lifeExpectancy+').'
+                  : 'An even split — Freedom Age '+ageStr(chosenStrat.age)+', ~'+gbpC(chosenStrat.legacy)+' legacy.')
+                : 'Not achievable with these assumptions.'
+            }</div>
+            <button className="btn primary" onClick={()=>applyStrategy(chosenStrat.allocPension)}>Apply to my plan →</button>
+          </div>
+        </div>
+        <div className="checklist">
+          {rec.amount>0 && <div className="chk"><span className="ck">✓</span> Pension: <b>{gbp(chosenStrat.split.pension)}</b>{chosenStrat.split.pension>=60000?' (annual limit)':''}</div>}
+          {chosenStrat.split.isa>0 && <div className="chk"><span className="ck">✓</span> ISA: <b>{gbp(chosenStrat.split.isa)}</b>{chosenStrat.split.isa>=20000?' (£20k maxed)':''}</div>}
+          {chosenStrat.split.gia>0 && <div className="chk"><span className="ck">✓</span> GIA: <b>{gbp(chosenStrat.split.gia)}</b></div>}
+          {nextEvent && <div className="chk"><span className="ck">◷</span> {nextEvent.name} in {nextEvent.inMonths} month{nextEvent.inMonths===1?'':'s'} ({gbpC(nextEvent.amount)})</div>}
+          {inputs.mortgage>0 && <div className="chk"><span className="ck">○</span> Mortgage overpay won’t move your Freedom Age (home equity isn’t drawn on)</div>}
+        </div>
+      </div>
+
       {/* DECISION COMPARATOR */}
       <div className="panel comparator" style={{marginBottom:16}}>
         <div className="chart-h" style={{marginBottom:4}}><h2>💡 I’ve got a lump sum — where should it go?</h2></div>
@@ -1701,25 +1737,7 @@ function App() {
         })()}
       </div>
 
-      {/* QUICK-EDIT CURRENT POSITION */}
-      <div className="qedit">
-        <h2>Your current position</h2>
-        <div className="desc">Edit your assets and savings here — everything updates instantly.</div>
-        <div className="qgrid">
-          <div className="qcell"><label>Pension</label>
-            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.pensionCurrent} ariaLabel="Current pension" onChange={v=>set({pensionCurrent:v})} /></div></div>
-          <div className="qcell"><label>ISA</label>
-            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.isaCurrent} ariaLabel="Current ISA" onChange={v=>set({isaCurrent:v})} /></div></div>
-          <div className="qcell"><label>GIA</label>
-            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.giaCurrent} ariaLabel="Current GIA" onChange={v=>set({giaCurrent:v})} /></div></div>
-          <div className="qcell"><label>Cash</label>
-            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.cashCurrent} ariaLabel="Current cash" onChange={v=>set({cashCurrent:v})} /></div></div>
-          <div className="qcell savings"><label>Savings / yr</label>
-            <div className="qin"><span>£</span><NumInput step={1000} min={0} value={seg0.amount} ariaLabel="Annual savings" onChange={v=>updSeg(earliestIdx,{amount:v})} /></div></div>
-        </div>
-      </div>
-
-      {/* ===== OUTPUTS (rendered below inputs via flex order) ===== */}
+      {/* ===== OUTPUTS ===== */}
       <div className="outputs-block">
       {/* OPPORTUNITY + RISK */}
       <div className="grid2">
@@ -1906,10 +1924,27 @@ function App() {
         {!showAllRows && <div className="note">Showing a sample of years — “Show all years” for the full schedule. Export the complete table with the CSV button.</div>}
       </div>
       </div>{/* end outputs-block */}
+      </main>{/* end main */}
 
-      {/* ===== INPUTS (pulled to top via flex order) ===== */}
+      {/* ===== SIDEBAR: all the inputs that build the simulation ===== */}
+      <aside className="sidebar">
+      <div className="sb-inner">
+        <div className="sb-head">🧮 Your inputs</div>
+        <div className="sb-note">The simulation is built from these — add your current position, assumptions and any cash events. Everything updates live.</div>
+        <div className="qedit sb-block">
+          <h3 className="sb-sec">Current position</h3>
+          <div className="qgrid">
+            <div className="qcell"><label>Pension</label>
+              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.pensionCurrent} ariaLabel="Current pension" onChange={v=>set({pensionCurrent:v})} /></div></div>
+            <div className="qcell"><label>ISA</label>
+              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.isaCurrent} ariaLabel="Current ISA" onChange={v=>set({isaCurrent:v})} /></div></div>
+            <div className="qcell"><label>GIA</label>
+              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.giaCurrent} ariaLabel="Current GIA" onChange={v=>set({giaCurrent:v})} /></div></div>
+            <div className="qcell"><label>Cash</label>
+              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.cashCurrent} ariaLabel="Current cash" onChange={v=>set({cashCurrent:v})} /></div></div>
+          </div>
+        </div>
       <div className="inputs-block">
-      <div className="section-title">Assumptions &amp; inputs — edit anything here</div>
       <div className="inputs-grid">
         <Section title="Personal" open id="sec-personal">
           <Num label="Current age" value={inputs.currentAge} onChange={v=>set({currentAge:v})} />
@@ -2008,8 +2043,11 @@ function App() {
         This is a planning model, not financial advice — sense-check the assumptions against your own circumstances and tax position.
       </div>
 
-      <div className="note" style={{textAlign:'center',marginTop:24}}>Inputs auto-save to this browser. Financial Optionality Dashboard.</div>
+      <div className="note" style={{textAlign:'center',marginTop:20}}>Inputs auto-save to this browser. Financial Optionality Dashboard.</div>
       </div>{/* end foot-block */}
+      </div>{/* end sb-inner */}
+      </aside>{/* end sidebar */}
+      </div>{/* end layout */}
     </div>
   );
 }
