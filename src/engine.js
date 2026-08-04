@@ -84,14 +84,6 @@
     annualSavings: 6000,
     allocPension: 0.30,
 
-    // Tax & wrappers (this year) — used by the lump-sum comparator's net-cost view
-    marginalRate: 0.20,            // basic rate — median UK earner
-    salarySacrifice: true,         // pension via salary sacrifice (saves employee NI too)
-    employeeNI: 0.08,              // employee NI main rate (April 2024)
-    employerNIpass: 0.0,           // share of employer's NI passed into your pension
-    pensionAllowanceLeft: 60000,   // pension annual allowance remaining this year
-    isaAllowanceLeft: 20000,       // ISA allowance remaining this year
-
     // Property (optional, informational)
     homeValue: 290000,             // ~UK average house price
     mortgage: 150000,
@@ -234,15 +226,35 @@
           accessOut += (need - draw);
           if (draw > 0.5) { survived = false; if (failAge === null) failAge = a; }
         } else {
-          // RETIREMENT: pension first, then accessible
-          var draw2 = need;
-          var fromPen = Math.min(pension, draw2); pension -= fromPen; draw2 -= fromPen;
-          pensionOut += fromPen;
-          var fromCash2 = Math.min(cash, draw2); cash -= fromCash2; draw2 -= fromCash2;
-          var fromIsa2 = Math.min(isa, draw2); isa -= fromIsa2; draw2 -= fromIsa2;
-          var fromGia2 = Math.min(gia, draw2); gia -= fromGia2; draw2 -= fromGia2;
-          accessOut += (fromCash2 + fromIsa2 + fromGia2);
-          if (draw2 > 0.5) { survived = false; if (failAge === null) failAge = a; }
+          // RETIREMENT: draw PROPORTIONALLY across every pot (pension + ISA + GIA
+          // + cash) so no single account is drained while another compounds
+          // untouched. Each pot then bears roughly the same withdrawal rate as
+          // the portfolio overall. Any shortfall (a pot emptying) cascades to
+          // whatever's left.
+          var pPen = pension, pCash = cash, pIsa = isa, pGia = gia;
+          var totPot = pPen + pCash + pIsa + pGia;
+          var takePen = 0, takeCash = 0, takeIsa = 0, takeGia = 0, unmet = need;
+          if (totPot > 0) {
+            takePen = Math.min(pPen, need * pPen / totPot);
+            takeCash = Math.min(pCash, need * pCash / totPot);
+            takeIsa = Math.min(pIsa, need * pIsa / totPot);
+            takeGia = Math.min(pGia, need * pGia / totPot);
+            unmet = need - (takePen + takeCash + takeIsa + takeGia);
+            // second pass: cover rounding / emptied-pot shortfall from the rest
+            if (unmet > 0.005) {
+              var rem2 = unmet;
+              var t;
+              t = Math.min(pCash - takeCash, rem2); takeCash += t; rem2 -= t;
+              t = Math.min(pIsa - takeIsa, rem2); takeIsa += t; rem2 -= t;
+              t = Math.min(pGia - takeGia, rem2); takeGia += t; rem2 -= t;
+              t = Math.min(pPen - takePen, rem2); takePen += t; rem2 -= t;
+              unmet = rem2;
+            }
+          }
+          pension -= takePen; cash -= takeCash; isa -= takeIsa; gia -= takeGia;
+          pensionOut += takePen;
+          accessOut += (takeCash + takeIsa + takeGia);
+          if (unmet > 0.5) { survived = false; if (failAge === null) failAge = a; }
         }
       }
 
@@ -502,6 +514,15 @@
     else if (buffer > inp.retirementSpending * 3) confidence = 'high';
     else if (buffer > 0) confidence = 'medium';
     else confidence = 'low';
+    // Guardrail: a plan leaning on a withdrawal rate above the sustainable guide
+    // has little margin for a bad run of markets — cap its resilience rating so a
+    // high starting draw can never read as "Strong".
+    var wdTarget = inp.withdrawalRate || 0.04;
+    if (planSurvives && sim.initialSWR != null) {
+      if (sim.initialSWR > wdTarget * 1.5 && confidence === 'high') confidence = 'medium';
+      if (sim.initialSWR > wdTarget * 1.5) confidence = (confidence === 'high') ? 'medium' : 'low';
+      else if (sim.initialSWR > wdTarget * 1.1 && confidence === 'high') confidence = 'medium';
+    }
 
     var yearsEarlyLate = (inp.targetOptionalityAge != null)
       ? round2(inp.targetOptionalityAge - effectiveStop) : null; // +ve = early
@@ -810,22 +831,11 @@
     return { spendHeadroom: Math.max(0, spendHeadroom), returnHeadroom: Math.max(0, rlo), baseAge: base };
   }
 
-  // Pension £ received per £1 of net (take-home) cost, given tax relief.
-  function pensionUplift(inp) {
-    if (inp.salarySacrifice) {
-      var denom = Math.max(0.05, 1 - (inp.marginalRate || 0) - (inp.employeeNI || 0));
-      return (1 + (inp.employerNIpass || 0)) / denom;      // e.g. 40%+2% → ~1.72×
-    }
-    return 1 / Math.max(0.05, 1 - (inp.marginalRate || 0)); // relief at source: 40% → ~1.67×
-  }
 
-  // ---- Decision comparator: "I've got £X of net cash — where should it go?" ----------
-  // `amount` is NET take-home cash. Each destination deploys what that cash buys
-  // after tax relief and wrapper allowances, so pension's relief is visible.
+  // ---- Decision comparator: "I've got £X to invest — where should it go?" ----------
+  // Simple gross basis: £X is deployed straight into each destination (ISA fills
+  // its £20k limit first, the rest to GIA). No tax-relief modelling.
   function decisionComparator(inp, amount) {
-    var isaLeft = inp.isaAllowanceLeft != null ? inp.isaAllowanceLeft : 20000;
-    var penLeft = inp.pensionAllowanceLeft != null ? inp.pensionAllowanceLeft : 60000;
-    var uplift = pensionUplift(inp);
     var dests = [
       { key: 'pension' }, { key: 'isa' }, { key: 'gia' }, { key: 'cash' }
     ];
@@ -837,23 +847,15 @@
     var out = [];
     for (var i = 0; i < dests.length; i++) {
       var x = JSON.parse(JSON.stringify(inp));
-      var k = dests[i].key, label, invested;
-      if (k === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); label = 'Overpay mortgage'; invested = amount; }
-      else if (k === 'pension') {
-        var netForPen = Math.min(amount, penLeft / uplift);   // net cash that fits the allowance
-        var penIn = netForPen * uplift;
-        addLump(x, 'pension', penIn);
-        var restNet = amount - netForPen;
-        addLump(x, 'gia', restNet);
-        invested = penIn + restNet;
-        label = 'Pension' + (restNet > 0 ? ' + GIA' : '') + (uplift > 1.01 ? ' (+tax relief)' : '');
-      }
+      var k = dests[i].key, label, invested = amount;
+      if (k === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); label = 'Overpay mortgage'; }
+      else if (k === 'pension') { addLump(x, 'pension', amount); label = 'Pension'; }
       else if (k === 'isa') {
-        var toIsa = Math.min(isaLeft, amount); addLump(x, 'isa', toIsa);
+        var toIsa = Math.min(20000, amount); addLump(x, 'isa', toIsa);
         var rest = amount - toIsa; addLump(x, 'gia', rest);
-        invested = amount; label = rest > 0 ? 'ISA, then GIA' : 'ISA';
+        label = rest > 0 ? 'ISA, then GIA' : 'ISA';
       }
-      else { addLump(x, k, amount); invested = amount; label = k === 'gia' ? 'GIA' : 'Cash'; }
+      else { addLump(x, k, amount); label = k === 'gia' ? 'GIA' : 'Cash'; }
       var r = compute(x);
       out.push({ key: k, label: label, invested: invested, freedomAge: r.optionalityAge, survives: r.planSurvives,
         pension: r.pension.atAccess, bridge: r.accessible.atOptionality, income: r.retirement.sustainableIncome, legacy: r.endWorth });
@@ -893,7 +895,6 @@
     recommendation: recommendation,
     freedomBuffer: freedomBuffer,
     decisionComparator: decisionComparator,
-    pensionUplift: pensionUplift,
     milestones: milestones,
     requiredPensionAtAccess: requiredPensionAtAccess,
     requiredBridgeValue: requiredBridgeValue,
