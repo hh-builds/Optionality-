@@ -228,6 +228,31 @@ function App() {
   const gAcc  = (v) => gbpC(v * rf(inputs.pensionAccessAge));   // pots measured at pension access
   const gFree = (v) => gbpC(v * rf(result.effectiveStop));      // pots measured at the Freedom Age
   const gLife = (v) => gbpC(v * rf(inputs.lifeExpectancy));     // measured at life expectancy
+
+  // ---- Personal-CFO narrative: am I on track, pension status, what to do now ----
+  const balStrat = rec.strategies.find(s=>s.key==='balanced') || chosenStrat;
+  const yearsToFreedom = result.achievable ? Math.max(0, result.effectiveStop - inputs.currentAge) : null;
+  const pensionFunded = result.pension.atAccess >= result.pension.required;
+  const pensionAlmost = !pensionFunded && result.pension.atAccess >= result.pension.required * 0.9;
+  const pensionStatus = !result.achievable ? {cls:'r', label:'—'}
+    : pensionFunded ? {cls:'g', label:'Fully funded'}
+    : pensionAlmost ? {cls:'a', label:'Almost funded'}
+    : {cls:'r', label:'Behind target'};
+  const onTrackChip = !result.planSurvives ? {cls:'low', label:'Plan doesn’t hold yet'}
+    : (inputs.targetOptionalityAge && result.effectiveStop > inputs.targetOptionalityAge + 0.5) ? {cls:'med', label:'Slightly behind'}
+    : {cls:'good', label:'On track'};
+  const priority = !result.achievable ? 'closing the gap so the plan can fund your lifestyle at all'
+    : !result.planSurvives ? 'fixing the shortfall before you can stop'
+    : pensionFunded ? 'building accessible wealth (your Bridge Fund) so you can stop earlier'
+    : 'topping up your pension toward its target';
+  const balDelta = (result.optionalityAge!=null && balStrat && balStrat.age!=null) ? Math.round((result.optionalityAge - balStrat.age)*12) : 0;
+  const planLines = [];
+  if (balStrat) {
+    if (balStrat.split.pension > 0) planLines.push('Keep contributing about '+gbp(balStrat.split.pension)+' to your pension (at least your employer match and any tax-efficient minimum).');
+    else planLines.push('Your pension needs no more contributions to hit its target — keep any employer match, and redirect the rest to accessible savings.');
+    if (balStrat.split.isa > 0) planLines.push('Max your ISA ('+gbp(Math.min(balStrat.split.isa,20000))+').');
+    if (balStrat.split.gia > 0) planLines.push('Invest the remaining '+gbp(balStrat.split.gia)+' in your GIA.');
+  }
   const reqLine = realTerms ? result.pension.required * rf(inputs.pensionAccessAge) : result.pension.required;
 
   const chartData = rows.map(r => ({
@@ -242,6 +267,19 @@ function App() {
   const conf = confMap[result.confidence];
   // headline age: the chosen (overridden) stop age, else the earliest achievable
   const heroAge = result.overridden ? result.effectiveStop : (result.achievable ? result.optionalityAge : null);
+
+  // ---- Withdrawal-rate guardrail -------------------------------------
+  const wd = result.withdrawal || {};
+  const wdPct = (r) => (r!=null ? (r*100).toFixed(1)+'%' : '—');
+  const wdWarn = result.planSurvives && wd.status && wd.status !== 'safe' && wd.initialRate != null;
+  const wdMsg = wdWarn
+    ? 'This plan starts by drawing about '+wdPct(wd.initialRate)+' of your pot a year at age '+ageStr(result.effectiveStop)+' — '
+      + (wd.status==='high' ? 'well above' : 'above') + ' your '+wdPct(wd.target)+' sustainable guide. It still lasts to age '+inputs.lifeExpectancy
+      + ' because the horizon is finite, the State Pension arrives at '+inputs.statePensionAge+', and full returns are assumed to hold — but there’s little margin for a bad run of markets.'
+      + (wd.sustainableAge!=null && wd.sustainableAge>result.effectiveStop+0.1
+          ? ' To stay within your '+wdPct(wd.target)+' guide you’d wait to about '+ageStr(wd.sustainableAge)+'.'
+          : '')
+    : '';
 
   // plain-language reason behind the confidence rating
   const legacy = result.endWorth;
@@ -306,7 +344,9 @@ function App() {
         <div className="brand"><span className="dot"></span><h1>Financial Optionality</h1>
           <span className="muted" style={{fontSize:13}}>personal CFO dashboard</span></div>
         <div className="toolbar">
-          <button className="btn" onClick={()=>setRealTerms(!realTerms)} title="Switch tables and charts between today's money (real terms) and future pounds (nominal)">{realTerms?'£ Today’s money':'£ Future (nominal)'}</button>
+          <button className="btn subtle" onClick={()=>setRealTerms(!realTerms)} title={realTerms
+            ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
+            : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
           <button className="btn" onClick={()=>setDark(!dark)}>{dark?'☀ Light':'☾ Dark'}</button>
           <button className="btn" onClick={exportCsv}>⬇ CSV</button>
           <button className="btn" onClick={()=>window.print()}>⎙ Print</button>
@@ -334,6 +374,13 @@ function App() {
                   ? 'The earliest age you can stop for good and keep your lifestyle to age '+inputs.lifeExpectancy+'. Assumes all employment income and new savings stop at that age.'
                   : 'On current assumptions the plan never fully funds age '+inputs.lifeExpectancy+'. Adjust savings, spending or returns below.')
           }</div>
+          {wdWarn && <div className={'wd-guard '+(wd.status==='high'?'wd-high':'wd-watch')}>
+            <span className="wd-ic">{wd.status==='high'?'⚠':'⚡'}</span>
+            <span><b>Withdrawal-rate check:</b> {wdMsg}</span>
+            {wd.sustainableAge!=null && wd.sustainableAge>result.effectiveStop+0.1 &&
+              <button className="wd-btn" onClick={()=>set({plannedStopAge: Math.round(wd.sustainableAge*10)/10})}
+                title="Pin your plan to the age that stays within the sustainable rate">Use {ageStr(wd.sustainableAge)}</button>}
+          </div>}
           <div className="hero-plan">
             <span className="hp-lbl">Plan to stop at</span>
             <NumInput className="inline-num" style={{width:76,padding:'5px 8px',fontSize:15,textAlign:'center'}} min={0} step="0.1"
@@ -351,12 +398,12 @@ function App() {
         </div>
         <div className="hero-stats">
           <div className="hstat">
-            <div className="hs-k">Pension Coast Age {result.pension.buffer>0 && <span className="hs-badge">+{Math.round(result.pension.buffer*100)}% margin</span>}
+            <div className="hs-k">Pension status {result.pension.buffer>0 && <span className="hs-badge">+{Math.round(result.pension.buffer*100)}% margin</span>}
               <button className="why-btn" onClick={()=>setShowWhy(!showWhy)}>Why?</button></div>
-            <div className="hs-v tnum">{result.pension.coastFireAge!=null?ageStr(result.pension.coastFireAge):'Not yet'}</div>
-            <div className="hs-s">{result.pension.coastFireAge!=null
-              ? 'Under your current assumptions, your existing pension is projected to reach its target (incl. a '+Math.round(result.pension.buffer*100)+'% margin) without further contributions. Extra pension saving may still be worth it for tax relief, employer contributions or a bigger buffer.'
-              : 'Under your current assumptions, your existing pension still needs contributions to reach its target'+(result.pension.buffer>0?' plus a '+Math.round(result.pension.buffer*100)+'% margin':'')+'.'}</div>
+            <span className={'pill '+(pensionStatus.cls==='g'?'good':pensionStatus.cls==='a'?'med':'low')} style={{margin:'3px 0'}}><span className="ic"></span>{pensionStatus.label}</span>
+            <div className="hs-s">{gAcc(result.pension.atAccess)} projected vs {gAcc(result.pension.required)} target. {result.pension.coastFireAge!=null
+              ? 'Coasted — projected to reach target with no further contributions (assumes your returns, spending, withdrawal rate and access age).'
+              : 'Still needs contributions to reach the target.'}</div>
             {showWhy && <div className="why-box">
               <div className="why-row"><span>Current pension</span><b>{gbpC(result.pension.current)}</b></div>
               <div className="why-row"><span>Net return (after fee)</span><b>{(result.pension.netReturn*100).toFixed(1)}%</b></div>
@@ -376,6 +423,27 @@ function App() {
               : confidenceWhy}</div>
           </div>
         </div>
+      </div>
+
+      {/* ===== YOUR PLAN — the personal-CFO narrative ===== */}
+      <div className="panel cfo-plan">
+        <div className="plan-head">
+          <h2>📋 Your Plan</h2>
+          <span className={'pill '+onTrackChip.cls}><span className="ic"></span>{onTrackChip.label}</span>
+        </div>
+        <div className="plan-narrative">{
+          result.achievable
+            ? <span>You’re about <b>{Math.round(yearsToFreedom)} year{Math.round(yearsToFreedom)===1?'':'s'}</b> from financial freedom (age <b>{ageStr(result.effectiveStop)}</b>). Your pension is <b style={{color:pensionStatus.cls==='g'?'var(--good-text)':pensionStatus.cls==='a'?'var(--warning)':'var(--critical)'}}>{pensionStatus.label.toLowerCase()}</b>. Your biggest priority now is <b>{priority}</b>.</span>
+            : <span>On your current assumptions the plan doesn’t yet fund your lifestyle to age {inputs.lifeExpectancy}. The priority is {priority} — the opportunities below show the biggest levers.</span>
+        }</div>
+        {planLines.length>0 && <div className="plan-actions">
+          <div className="pa-title">This year — {gbp(rec.amount)} of savings</div>
+          {planLines.map((l,i)=>(<div className="pa-line" key={i}><span className="pa-tick">✓</span> {l}</div>))}
+          <div className="pa-foot">{balDelta>0
+            ? 'Following this brings your Freedom Age forward by about '+monthsStr(balDelta)+' vs your current split. '
+            : 'This keeps you at your earliest Freedom Age. '}
+            <span className="muted">Balanced plan — optimised for the earliest Freedom Age that keeps your pension on target. Excludes tax effects.</span></div>
+        </div>}
       </div>
 
       {/* LIFE TIMELINE */}
@@ -453,7 +521,7 @@ function App() {
       </div>
 
       {/* ===== WHERE YOU STAND ===== */}
-      <div className="section-title">Where you stand <span className="terms-tag" style={{marginLeft:8}}>{realTerms?'today’s money':'future £ (nominal)'}</span></div>
+      <div className="section-title">Where you stand</div>
       <div className="kpis">
         <KpiCard title="Pension" status={result.pension.status}
           main={gAcc(result.pension.atAccess)}
@@ -467,12 +535,20 @@ function App() {
           rows={[['Need to bridge to '+inputs.pensionAccessAge, gFree(result.accessible.requiredBridge)],
                  ['ISA/GIA now', gbpC(result.accessible.current)],
                  ['Left @ access', gAcc(result.accessible.remainingAtAccess)]]} />
-        <KpiCard title="Lifetime Income" status={result.retirement.status}
+        <KpiCard title="Income after pension" status={result.retirement.status}
           main={gbpC(result.retirement.sustainableIncome)+'/yr'}
           reason={{good: result.retirement.sustainableIncome>=result.retirement.target, text:(result.retirement.sustainableIncome>=result.retirement.target?'+':'−')+gbpC(Math.abs(result.retirement.sustainableIncome-result.retirement.target))+'/yr vs target'}}
           rows={[['Target spend', gbpC(result.retirement.target)+'/yr'],
                  ['State pension', gbpC(result.retirement.statePension)+'/yr'],
                  ['Est. legacy @ '+inputs.lifeExpectancy, gLife(result.retirement.legacy)]]} />
+        <KpiCard title="Starting withdrawal rate"
+          status={wd.status==='safe'?'ahead':wd.status==='watch'?'ontrack':'behind'}
+          main={wd.initialRate!=null?wdPct(wd.initialRate):'—'}
+          reason={{good: !wdWarn, text: wd.initialRate==null ? 'Covered by State Pension'
+            : wdWarn ? 'above your '+wdPct(wd.target)+' guide' : 'within your '+wdPct(wd.target)+' guide'}}
+          rows={[['Your sustainable guide', wdPct(wd.target)],
+                 ['First-year draw @ '+ageStr(result.effectiveStop), wd.initialRate!=null?wdPct(wd.initialRate):'—'],
+                 ['Within-guide age', wd.sustainableAge!=null?ageStr(wd.sustainableAge):'—']]} />
         <KpiCard title="Investable net worth"
           main={gbpC(nw.total)}
           rows={[['Pension', gbpC(nw.pension)],
@@ -568,9 +644,9 @@ function App() {
       <div className="grid2">
         <div className="panel">
           <h2>⭐ Biggest opportunities</h2>
-          <div className="desc">The levers that move your Freedom Age forward most — click any to apply it.</div>
+          <div className="desc">Your top three levers to bring Freedom forward — click any to apply it.</div>
           {opps.length===0 && <div className="muted">Set an achievable plan to see opportunities.</div>}
-          {opps.map((o,i) => (
+          {opps.slice(0,3).map((o,i) => (
             <button className="oppitem clickable" key={i} onClick={()=>applyPatch(o.patch)} title="Apply this change to your plan">
               <span className="lab">{o.label}</span>
               <span className={'delta '+(o.deltaMonths>0?'pos':'neg')}>{o.deltaMonths>0?'▲ '+monthsStr(o.deltaMonths)+' earlier':o.deltaMonths<0?'▼ later':'≈ no change'} <span className="apply-hint">apply →</span></span>
@@ -629,7 +705,7 @@ function App() {
       <div className="section-title">Projections</div>
       <div className="grid2">
         <div className="panel">
-          <div className="chart-h"><h2>Pension vs target</h2><span className="terms-tag">{realTerms?'today’s money':'future £'}</span></div>
+          <div className="chart-h"><h2>Pension vs target</h2></div>
           <div className="desc">Projected pot against the value needed at access age {inputs.pensionAccessAge}.</div>
           {ResponsiveContainer ? (
           <ResponsiveContainer width="100%" height={230}>
@@ -650,7 +726,7 @@ function App() {
         </div>
 
         <div className="panel">
-          <div className="chart-h"><h2>Combined net worth</h2><span className="terms-tag">{realTerms?'today’s money':'future £'}</span></div>
+          <div className="chart-h"><h2>Combined net worth</h2></div>
           <div className="desc">Pension, ISA, GIA, cash{nw.homeEquity>0?' and home equity':''} over time.</div>
           {ResponsiveContainer ? (
           <ResponsiveContainer width="100%" height={230}>
@@ -678,7 +754,7 @@ function App() {
       </div>
 
       <div className="panel" style={{marginBottom:16}}>
-        <div className="chart-h"><h2>Annual cash flow</h2><span className="terms-tag">{realTerms?'today’s money':'future £'}</span></div>
+        <div className="chart-h"><h2>Annual cash flow</h2></div>
         <div className="desc">Contributions in (positive) and withdrawals out (negative), split by where the money comes from.</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={220}>
@@ -717,12 +793,13 @@ function App() {
           <table>
             <thead>
               <tr className="grouprow">
-                <th></th><th colSpan={5} className="grp grp-p">Pension</th><th colSpan={5} className="grp grp-a">ISA / GIA / cash</th><th></th>
+                <th></th><th colSpan={5} className="grp grp-p">Pension</th><th colSpan={5} className="grp grp-a">ISA / GIA / cash</th><th></th><th></th>
               </tr>
               <tr>
                 <th>Age</th>
                 <th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th>
                 <th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th>
+                <th title={'Spending drawn from your invested pot this year, as a % of the pot. Your sustainable guide is '+(inputs.withdrawalRate*100).toFixed(1)+'%. Highlighted when above it.'}>Draw&nbsp;rate</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -740,6 +817,8 @@ function App() {
                   <td>{r.accessOut?<span style={{color:'var(--critical)'}}>{money(-r.accessOut, r.age)}</span>:'—'}</td>
                   <td>{money(r.growth, r.age)}</td>
                   <td>{money(r.accessEnd, r.age)}</td>
+                  <td className="tnum" style={r.withdrawalRate>inputs.withdrawalRate*1.05?{color:'var(--critical)',fontWeight:600}:{color:'var(--muted)'}}>
+                    {r.withdrawalRate>0 && r.phase!=='accumulation' ? (r.withdrawalRate*100).toFixed(1)+'%' : '—'}</td>
                   <td className="notecell">{r.notes}</td>
                 </tr>
               ))}

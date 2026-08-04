@@ -30,68 +30,71 @@
   }
 
   // ---- Default inputs -------------------------------------------------
+  // Defaults use UK averages (2025/26) where available, best-estimate otherwise.
+  // Sources noted in comments: ONS Wealth & Assets Survey, PLSA Retirement Living
+  // Standards, full New State Pension 2025/26, HMRC allowances, BoE inflation target.
   var DEFAULTS = {
     // Personal
     currentAge: 35,
-    targetOptionalityAge: 40,      // optional aspiration
+    targetOptionalityAge: 55,      // optional aspiration
     plannedStopAge: null,          // manual override of the optionality age (null = auto / earliest)
-    pensionAccessAge: 60,
-    lifeExpectancy: 95,
-    statePensionAge: 68,
+    pensionAccessAge: 57,          // UK minimum pension access age from April 2028
+    lifeExpectancy: 90,            // prudent planning age (ONS cohort life expectancy ~87)
+    statePensionAge: 68,           // legislated for those born after ~1978
     statePensionIncluded: true,
-    statePensionAmount: 10000,     // annual, today's money
+    statePensionAmount: 11973,     // full New State Pension 2025/26 (£230.25/wk)
 
     // Pension
-    pensionCurrent: 10000,
-    employerContribution: 10000,   // annual, added to pension while working
-    pensionReturn: 0.07,
-    pensionFee: 0.003,
+    pensionCurrent: 35000,         // ONS avg pension wealth, age 35–44
+    employerContribution: 4000,    // annual workplace contribution (auto-enrolment on ~median pay)
+    pensionReturn: 0.07,           // long-run nominal equity/balanced return
+    pensionFee: 0.005,             // typical all-in workplace fund charge
     withdrawalRate: 0.04,          // sustainable pension withdrawal rate
     pensionBuffer: 0.10,           // safety margin on top of the pension target (coast + status)
 
     // ISA
-    isaCurrent: 10000,
+    isaCurrent: 25000,             // avg adult ISA holdings (HMRC/ONS)
     isaReturn: 0.07,
 
     // GIA
-    giaCurrent: 10000,
+    giaCurrent: 5000,
     giaReturn: 0.07,
     giaTaxDrag: 0.005,
 
     // Cash
-    cashCurrent: 10000,
+    cashCurrent: 10000,            // typical household savings balance
 
     // Bridge (post-stop, pre-pension-access)
     bridgeReturn: 0.05,
 
     // Inflation
-    inflation: 0.025,
+    inflation: 0.025,              // long-run assumption (BoE target 2% + margin)
 
     // Spending
-    bridgeSpending: 10000,         // annual, before pension access
-    retirementSpending: 10000,     // annual, after pension access
+    bridgeSpending: 30000,         // annual, before pension access (~PLSA moderate, single)
+    retirementSpending: 30000,     // annual, after pension access (~PLSA moderate, single)
     spendingInflationLinked: true,
 
     // Savings plan — list of periods, each active from `fromYear` (years from now)
     // until the next period starts. amount is annual; allocPension = share to pension.
     savingsPlan: [
-      { fromYear: 0, amount: 10000, allocPension: 0.30 }
+      { fromYear: 0, amount: 6000, allocPension: 0.30 }   // ~median household annual saving
     ],
     // legacy mirrors of period 0 (kept for back-compat / migration)
-    annualSavings: 10000,
+    annualSavings: 6000,
     allocPension: 0.30,
 
     // Tax & wrappers (this year) — used by the lump-sum comparator's net-cost view
-    marginalRate: 0.40,            // marginal income-tax rate
+    marginalRate: 0.20,            // basic rate — median UK earner
     salarySacrifice: true,         // pension via salary sacrifice (saves employee NI too)
-    employeeNI: 0.02,              // employee NI rate saved on sacrificed pay
-    employerNIpass: 0.0,           // share of employer's 13.8% NI passed into your pension
+    employeeNI: 0.08,              // employee NI main rate (April 2024)
+    employerNIpass: 0.0,           // share of employer's NI passed into your pension
     pensionAllowanceLeft: 60000,   // pension annual allowance remaining this year
     isaAllowanceLeft: 20000,       // ISA allowance remaining this year
 
     // Property (optional, informational)
-    homeValue: 0,
-    mortgage: 0,
+    homeValue: 290000,             // ~UK average house price
+    mortgage: 150000,
 
     // Future cash events — timed as "years from now" (yearsFromNow)
     cashEvents: [
@@ -120,6 +123,14 @@
     var survived = true;
     var failAge = null;
     var minAccessibleBridge = Infinity;
+
+    // Withdrawal-rate guardrail: track the portfolio draw as a % of the pot in
+    // the retirement phase (age >= pension access). The 4% assumption is a
+    // sustainability heuristic; here we MEASURE the actual rate so the UI can
+    // warn when the plan leans on a rate above it.
+    var initialSWR = null;   // first full retirement-year rate
+    var peakSWR = 0;         // worst retirement-year rate
+    var peakSWRAge = null;
 
     var pensionAtAccess = null;
     var accessibleAtOptionality = null;
@@ -203,6 +214,7 @@
 
       // 3) Spending / withdrawals (only for the retired fraction of the year)
       var sppAmt = 0; // state pension received this year (informational)
+      var withdrawalRate = 0;
       if (spendFrac > 0) {
         var baseSpend = (a < accessAge ? inp.bridgeSpending : inp.retirementSpending);
         var spendNeed = baseSpend * inflFactor * spendFrac;
@@ -210,6 +222,8 @@
           ? inp.statePensionAmount * inflFactor * spendFrac : 0;
         sppAmt = sp;
         var need = Math.max(0, spendNeed - sp);
+        var potPreDraw = pension + isa + gia + cash;   // invested pot before this year's draw
+        withdrawalRate = potPreDraw > 0 ? need / potPreDraw : 0;
 
         if (a < accessAge) {
           // BRIDGE: accessible only (cash -> isa -> gia)
@@ -230,6 +244,12 @@
           accessOut += (fromCash2 + fromIsa2 + fromGia2);
           if (draw2 > 0.5) { survived = false; if (failAge === null) failAge = a; }
         }
+      }
+
+      // guardrail: record retirement-phase withdrawal rates (after access age)
+      if (spendFrac >= 1 && a >= accessAge && withdrawalRate > 0) {
+        if (initialSWR === null) initialSWR = withdrawalRate;
+        if (withdrawalRate > peakSWR) { peakSWR = withdrawalRate; peakSWRAge = a; }
       }
 
       // track bridge low-water mark
@@ -268,6 +288,7 @@
         pensionWithdraw: round2(pensionOut),
         totalWithdraw: round2(pensionOut + accessOut),
         statePension: round2(sppAmt),
+        withdrawalRate: withdrawalRate,
         growth: round2(isaGrowth + giaGrowth),
         accessEnd: round2(isa + gia + cash),
         isa: round2(isa), gia: round2(gia), cash: round2(cash),
@@ -287,7 +308,10 @@
       minAccessibleBridge: minAccessibleBridge,
       pensionAtAccess: pensionAtAccess === null ? pension : pensionAtAccess,
       accessibleAtOptionality: accessibleAtOptionality === null ? (isa + gia + cash) : accessibleAtOptionality,
-      accessibleAtAccess: accessibleAtAccess === null ? 0 : accessibleAtAccess
+      accessibleAtAccess: accessibleAtAccess === null ? 0 : accessibleAtAccess,
+      initialSWR: initialSWR,
+      peakSWR: peakSWR,
+      peakSWRAge: peakSWRAge
     };
   }
 
@@ -314,6 +338,35 @@
     while (ans < inp.lifeExpectancy && !simulate(inp, ans).survived && guard < 30) {
       ans = Math.round((ans + 0.1) * 10) / 10; guard++;
     }
+    return ans;
+  }
+
+  // ---- Sustainable-rate guardrail ------------------------------------
+  // The earliest stop age at which the plan not only survives to life
+  // expectancy but does so with a first-year (retirement) withdrawal rate at
+  // or below the assumed sustainable rate — i.e. it keeps a margin for a bad
+  // run of markets rather than relying on central returns holding exactly.
+  function sustainableOptionalityAge(inp) {
+    var target = (inp.withdrawalRate || 0.04) * 1.05; // small tolerance band
+    function ok(stop) {
+      var s = simulate(inp, stop);
+      if (!s.survived) return false;
+      // if the plan never actually draws in retirement (e.g. covered by state
+      // pension), treat it as within-rate.
+      if (s.initialSWR == null) return true;
+      return s.initialSWR <= target;
+    }
+    var lo = inp.currentAge, hi = inp.lifeExpectancy;
+    if (ok(lo)) return lo;
+    if (!ok(hi)) return null;                 // even working to the end can't get within-rate
+    for (var i = 0; i < 40; i++) {
+      var mid = (lo + hi) / 2;
+      if (ok(mid)) hi = mid; else lo = mid;
+      if (hi - lo < 0.05) break;
+    }
+    var ans = Math.ceil(hi * 10) / 10;
+    var guard = 0;
+    while (ans < inp.lifeExpectancy && !ok(ans) && guard < 30) { ans = Math.round((ans + 0.1) * 10) / 10; guard++; }
     return ans;
   }
 
@@ -506,6 +559,31 @@
         legacy: sim.endWorth,
         status: status(maxRet - inp.retirementSpending, inp.retirementSpending)
       },
+      withdrawal: (function () {
+        var target = inp.withdrawalRate || 0.04;
+        // The classic "safe withdrawal rate" concept measures the FIRST year's
+        // draw as a share of the pot; later years naturally rise toward 100% as
+        // the pot is deliberately run down, so the peak is not a fair gauge.
+        var initial = sim.initialSWR;
+        var st = 'safe';
+        if (initial != null) {
+          if (initial > target * 1.5) st = 'high';
+          else if (initial > target * 1.1) st = 'watch';
+        }
+        return {
+          target: target,
+          initialRate: initial,          // first full retirement year (the SWR)
+          peakRate: sim.peakSWR || 0,    // late-life peak (approaches 100% by design)
+          peakAge: sim.peakSWRAge,
+          status: st,
+          // earliest age that stays within the sustainable rate (the guardrailed answer)
+          sustainableAge: sustainableOptionalityAge(inp),
+          // A plan can still survive above 4% because the horizon is finite, the
+          // State Pension arrives later, and central returns are assumed to hold —
+          // but it has less margin for a bad run of markets. Flag that context.
+          survivesAbove: (initial != null && initial > target * 1.1 && planSurvives)
+        };
+      })(),
       netWorth: {
         pension: inp.pensionCurrent,
         isa: inp.isaCurrent,
@@ -807,6 +885,7 @@
     DEFAULTS: DEFAULTS,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,
+    sustainableOptionalityAge: sustainableOptionalityAge,
     compute: compute,
     opportunities: opportunities,
     risks: risks,
