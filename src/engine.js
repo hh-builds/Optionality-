@@ -81,6 +81,14 @@
     annualSavings: 10000,
     allocPension: 0.30,
 
+    // Tax & wrappers (this year) — used by the lump-sum comparator's net-cost view
+    marginalRate: 0.40,            // marginal income-tax rate
+    salarySacrifice: true,         // pension via salary sacrifice (saves employee NI too)
+    employeeNI: 0.02,              // employee NI rate saved on sacrificed pay
+    employerNIpass: 0.0,           // share of employer's 13.8% NI passed into your pension
+    pensionAllowanceLeft: 60000,   // pension annual allowance remaining this year
+    isaAllowanceLeft: 20000,       // ISA allowance remaining this year
+
     // Property (optional, informational)
     homeValue: 0,
     mortgage: 0,
@@ -661,9 +669,9 @@
     plan[firstPeriodIdx(plan)].allocPension = allocP;
     x.savingsPlan = plan; x.plannedStopAge = null;
     var age = findOptionalityAge(x);
-    if (age == null) return { age: null, legacy: -1e18 };
+    if (age == null) return { age: null, legacy: -1e18, pensionAtAccess: 0 };
     var sim = simulate(x, age);
-    return { age: age, legacy: sim.endWorth };
+    return { age: age, legacy: sim.endWorth, pensionAtAccess: sim.pensionAtAccess };
   }
   // Returns the recommended this-year split for four strategies.
   function recommendation(inp) {
@@ -683,17 +691,28 @@
       var g = grid[s2];
       if (g.age != null && g.age <= bestAge + 2 && g.legacy > bestLegacy + 1e-6) { bestLegacy = g.legacy; riskAlloc = s2 / 100; }
     }
+    // Balanced = earliest Freedom Age that still leaves the pension on track to its
+    // target (+ safety margin). Funds the pension only as much as it needs — never
+    // over-weights the locked pension, so it never makes you work longer than needed.
+    var reqBuffered = requiredPensionAtAccess(inp) * (1 + (inp.pensionBuffer || 0));
+    var balancedAlloc = null, balBestAge = 1e9, bestPenGap = -1e18, fallbackAlloc = freedomAlloc;
+    for (var s3 = 0; s3 <= 100; s3 += 5) {
+      var gb = grid[s3]; if (gb.age == null) continue;
+      if (gb.pensionAtAccess >= reqBuffered && gb.age < balBestAge - 1e-9) { balBestAge = gb.age; balancedAlloc = s3 / 100; }
+      if (gb.pensionAtAccess > bestPenGap) { bestPenGap = gb.pensionAtAccess; fallbackAlloc = s3 / 100; } // if target never met
+    }
+    if (balancedAlloc == null) balancedAlloc = fallbackAlloc; // pension can't reach target: get as close as possible
     function pack(key, label, alloc, blurb) {
       var g = grid[Math.round(alloc * 100)] || ageLegacyForAlloc(inp, alloc);
       return { key: key, label: label, allocPension: alloc, split: splitThreeWays(amount, alloc), age: g.age, legacy: g.legacy, blurb: blurb };
     }
     var strategies = [
       pack('freedom', 'Maximise Freedom', freedomAlloc, 'Earliest Freedom Age.'),
-      pack('balanced', 'Balanced', 0.50, 'Even split of pension and accessible.'),
+      pack('balanced', 'Balanced', balancedAlloc, 'Earliest Freedom while the pension still hits its target.'),
       pack('pension', 'Maximise Pension', 1.00, 'Biggest long-term pension pot.'),
       pack('lowrisk', 'Lowest Risk', riskAlloc, 'Largest safety buffer at life expectancy.')
     ];
-    return { amount: amount, strategies: strategies, recommendedKey: 'freedom' };
+    return { amount: amount, strategies: strategies, recommendedKey: 'balanced' };
   }
 
   // ---- Freedom buffer: how much headroom before the Freedom Age slips -----
@@ -713,30 +732,52 @@
     return { spendHeadroom: Math.max(0, spendHeadroom), returnHeadroom: Math.max(0, rlo), baseAge: base };
   }
 
-  // ---- Decision comparator: "I've got £X — where should it go?" ----------
+  // Pension £ received per £1 of net (take-home) cost, given tax relief.
+  function pensionUplift(inp) {
+    if (inp.salarySacrifice) {
+      var denom = Math.max(0.05, 1 - (inp.marginalRate || 0) - (inp.employeeNI || 0));
+      return (1 + (inp.employerNIpass || 0)) / denom;      // e.g. 40%+2% → ~1.72×
+    }
+    return 1 / Math.max(0.05, 1 - (inp.marginalRate || 0)); // relief at source: 40% → ~1.67×
+  }
+
+  // ---- Decision comparator: "I've got £X of net cash — where should it go?" ----------
+  // `amount` is NET take-home cash. Each destination deploys what that cash buys
+  // after tax relief and wrapper allowances, so pension's relief is visible.
   function decisionComparator(inp, amount) {
-    // realistic annual wrapper limits (this year only; carry-forward ignored)
-    var ISA_LIMIT = 20000, PENSION_ALLOWANCE = 60000;
+    var isaLeft = inp.isaAllowanceLeft != null ? inp.isaAllowanceLeft : 20000;
+    var penLeft = inp.pensionAllowanceLeft != null ? inp.pensionAllowanceLeft : 60000;
+    var uplift = pensionUplift(inp);
     var dests = [
-      { key: 'pension', label: amount > PENSION_ALLOWANCE ? 'Pension (then GIA)' : 'Pension' },
-      { key: 'isa', label: amount > ISA_LIMIT ? 'ISA, then GIA' : 'ISA' },
-      { key: 'gia', label: 'GIA' },
-      { key: 'cash', label: 'Cash' }
+      { key: 'pension' }, { key: 'isa' }, { key: 'gia' }, { key: 'cash' }
     ];
-    if ((inp.mortgage || 0) > 0) dests.push({ key: 'mortgage', label: 'Overpay mortgage' });
+    if ((inp.mortgage || 0) > 0) dests.push({ key: 'mortgage' });
     function addLump(x, account, amt) {
+      if (amt <= 0) return;
       x.cashEvents = (x.cashEvents || []).concat([{ name: 'Lump sum', amount: amt, yearsFromNow: 0, direction: 'in', account: account }]);
     }
     var out = [];
     for (var i = 0; i < dests.length; i++) {
       var x = JSON.parse(JSON.stringify(inp));
-      var k = dests[i].key;
-      if (k === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); }
-      else if (k === 'isa') { var toIsa = Math.min(ISA_LIMIT, amount); addLump(x, 'isa', toIsa); if (amount - toIsa > 0) addLump(x, 'gia', amount - toIsa); }
-      else if (k === 'pension') { var toPen = Math.min(PENSION_ALLOWANCE, amount); addLump(x, 'pension', toPen); if (amount - toPen > 0) addLump(x, 'gia', amount - toPen); }
-      else { addLump(x, k, amount); }
+      var k = dests[i].key, label, invested;
+      if (k === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); label = 'Overpay mortgage'; invested = amount; }
+      else if (k === 'pension') {
+        var netForPen = Math.min(amount, penLeft / uplift);   // net cash that fits the allowance
+        var penIn = netForPen * uplift;
+        addLump(x, 'pension', penIn);
+        var restNet = amount - netForPen;
+        addLump(x, 'gia', restNet);
+        invested = penIn + restNet;
+        label = 'Pension' + (restNet > 0 ? ' + GIA' : '') + (uplift > 1.01 ? ' (+tax relief)' : '');
+      }
+      else if (k === 'isa') {
+        var toIsa = Math.min(isaLeft, amount); addLump(x, 'isa', toIsa);
+        var rest = amount - toIsa; addLump(x, 'gia', rest);
+        invested = amount; label = rest > 0 ? 'ISA, then GIA' : 'ISA';
+      }
+      else { addLump(x, k, amount); invested = amount; label = k === 'gia' ? 'GIA' : 'Cash'; }
       var r = compute(x);
-      out.push({ key: k, label: dests[i].label, freedomAge: r.optionalityAge, survives: r.planSurvives,
+      out.push({ key: k, label: label, invested: invested, freedomAge: r.optionalityAge, survives: r.planSurvives,
         pension: r.pension.atAccess, bridge: r.accessible.atOptionality, income: r.retirement.sustainableIncome, legacy: r.endWorth });
     }
     out.sort(function (a, b) { var aa = a.freedomAge == null ? 1e6 : a.freedomAge, bb = b.freedomAge == null ? 1e6 : b.freedomAge; if (Math.abs(aa - bb) > 0.05) return aa - bb; return b.income - a.income; });
@@ -773,6 +814,7 @@
     recommendation: recommendation,
     freedomBuffer: freedomBuffer,
     decisionComparator: decisionComparator,
+    pensionUplift: pensionUplift,
     milestones: milestones,
     requiredPensionAtAccess: requiredPensionAtAccess,
     requiredBridgeValue: requiredBridgeValue,

@@ -493,7 +493,7 @@ function App() {
         </div>
         <div className="strat-def">{{
           freedom: 'Maximise Freedom — earliest possible Freedom Age, directing savings to accessible accounts (ISA/GIA) to fund the bridge to pension access.',
-          balanced: 'Balanced (default) — an even split between pension and accessible savings: keeps the pension growing while still funding the bridge.',
+          balanced: 'Balanced (default) — the earliest Freedom Age that still keeps your pension on track to its target (+ margin). Funds the pension only as much as it needs, then sends the rest to accessible savings — so it never over-weights the locked pension.',
           pension: 'Maximise Pension — everything into the pension for the biggest long-term pot and retirement income; your Freedom Age is later.',
           lowrisk: 'Lowest Risk — keeps your Freedom Age near the earliest while building the largest safety buffer at life expectancy.'
         }[strategy]}</div>
@@ -527,19 +527,20 @@ function App() {
       {/* DECISION COMPARATOR */}
       <div className="panel comparator" style={{marginBottom:16}}>
         <div className="chart-h" style={{marginBottom:4}}><h2>💡 I’ve got a lump sum — where should it go?</h2></div>
-        <div className="desc" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>Compare putting
+        <div className="desc" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>Compare
           <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
             <span style={{position:'absolute',left:9,color:'var(--muted)',fontSize:13,pointerEvents:'none'}}>£</span>
             <NumInput className="inline-num" style={{paddingLeft:18,width:120}} step={5000} min={0} value={compareAmount} ariaLabel="Lump sum amount" onChange={v=>setCompareAmount(v)} />
           </span>
-          across your options — ranked by the earliest Freedom Age. <span className="muted">ISA is capped at £20k and pension at the £60k allowance this year (carry-forward ignored); the rest flows to GIA. Excludes tax relief.</span></div>
+          of <b style={{color:'var(--text-primary)'}}>net take-home cash</b> — ranked by earliest Freedom Age. <span className="muted">Pension gets tax relief, so the same net cash buys ~{Engine.pensionUplift(inputs).toFixed(2)}× as much in your pension (salary sacrifice, {Math.round(inputs.marginalRate*100)}% tax). ISA £20k / pension £60k allowances; the rest flows to GIA.</span></div>
         <div className="tablewrap">
           <table className="cmp-table">
-            <thead><tr><th>Put it…</th><th>Freedom Age</th><th>Pension @ access</th><th>Bridge Fund</th><th>Lifetime income</th></tr></thead>
+            <thead><tr><th>Put it…</th><th>Goes in</th><th>Freedom Age</th><th>Pension @ access</th><th>Bridge Fund</th><th>Lifetime income</th></tr></thead>
             <tbody>
               {comparison.map((d,i)=>(
                 <tr key={i} className={d.best?'cmp-best':''}>
                   <td style={{textAlign:'left'}}>{d.label}{d.best && <span className="best-tag">best for freedom</span>}</td>
+                  <td className="tnum">{gbpC(d.invested)}</td>
                   <td className="tnum">{d.freedomAge!=null?ageStr(d.freedomAge):'—'}</td>
                   <td className="tnum">{gAcc(d.pension)}</td>
                   <td className="tnum">{gbpC(d.bridge * rf(d.freedomAge!=null?d.freedomAge:result.effectiveStop))}</td>
@@ -788,6 +789,17 @@ function App() {
           <Pct label="Target withdrawal rate" value={inputs.withdrawalRate} onChange={v=>set({withdrawalRate:v})} />
           <Pct label="Pension safety margin (on top of target)" value={inputs.pensionBuffer} onChange={v=>set({pensionBuffer:v})} />
           <div className="note">The Coast age and pension status aim for the required pot × (1 + margin). 0% = just the target; 10–20% adds a cushion so “stop contributing” isn’t called on a razor-thin surplus.</div>
+        </Section>
+
+        <Section title="Tax &amp; wrappers">
+          <div className="note" style={{marginTop:0,marginBottom:6}}>Powers the lump-sum comparator’s net-cost view (pension tax relief). This year’s figures.</div>
+          <Pct label="Marginal income-tax rate" value={inputs.marginalRate} onChange={v=>set({marginalRate:v})} />
+          <label className="switch"><input type="checkbox" checked={inputs.salarySacrifice} onChange={e=>set({salarySacrifice:e.target.checked})} />Pension via salary sacrifice (also saves NI)</label>
+          {inputs.salarySacrifice && <Pct label="Employee NI saved on sacrifice" value={inputs.employeeNI} onChange={v=>set({employeeNI:v})} />}
+          {inputs.salarySacrifice && <Pct label="Employer NI passed into pension" value={inputs.employerNIpass} onChange={v=>set({employerNIpass:v})} />}
+          <Num label="Pension allowance left this year" value={inputs.pensionAllowanceLeft} onChange={v=>set({pensionAllowanceLeft:v})} prefix="£" />
+          <Num label="ISA allowance left this year" value={inputs.isaAllowanceLeft} onChange={v=>set({isaAllowanceLeft:v})} prefix="£" />
+          <div className="note">Net £1 into pension via salary sacrifice buys ~{Engine.pensionUplift(inputs).toFixed(2)}× as much invested as £1 into ISA/GIA. The recommendation split above is still shown gross (pre-tax); this net-cost view lives in the comparator for now.</div>
         </Section>
 
         <Section title="ISA">
