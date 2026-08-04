@@ -148,6 +148,7 @@ function App() {
       base.savingsPlan = [{ fromYear:0, amount: base.annualSavings != null ? base.annualSavings : 10000,
         allocPension: base.allocPension != null ? base.allocPension : 0.30 }];
     }
+    base.spendingInflationLinked = true; // spending always holds its real (today's-money) value
     return base;
   });
   const [dark, setDark] = useState(() => {
@@ -189,7 +190,8 @@ function App() {
   const rks = useMemo(() => Engine.risks(inputs), [inputs]);
   const rec = useMemo(() => Engine.recommendation(inputs), [inputs]);
   const buffer = useMemo(() => Engine.freedomBuffer(inputs), [inputs]);
-  const [strategy, setStrategy] = useState('freedom');
+  const [strategy, setStrategy] = useState('balanced');
+  const [showWhy, setShowWhy] = useState(false);
   const [compareAmount, setCompareAmount] = useState(100000);
   const comparison = useMemo(() => Engine.decisionComparator(inputs, compareAmount), [inputs, compareAmount]);
   const chosenStrat = rec.strategies.find(s => s.key === strategy) || rec.strategies[0];
@@ -219,9 +221,13 @@ function App() {
   const totalNW = nw.total + nw.homeEquity;
 
   /* chart data */
-  // real-terms deflator: express future £ in today's money when realTerms is on
+  // real-terms deflator: express future £ in today's money when realTerms is on.
+  // Each figure is deflated by the age at which it's measured.
   const rf = (age) => realTerms ? 1 / Math.pow(1 + inputs.inflation, (age||inputs.currentAge) - inputs.currentAge) : 1;
   const money = (v, age) => gbpC(v * rf(age));
+  const gAcc  = (v) => gbpC(v * rf(inputs.pensionAccessAge));   // pots measured at pension access
+  const gFree = (v) => gbpC(v * rf(result.effectiveStop));      // pots measured at the Freedom Age
+  const gLife = (v) => gbpC(v * rf(inputs.lifeExpectancy));     // measured at life expectancy
   const reqLine = realTerms ? result.pension.required * rf(inputs.pensionAccessAge) : result.pension.required;
 
   const chartData = rows.map(r => ({
@@ -232,7 +238,7 @@ function App() {
     withdrawals: -r.withdrawals * rf(r.age), pensionWithdrawals: -r.pensionWithdraw * rf(r.age)
   }));
 
-  const confMap = { high:['good','High confidence'], medium:['med','Medium confidence'], low:['low','Low confidence'] };
+  const confMap = { high:['good','Strong'], medium:['med','Moderate'], low:['low','Low'] };
   const conf = confMap[result.confidence];
   // headline age: the chosen (overridden) stop age, else the earliest achievable
   const heroAge = result.overridden ? result.effectiveStop : (result.achievable ? result.optionalityAge : null);
@@ -325,7 +331,7 @@ function App() {
                       ? '⚠ Can’t bridge to pension access at this age — accessible savings run dry near age '+(result.failAge!=null?Math.floor(result.failAge):'—')+' (pension locked until '+inputs.pensionAccessAge+'). Earliest workable age is '+(result.achievable?ageStr(result.optionalityAge):'later')+'.'
                       : '⚠ Stopping this early runs out of money near age '+(result.failAge!=null?Math.floor(result.failAge):inputs.lifeExpectancy)+'. Earliest sustainable age is '+(result.achievable?ageStr(result.optionalityAge):'later than shown')+'.'))
               : (result.achievable
-                  ? 'The earliest age you can stop working for good and keep your lifestyle to age '+inputs.lifeExpectancy+'.'
+                  ? 'The earliest age you can stop for good and keep your lifestyle to age '+inputs.lifeExpectancy+'. Assumes all employment income and new savings stop at that age.'
                   : 'On current assumptions the plan never fully funds age '+inputs.lifeExpectancy+'. Adjust savings, spending or returns below.')
           }</div>
           <div className="hero-plan">
@@ -345,17 +351,28 @@ function App() {
         </div>
         <div className="hero-stats">
           <div className="hstat">
-            <div className="hs-k">Stop paying into pension at</div>
-            <div className="hs-v tnum">{result.pension.coastFireAge!=null?ageStr(result.pension.coastFireAge):'—'}</div>
+            <div className="hs-k">Pension Coast Age {result.pension.buffer>0 && <span className="hs-badge">+{Math.round(result.pension.buffer*100)}% margin</span>}
+              <button className="why-btn" onClick={()=>setShowWhy(!showWhy)}>Why?</button></div>
+            <div className="hs-v tnum">{result.pension.coastFireAge!=null?ageStr(result.pension.coastFireAge):'Not yet'}</div>
             <div className="hs-s">{result.pension.coastFireAge!=null
-              ? 'Coast point — from here your pension reaches target on growth alone, no more contributions needed.'
-              : 'Your pension still needs contributions to reach its target.'}</div>
+              ? 'Under your current assumptions, your existing pension is projected to reach its target (incl. a '+Math.round(result.pension.buffer*100)+'% margin) without further contributions. Extra pension saving may still be worth it for tax relief, employer contributions or a bigger buffer.'
+              : 'Under your current assumptions, your existing pension still needs contributions to reach its target'+(result.pension.buffer>0?' plus a '+Math.round(result.pension.buffer*100)+'% margin':'')+'.'}</div>
+            {showWhy && <div className="why-box">
+              <div className="why-row"><span>Current pension</span><b>{gbpC(result.pension.current)}</b></div>
+              <div className="why-row"><span>Net return (after fee)</span><b>{(result.pension.netReturn*100).toFixed(1)}%</b></div>
+              <div className="why-row"><span>Years to access ({inputs.pensionAccessAge})</span><b>{Math.round(result.pension.yearsToAccess)}</b></div>
+              <div className="why-row"><span>Target pot at access</span><b>{gbpC(result.pension.rawRequired)}</b></div>
+              <div className="why-row"><span>+ {Math.round(result.pension.buffer*100)}% safety margin</span><b>{gbpC(result.pension.required)}</b></div>
+              <div className="why-row"><span>State Pension</span><b>{inputs.statePensionIncluded?gbpC(inputs.statePensionAmount)+'/yr from '+inputs.statePensionAge:'excluded'}</b></div>
+              <div className="why-row"><span>Retirement spend · withdrawal</span><b>{gbpC(inputs.retirementSpending)}/yr · {(inputs.withdrawalRate*100).toFixed(1)}%</b></div>
+              <div className="why-note">Coast = the age your <b>current</b> pension alone, growing at the net return with no further contributions, reaches the target + margin.</div>
+            </div>}
           </div>
           <div className="hstat">
-            <div className="hs-k">Plan confidence</div>
+            <div className="hs-k">Plan resilience</div>
             <span className={'pill '+conf[0]} title={confidenceWhy}><span className="ic"></span>{conf[1]}</span>
-            <div className="hs-s">{buffer
-              ? 'Absorbs +'+gbpC(buffer.spendHeadroom)+'/yr more spending or '+(buffer.returnHeadroom*100).toFixed(1)+'% lower returns before your date slips a year.'
+            <div className="hs-s">{buffer && result.planSurvives
+              ? 'Deterministic sensitivity, not a probability: your Freedom Age slips by a year if returns run '+(buffer.returnHeadroom*100).toFixed(1)+'% lower or spending is '+gbpC(buffer.spendHeadroom)+'/yr higher.'
               : confidenceWhy}</div>
           </div>
         </div>
@@ -427,35 +444,35 @@ function App() {
 
         <div className="plan-impact">
           <div className="pi-tile"><div className="pi-k">Freedom Age</div><div className="pi-v tnum" style={{color:'var(--accent)'}}>{result.achievable?ageStr(result.optionalityAge):'—'}</div></div>
-          <div className="pi-tile"><div className="pi-k">Pension @ access</div><div className="pi-v tnum">{gbpC(result.pension.atAccess)}</div></div>
-          <div className="pi-tile"><div className="pi-k">Bridge Fund @ freedom</div><div className="pi-v tnum">{gbpC(result.accessible.atOptionality)}</div></div>
-          <div className="pi-tile"><div className="pi-k">Left @ access</div><div className="pi-v tnum">{gbpC(result.accessible.remainingAtAccess)}</div></div>
+          <div className="pi-tile"><div className="pi-k">Pension @ access</div><div className="pi-v tnum">{gAcc(result.pension.atAccess)}</div></div>
+          <div className="pi-tile"><div className="pi-k">Bridge Fund @ freedom</div><div className="pi-v tnum">{gFree(result.accessible.atOptionality)}</div></div>
+          <div className="pi-tile"><div className="pi-k">Left @ access</div><div className="pi-v tnum">{gAcc(result.accessible.remainingAtAccess)}</div></div>
           <div className="pi-tile"><div className="pi-k">Lifetime income</div><div className="pi-v tnum">{gbpC(result.retirement.sustainableIncome)}/yr</div></div>
         </div>
         <div className="note" style={{marginTop:8}}>New savings fill your ISA up to £20k/yr, then flow to the GIA. Savings stop automatically when you reach your Freedom Age.</div>
       </div>
 
       {/* ===== WHERE YOU STAND ===== */}
-      <div className="section-title">Where you stand</div>
+      <div className="section-title">Where you stand <span className="terms-tag" style={{marginLeft:8}}>{realTerms?'today’s money':'future £ (nominal)'}</span></div>
       <div className="kpis">
         <KpiCard title="Pension" status={result.pension.status}
-          main={gbpC(result.pension.atAccess)}
-          reason={{good: result.pension.difference>=0, text:(result.pension.difference>=0?'+':'−')+gbpC(Math.abs(result.pension.difference))+(result.pension.difference>=0?' ahead of target':' short of target')}}
-          rows={[['Projected @ '+inputs.pensionAccessAge, gbpC(result.pension.atAccess)],
-                 ['Need at target', gbpC(result.pension.required)],
+          main={gAcc(result.pension.atAccess)}
+          reason={{good: result.pension.difference>=0, text:(result.pension.difference>=0?'+':'−')+gAcc(Math.abs(result.pension.difference))+(result.pension.difference>=0?' ahead of target':' short of target')}}
+          rows={[['Projected @ '+inputs.pensionAccessAge, gAcc(result.pension.atAccess)],
+                 ['Need at target', gAcc(result.pension.required)],
                  ['Withdrawal rate', (inputs.withdrawalRate*100).toFixed(1)+'%']]} />
         <KpiCard title="Bridge Fund" status={result.accessible.status}
-          main={gbpC(result.accessible.atOptionality)}
-          reason={{good: result.accessible.difference>=0, text:(result.accessible.difference>=0?'+':'−')+gbpC(Math.abs(result.accessible.difference))+(result.accessible.difference>=0?' surplus':' short of bridge')}}
-          rows={[['Need to bridge to '+inputs.pensionAccessAge, gbpC(result.accessible.requiredBridge)],
+          main={gFree(result.accessible.atOptionality)}
+          reason={{good: result.accessible.difference>=0, text:(result.accessible.difference>=0?'+':'−')+gAcc(Math.abs(result.accessible.difference))+(result.accessible.difference>=0?' surplus':' short of bridge')}}
+          rows={[['Need to bridge to '+inputs.pensionAccessAge, gFree(result.accessible.requiredBridge)],
                  ['ISA/GIA now', gbpC(result.accessible.current)],
-                 ['Left @ access', gbpC(result.accessible.remainingAtAccess)]]} />
+                 ['Left @ access', gAcc(result.accessible.remainingAtAccess)]]} />
         <KpiCard title="Lifetime Income" status={result.retirement.status}
           main={gbpC(result.retirement.sustainableIncome)+'/yr'}
           reason={{good: result.retirement.sustainableIncome>=result.retirement.target, text:(result.retirement.sustainableIncome>=result.retirement.target?'+':'−')+gbpC(Math.abs(result.retirement.sustainableIncome-result.retirement.target))+'/yr vs target'}}
           rows={[['Target spend', gbpC(result.retirement.target)+'/yr'],
                  ['State pension', gbpC(result.retirement.statePension)+'/yr'],
-                 ['Est. legacy @ '+inputs.lifeExpectancy, gbpC(result.retirement.legacy)]]} />
+                 ['Est. legacy @ '+inputs.lifeExpectancy, gLife(result.retirement.legacy)]]} />
         <KpiCard title="Investable net worth"
           main={gbpC(nw.total)}
           rows={[['Pension', gbpC(nw.pension)],
@@ -468,11 +485,18 @@ function App() {
       <div className="panel action-panel">
         <div className="chart-h" style={{marginBottom:4}}><h2>⭐ What should I do this year?</h2>
           <span className="muted" style={{fontSize:13}}>this year’s savings of <b style={{color:'var(--text-primary)'}}>{gbp(rec.amount)}</b></span></div>
+        <div className="tax-flag">⚠ Mathematical allocation — <b>excludes tax effects</b> (salary sacrifice, income tax &amp; NI relief, employer match, pension/ISA allowances, GIA tax drag). Treat as a starting point, not advice.</div>
         <div className="strat-tabs">
           {rec.strategies.map(s => (
             <button key={s.key} className={'strat-tab'+(strategy===s.key?' on':'')} onClick={()=>setStrategy(s.key)}>{s.label}</button>
           ))}
         </div>
+        <div className="strat-def">{{
+          freedom: 'Maximise Freedom — earliest possible Freedom Age, directing savings to accessible accounts (ISA/GIA) to fund the bridge to pension access.',
+          balanced: 'Balanced (default) — an even split between pension and accessible savings: keeps the pension growing while still funding the bridge.',
+          pension: 'Maximise Pension — everything into the pension for the biggest long-term pot and retirement income; your Freedom Age is later.',
+          lowrisk: 'Lowest Risk — keeps your Freedom Age near the earliest while building the largest safety buffer at life expectancy.'
+        }[strategy]}</div>
         <div className="rec-body">
           <div className="alloc-row">
             <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-pension)'}}>Pension</div><div className="ac-v tnum">{gbp(chosenStrat.split.pension)}</div></div>
@@ -508,7 +532,7 @@ function App() {
             <span style={{position:'absolute',left:9,color:'var(--muted)',fontSize:13,pointerEvents:'none'}}>£</span>
             <NumInput className="inline-num" style={{paddingLeft:18,width:120}} step={5000} min={0} value={compareAmount} ariaLabel="Lump sum amount" onChange={v=>setCompareAmount(v)} />
           </span>
-          across your options — ranked by the earliest Freedom Age.</div>
+          across your options — ranked by the earliest Freedom Age. <span className="muted">ISA is capped at £20k and pension at the £60k allowance this year (carry-forward ignored); the rest flows to GIA. Excludes tax relief.</span></div>
         <div className="tablewrap">
           <table className="cmp-table">
             <thead><tr><th>Put it…</th><th>Freedom Age</th><th>Pension @ access</th><th>Bridge Fund</th><th>Lifetime income</th></tr></thead>
@@ -517,8 +541,8 @@ function App() {
                 <tr key={i} className={d.best?'cmp-best':''}>
                   <td style={{textAlign:'left'}}>{d.label}{d.best && <span className="best-tag">best for freedom</span>}</td>
                   <td className="tnum">{d.freedomAge!=null?ageStr(d.freedomAge):'—'}</td>
-                  <td className="tnum">{gbpC(d.pension)}</td>
-                  <td className="tnum">{gbpC(d.bridge)}</td>
+                  <td className="tnum">{gAcc(d.pension)}</td>
+                  <td className="tnum">{gbpC(d.bridge * rf(d.freedomAge!=null?d.freedomAge:result.effectiveStop))}</td>
                   <td className="tnum">{gbpC(d.income)}/yr</td>
                 </tr>
               ))}
@@ -531,8 +555,8 @@ function App() {
           const bestIsAccessible = best.key==='isa'||best.key==='gia'||best.key==='cash';
           return <div className="cmp-rec">
             <b>Recommendation:</b> {bestIsAccessible
-              ? gbp(compareAmount)+' into your '+(best.key==='cash'?'cash':best.key.toUpperCase())+' reaches Freedom Age '+ageStr(best.freedomAge)+(penOpt&&penOpt.freedomAge!=null&&penOpt.freedomAge>best.freedomAge?' — '+monthsStr(Math.round((penOpt.freedomAge-best.freedomAge)*12))+' sooner than into pension':'')+'. Accessible money funds the bridge to pension access, which pension (locked until '+inputs.pensionAccessAge+') can’t — though pension would build a bigger pot and higher lifetime income for later.'
-              : best.label+' gives the earliest Freedom Age ('+ageStr(best.freedomAge)+') here.'}
+              ? gbp(compareAmount)+' as “'+best.label+'” reaches Freedom Age '+ageStr(best.freedomAge)+(penOpt&&penOpt.freedomAge!=null&&penOpt.freedomAge>best.freedomAge?' — '+monthsStr(Math.round((penOpt.freedomAge-best.freedomAge)*12))+' sooner than pension':'')+'. Accessible money funds the bridge to pension access, which pension (locked until '+inputs.pensionAccessAge+') can’t — though pension would build a bigger pot and higher lifetime income for later. (Before tax relief, which favours pension.)'
+              : '“'+best.label+'” gives the earliest Freedom Age ('+ageStr(best.freedomAge)+') here.'}
           </div>;
         })()}
       </div>
@@ -759,9 +783,11 @@ function App() {
         <Section title="Pension" id="sec-pension">
           <Num label="Current pension value" value={inputs.pensionCurrent} onChange={v=>set({pensionCurrent:v})} prefix="£" />
           <Num label="Employer contribution (annual)" value={inputs.employerContribution} onChange={v=>set({employerContribution:v})} prefix="£" />
-          <Pct label="Expected annual return" value={inputs.pensionReturn} onChange={v=>set({pensionReturn:v})} />
+          <Pct label="Expected annual return (nominal)" value={inputs.pensionReturn} onChange={v=>set({pensionReturn:v})} />
           <Pct label="Annual fee" value={inputs.pensionFee} onChange={v=>set({pensionFee:v})} />
           <Pct label="Target withdrawal rate" value={inputs.withdrawalRate} onChange={v=>set({withdrawalRate:v})} />
+          <Pct label="Pension safety margin (on top of target)" value={inputs.pensionBuffer} onChange={v=>set({pensionBuffer:v})} />
+          <div className="note">The Coast age and pension status aim for the required pot × (1 + margin). 0% = just the target; 10–20% adds a cushion so “stop contributing” isn’t called on a razor-thin surplus.</div>
         </Section>
 
         <Section title="ISA">
@@ -777,15 +803,12 @@ function App() {
         </Section>
 
         <Section title="Spending">
-          <div className="note" style={{marginTop:0,marginBottom:6}}>Enter spending in <b>today’s money</b> — what your lifestyle costs at today’s prices.</div>
+          <div className="note" style={{marginTop:0,marginBottom:6}}>Spending is in <b>today’s money</b> and holds its real value — the cash actually withdrawn rises with inflation, but its buying power stays constant.</div>
           <Num label="Bridge spending / yr (before pension access)" value={inputs.bridgeSpending} onChange={v=>set({bridgeSpending:v})} prefix="£" />
           <Num label="Retirement spending / yr (after access)" value={inputs.retirementSpending} onChange={v=>set({retirementSpending:v})} prefix="£" />
           <Pct label="Expected return during bridge" value={inputs.bridgeReturn} onChange={v=>set({bridgeReturn:v})} />
           <Pct label="Inflation" value={inputs.inflation} onChange={v=>set({inflation:v})} />
-          <label className="switch"><input type="checkbox" checked={inputs.spendingInflationLinked} onChange={e=>set({spendingInflationLinked:e.target.checked})} />Keep spending at today’s value (rise with inflation)</label>
-          <div className="note" style={{marginTop:6}}>{inputs.spendingInflationLinked
-            ? 'On (recommended): your '+gbp(inputs.retirementSpending)+' keeps its buying power, so the actual cash withdrawn rises with inflation over time. In “today’s money” view it stays flat; in “future £” view it rises.'
-            : 'Off: a fixed '+gbp(inputs.retirementSpending)+' of cash each year — which buys less over time, so it falls in “today’s money” view. Turn on to hold your lifestyle at today’s value.'}</div>
+          <div className="note" style={{marginTop:6}}>Returns are <b>nominal</b> (before inflation). The <b>{realTerms?'Today’s money':'Future £'}</b> toggle in the top bar shows every figure in today’s money (real) or future pounds (nominal) — real ≈ nominal return − inflation.</div>
         </Section>
 
         <Section title="Property (optional)">
@@ -839,7 +862,8 @@ function App() {
         earning permanently and still fund spending every year to age {inputs.lifeExpectancy}, drawing on
         accessible wealth (ISA/GIA/cash) during the bridge to age {inputs.pensionAccessAge}, then pension plus
         any remainder — with the State Pension from age {inputs.statePensionAge}{inputs.statePensionIncluded?'':' (excluded)'}.
-        Figures are nominal £; spending {inputs.spendingInflationLinked?'rises with inflation':'is held flat in nominal terms'}.
+        Returns are entered nominal; spending is in today’s money and holds its real value. Every figure is shown in
+        <b> {realTerms?'today’s money (real)':'future £ (nominal)'}</b> — switch with the toggle in the top bar.
         This is a planning model, not financial advice — sense-check the assumptions against your own circumstances and tax position.
       </div>
 

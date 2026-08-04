@@ -47,6 +47,7 @@
     pensionReturn: 0.07,
     pensionFee: 0.003,
     withdrawalRate: 0.04,          // sustainable pension withdrawal rate
+    pensionBuffer: 0.10,           // safety margin on top of the pension target (coast + status)
 
     // ISA
     isaCurrent: 10000,
@@ -350,7 +351,7 @@
   // grows on its own to the required pension at access.
   function coastFireAge(inp) {
     var r = inp.pensionReturn - inp.pensionFee;
-    var req = requiredPensionAtAccess(inp);
+    var req = requiredPensionAtAccess(inp) * (1 + (inp.pensionBuffer || 0));
     for (var a = inp.currentAge; a <= inp.pensionAccessAge; a += 0.1) {
       var grown = inp.pensionCurrent * Math.pow(1 + r, inp.pensionAccessAge - a);
       if (grown >= req) return Math.round(a * 10) / 10;
@@ -408,7 +409,8 @@
     var sim = simulate(inp, effectiveStop);
     var planSurvives = sim.survived;
 
-    var reqPension = requiredPensionAtAccess(inp);
+    var reqPensionRaw = requiredPensionAtAccess(inp);          // pot to just hit the target
+    var reqPension = reqPensionRaw * (1 + (inp.pensionBuffer || 0)); // target + safety margin
     var reqBridge = requiredBridgeValue(inp, effectiveStop);
     var retInc = sustainableRetirementIncome(inp, sim);
     // consistent with the actual simulation: the real max retirement spend
@@ -470,7 +472,11 @@
       pension: {
         current: inp.pensionCurrent,
         atAccess: sim.pensionAtAccess,
-        required: reqPension,
+        required: reqPension,            // target + safety margin
+        rawRequired: reqPensionRaw,      // pot to just hit the target
+        buffer: inp.pensionBuffer || 0,
+        netReturn: inp.pensionReturn - inp.pensionFee,
+        yearsToAccess: inp.pensionAccessAge - inp.currentAge,
         difference: pensionDiff,
         status: status(pensionDiff, reqPension),
         coastFireAge: coastFireAge(inp)
@@ -709,20 +715,28 @@
 
   // ---- Decision comparator: "I've got £X — where should it go?" ----------
   function decisionComparator(inp, amount) {
+    // realistic annual wrapper limits (this year only; carry-forward ignored)
+    var ISA_LIMIT = 20000, PENSION_ALLOWANCE = 60000;
     var dests = [
-      { key: 'pension', label: 'Into pension' },
-      { key: 'isa', label: 'Into ISA' },
-      { key: 'gia', label: 'Into GIA' },
-      { key: 'cash', label: 'Keep as cash' }
+      { key: 'pension', label: amount > PENSION_ALLOWANCE ? 'Pension (then GIA)' : 'Pension' },
+      { key: 'isa', label: amount > ISA_LIMIT ? 'ISA, then GIA' : 'ISA' },
+      { key: 'gia', label: 'GIA' },
+      { key: 'cash', label: 'Cash' }
     ];
     if ((inp.mortgage || 0) > 0) dests.push({ key: 'mortgage', label: 'Overpay mortgage' });
+    function addLump(x, account, amt) {
+      x.cashEvents = (x.cashEvents || []).concat([{ name: 'Lump sum', amount: amt, yearsFromNow: 0, direction: 'in', account: account }]);
+    }
     var out = [];
     for (var i = 0; i < dests.length; i++) {
       var x = JSON.parse(JSON.stringify(inp));
-      if (dests[i].key === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); }
-      else { x.cashEvents = (x.cashEvents || []).concat([{ name: 'Lump sum', amount: amount, yearsFromNow: 0, direction: 'in', account: dests[i].key }]); }
+      var k = dests[i].key;
+      if (k === 'mortgage') { x.mortgage = Math.max(0, (x.mortgage || 0) - amount); }
+      else if (k === 'isa') { var toIsa = Math.min(ISA_LIMIT, amount); addLump(x, 'isa', toIsa); if (amount - toIsa > 0) addLump(x, 'gia', amount - toIsa); }
+      else if (k === 'pension') { var toPen = Math.min(PENSION_ALLOWANCE, amount); addLump(x, 'pension', toPen); if (amount - toPen > 0) addLump(x, 'gia', amount - toPen); }
+      else { addLump(x, k, amount); }
       var r = compute(x);
-      out.push({ key: dests[i].key, label: dests[i].label, freedomAge: r.optionalityAge, survives: r.planSurvives,
+      out.push({ key: k, label: dests[i].label, freedomAge: r.optionalityAge, survives: r.planSurvives,
         pension: r.pension.atAccess, bridge: r.accessible.atOptionality, income: r.retirement.sustainableIncome, legacy: r.endWorth });
     }
     out.sort(function (a, b) { var aa = a.freedomAge == null ? 1e6 : a.freedomAge, bb = b.freedomAge == null ? 1e6 : b.freedomAge; if (Math.abs(aa - bb) > 0.05) return aa - bb; return b.income - a.income; });
