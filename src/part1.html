@@ -195,7 +195,38 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .opt-msg.ok{color:var(--good-text);background:rgba(12,163,12,0.10);border:1px solid rgba(12,163,12,0.25)}
 .opt-msg.bad{color:var(--critical);background:rgba(208,59,59,0.10);border:1px solid rgba(208,59,59,0.25)}
 html[data-theme="dark"] .opt-msg.ok{color:var(--good)}
-/* savings plan rows */
+/* SAVINGS PLAN (promoted panel) */
+.savings-panel{margin-bottom:16px;border:1px solid var(--accent);box-shadow:0 1px 2px rgba(11,11,11,0.05),0 6px 22px rgba(42,120,214,0.07)}
+.savings-panel > h2{font-size:17px}
+.opt-btn{white-space:nowrap}
+.plan-cards{display:flex;flex-direction:column;gap:10px;margin:14px 0}
+.plan-card{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.pc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.pc-when{font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:-0.01em}
+.pc-grid{display:grid;grid-template-columns:1fr 1.1fr 2fr;gap:14px;align-items:end}
+.pc-field{display:flex;flex-direction:column;gap:4px}
+.pc-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.pc-inwrap{position:relative;display:flex;align-items:center}
+.pc-inwrap input{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);
+  color:var(--text-primary);font-size:15px;font-weight:600;font-family:inherit;font-variant-numeric:tabular-nums}
+.pc-inwrap input:focus{outline:none;border-color:var(--accent)}
+.pc-inwrap .pfx{position:absolute;left:9px;color:var(--muted);font-size:14px;pointer-events:none;z-index:1}
+.pc-alloc{gap:6px}
+.pc-slider{display:flex;align-items:center;gap:9px}
+.pc-slider input[type=range]{flex:1;margin:0}
+.ps-end{font-size:11px;font-weight:700;white-space:nowrap}
+.ps-end.p{color:var(--series-pension)} .ps-end.i{color:var(--series-isa)}
+.pc-split{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;margin-top:2px}
+.plan-add{margin-top:2px}
+.plan-impact{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:6px;
+  border-top:1px solid var(--border);padding-top:14px}
+.pi-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.pi-tile .pi-k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;font-weight:600;line-height:1.25}
+.pi-tile .pi-v{font-size:18px;font-weight:650;margin-top:5px;letter-spacing:-0.01em}
+@media (max-width:820px){ .pc-grid{grid-template-columns:1fr 1fr} .pc-alloc{grid-column:1 / -1} .plan-impact{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:520px){ .pc-grid{grid-template-columns:1fr} .plan-impact{grid-template-columns:1fr} }
+
+/* legacy savings plan rows (unused, kept harmless) */
 .plan-row{display:grid;grid-template-columns:.85fr 1fr 1.7fr 1.15fr auto;gap:8px;align-items:center;margin:7px 0}
 .plan-row input[type=number]{padding:6px 6px;font-size:13px;border:1px solid var(--border);border-radius:7px;
   background:var(--surface-2);color:var(--text-primary);width:100%;min-width:0}

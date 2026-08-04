@@ -415,6 +415,60 @@ function App() {
         </div>
       </div>
 
+      {/* SAVINGS PLAN — the core interactive panel */}
+      <div className="panel savings-panel">
+        <div className="chart-h" style={{marginBottom:2}}><h2>⭐ Your savings plan</h2>
+          <button className="btn primary opt-btn" onClick={optimiseSavings} title="Keep your yearly amounts, find the split that reaches Freedom earliest">⚡ Optimise allocation</button></div>
+        <div className="desc">How much you save each year and how it splits between <b style={{color:'var(--series-pension)'}}>pension</b> and <b style={{color:'var(--series-isa)'}}>accessible</b> (ISA/GIA). Each row applies from that point until the next — so contributions and the split can change over time. Edit anything; the impact updates instantly.</div>
+        {optMsg && <div className={'opt-msg '+(optMsg.ok?'ok':'bad')}>{optMsg.text}</div>}
+
+        <div className="plan-cards">
+          {plan.map((s,i) => {
+            const al = s.allocPension != null ? s.allocPension : 0.30;
+            const fromAge = inputs.currentAge + (s.fromYear||0);
+            const toAge = (i < plan.length-1) ? inputs.currentAge + (plan[i+1].fromYear||0) : null;
+            const pensionAmt = s.amount*al, accessAmt = s.amount*(1-al);
+            return (
+            <div className="plan-card" key={i}>
+              <div className="pc-head">
+                <span className="pc-when">{toAge!=null ? ('Age '+Math.round(fromAge)+'–'+Math.round(toAge)) : ('Age '+Math.round(fromAge)+' onwards')}</span>
+                <button className="icon-btn" onClick={()=>delSeg(i)} disabled={plan.length<=1} title="Remove period">✕</button>
+              </div>
+              <div className="pc-grid">
+                <label className="pc-field">
+                  <span className="pc-lbl">Starts (years from now)</span>
+                  <div className="pc-inwrap"><NumInput value={s.fromYear||0} min={0} onChange={v=>updSeg(i,{fromYear:Math.max(0,Math.round(v))})} ariaLabel="Starts in years" /></div>
+                </label>
+                <label className="pc-field">
+                  <span className="pc-lbl">Amount saved / year</span>
+                  <div className="pc-inwrap money"><span className="pfx">£</span><NumInput value={s.amount} min={0} step={1000} onChange={v=>updSeg(i,{amount:Math.max(0,v)})} ariaLabel="Annual amount" style={{paddingLeft:18}} /></div>
+                </label>
+                <div className="pc-field pc-alloc">
+                  <span className="pc-lbl">Split — {Math.round(al*100)}% pension / {Math.round((1-al)*100)}% ISA-GIA</span>
+                  <div className="pc-slider">
+                    <span className="ps-end p">Pension</span>
+                    <input type="range" min="0" max="100" value={Math.round(al*100)} onChange={e=>updSeg(i,{allocPension:parseInt(e.target.value)/100})} />
+                    <span className="ps-end i">ISA/GIA</span>
+                  </div>
+                  <div className="pc-split"><span style={{color:'var(--series-pension)'}}>{gbp(pensionAmt)} pension</span><span style={{color:'var(--series-isa)'}}>{gbp(accessAmt)} ISA/GIA</span></div>
+                </div>
+              </div>
+            </div>
+            );
+          })}
+          <button className="add-link plan-add" onClick={addSeg}>+ Add a period (change your saving later)</button>
+        </div>
+
+        <div className="plan-impact">
+          <div className="pi-tile"><div className="pi-k">Freedom Age</div><div className="pi-v tnum" style={{color:'var(--accent)'}}>{result.achievable?ageStr(result.optionalityAge):'—'}</div></div>
+          <div className="pi-tile"><div className="pi-k">Pension @ access</div><div className="pi-v tnum">{gbpC(result.pension.atAccess)}</div></div>
+          <div className="pi-tile"><div className="pi-k">Bridge Fund @ freedom</div><div className="pi-v tnum">{gbpC(result.accessible.atOptionality)}</div></div>
+          <div className="pi-tile"><div className="pi-k">Left @ access</div><div className="pi-v tnum">{gbpC(result.accessible.remainingAtAccess)}</div></div>
+          <div className="pi-tile"><div className="pi-k">Lifetime income</div><div className="pi-v tnum">{gbpC(result.retirement.sustainableIncome)}/yr</div></div>
+        </div>
+        <div className="note" style={{marginTop:8}}>New savings fill your ISA up to £20k/yr, then flow to the GIA. Savings stop automatically when you reach your Freedom Age.</div>
+      </div>
+
       {/* KPI CARDS */}
       <div className="kpis">
         <KpiCard title="Pension" status={result.pension.status}
@@ -707,45 +761,6 @@ function App() {
           <Pct label="Target withdrawal rate" value={inputs.withdrawalRate} onChange={v=>set({withdrawalRate:v})} />
         </Section>
 
-        <Section title="Savings plan ⭐" open span>
-          <div className="note" style={{marginTop:0,marginBottom:8}}>How much you save each year and the pension / ISA-GIA split. Each period applies <b>from that year</b> until the next one starts — so you can change contributions and allocation over time (e.g. £60k all-pension this year, then £40k split 50/50 from next year). Savings stop when you stop working. Adjust the split to see where the next pound is best spent — the impact below updates instantly.</div>
-          <div className="opt-out" style={{marginBottom:14}}>
-            <div className="mini"><div className="k">Optionality age</div><div className="val tnum" style={{color:'var(--accent)'}}>{result.achievable?ageStr(result.optionalityAge):'—'}</div></div>
-            <div className="mini"><div className="k">Pension @ access</div><div className="val tnum">{gbpC(result.pension.atAccess)}</div></div>
-            <div className="mini"><div className="k">ISA/GIA @ optionality</div><div className="val tnum">{gbpC(result.accessible.atOptionality)}</div></div>
-            <div className="mini"><div className="k">Left @ access</div><div className="val tnum">{gbpC(result.accessible.remainingAtAccess)}</div></div>
-            <div className="mini"><div className="k">Retirement income</div><div className="val tnum">{gbpC(result.retirement.sustainableIncome)}</div></div>
-          </div>
-          <div className="opt-bar">
-            <button className="btn primary" onClick={optimiseSavings} title="Keep your yearly savings amounts, find the split that reaches optionality earliest">⚡ Optimise allocation</button>
-            <span className="opt-bar-note">Keeps how much you save each year — finds the pension / ISA-GIA split, year by year, that brings your optionality age earliest.</span>
-          </div>
-          {optMsg && <div className={'opt-msg '+(optMsg.ok?'ok':'bad')}>{optMsg.text}</div>}
-          <div className="plan-row plan-head">
-            <span className="evh">From year</span><span className="evh">Annual £</span><span className="evh">To pension</span><span className="evh">Split (P · ISA/GIA)</span><span></span>
-          </div>
-          {plan.map((s,i) => {
-            const al = s.allocPension != null ? s.allocPension : 0.30;
-            return (
-            <div className="plan-row" key={i}>
-              <div style={{position:'relative',display:'flex',alignItems:'center'}}>
-                <NumInput value={s.fromYear||0} min={0} onChange={v=>updSeg(i,{fromYear:Math.max(0,Math.round(v))})} ariaLabel="From year" style={{paddingRight:24}} />
-                <span style={{position:'absolute',right:6,fontSize:11,color:'var(--muted)',pointerEvents:'none'}}>yr</span>
-              </div>
-              <NumInput value={s.amount} min={0} step={1000} onChange={v=>updSeg(i,{amount:Math.max(0,v)})} ariaLabel="Annual amount" />
-              <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <input type="range" min="0" max="100" value={Math.round(al*100)} onChange={e=>updSeg(i,{allocPension:parseInt(e.target.value)/100})} style={{flex:1,minWidth:60}} />
-                <span className="tnum" style={{width:38,textAlign:'right',fontWeight:600,fontSize:13}}>{Math.round(al*100)}%</span>
-              </div>
-              <span className="plan-split muted tnum">{gbpC(s.amount*al)} · {gbpC(s.amount*(1-al))}</span>
-              <button className="icon-btn" onClick={()=>delSeg(i)} disabled={plan.length<=1} title="Remove period">✕</button>
-            </div>
-            );
-          })}
-          <button className="add-link" onClick={addSeg}>+ Add savings period</button>
-          <div className="note">New savings fill your ISA up to £20k/yr, then flow to the GIA. Your current-year savings amount is also editable in “Your current position” at the top.</div>
-        </Section>
-
         <Section title="ISA">
           <Num label="Current ISA value" value={inputs.isaCurrent} onChange={v=>set({isaCurrent:v})} prefix="£" />
           <Pct label="Expected return" value={inputs.isaReturn} onChange={v=>set({isaReturn:v})} />
@@ -759,11 +774,15 @@ function App() {
         </Section>
 
         <Section title="Spending">
-          <Num label="Annual spending — bridge (before access)" value={inputs.bridgeSpending} onChange={v=>set({bridgeSpending:v})} prefix="£" />
-          <Num label="Annual spending — retirement (after access)" value={inputs.retirementSpending} onChange={v=>set({retirementSpending:v})} prefix="£" />
+          <div className="note" style={{marginTop:0,marginBottom:6}}>Enter spending in <b>today’s money</b> — what your lifestyle costs at today’s prices.</div>
+          <Num label="Bridge spending / yr (before pension access)" value={inputs.bridgeSpending} onChange={v=>set({bridgeSpending:v})} prefix="£" />
+          <Num label="Retirement spending / yr (after access)" value={inputs.retirementSpending} onChange={v=>set({retirementSpending:v})} prefix="£" />
           <Pct label="Expected return during bridge" value={inputs.bridgeReturn} onChange={v=>set({bridgeReturn:v})} />
           <Pct label="Inflation" value={inputs.inflation} onChange={v=>set({inflation:v})} />
-          <label className="switch"><input type="checkbox" checked={inputs.spendingInflationLinked} onChange={e=>set({spendingInflationLinked:e.target.checked})} />Spending inflation-linked</label>
+          <label className="switch"><input type="checkbox" checked={inputs.spendingInflationLinked} onChange={e=>set({spendingInflationLinked:e.target.checked})} />Keep spending at today’s value (rise with inflation)</label>
+          <div className="note" style={{marginTop:6}}>{inputs.spendingInflationLinked
+            ? 'On (recommended): your '+gbp(inputs.retirementSpending)+' keeps its buying power, so the actual cash withdrawn rises with inflation over time. In “today’s money” view it stays flat; in “future £” view it rises.'
+            : 'Off: a fixed '+gbp(inputs.retirementSpending)+' of cash each year — which buys less over time, so it falls in “today’s money” view. Turn on to hold your lifestyle at today’s value.'}</div>
         </Section>
 
         <Section title="Property (optional)">
