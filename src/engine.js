@@ -1207,6 +1207,36 @@
     };
   }
 
+  // Combined view over BOTH planners: pension (Coast) + accessible ISA/GIA (Bridge),
+  // aligned by age. Beyond a planner's modelled range it compounds the last balance at
+  // that planner's real growth with no further contributions. All values are REAL.
+  function combinedPlan(bp, cp) {
+    var b = bridgePlan(bp).base, c = coastPlan(cp).base, i;
+    var bMap = {}, cMap = {};
+    for (i = 0; i < b.rows.length; i++) bMap[b.rows[i].age] = b.rows[i];
+    for (i = 0; i < c.rows.length; i++) cMap[c.rows[i].age] = c.rows[i];
+    var bLast = b.rows.length ? b.rows[b.rows.length - 1] : { age: bp.currentAge, balance: bp.currentBalance || 0 };
+    var cLast = c.rows.length ? c.rows[c.rows.length - 1] : { age: cp.currentAge, projected: cp.currentPension || 0 };
+    var startAge = Math.min(bp.currentAge, cp.currentAge);
+    var endAge = Math.max(cp.retirementAge || cp.pensionAccessAge, bp.pensionAccessAge);
+    var series = [];
+    for (var a = startAge; a <= endAge; a++) {
+      var acc, accIn = 0, accG = 0;
+      if (bMap[a]) { acc = bMap[a].balance; accIn = bMap[a].contribution || 0; accG = bMap[a].growth || 0; }
+      else if (a < bp.currentAge) { acc = 0; }
+      else { acc = bLast.balance * Math.pow(1 + bp.growth, a - bLast.age); accG = acc - acc / (1 + bp.growth); }
+      var pen, penIn = 0, penG = 0;
+      if (cMap[a]) { pen = cMap[a].projected; penIn = cMap[a].contribution || 0; penG = cMap[a].growth || 0; }
+      else if (a < cp.currentAge) { pen = 0; }
+      else { pen = cLast.projected * Math.pow(1 + cp.growth, a - cLast.age); penG = pen - pen / (1 + cp.growth); }
+      series.push({ age: a, pension: pen, accessible: acc, netWorth: pen + acc,
+                    pensionIn: penIn, accessibleIn: accIn, pensionGrowth: penG, accessibleGrowth: accG,
+                    contributions: penIn + accIn });
+    }
+    return { series: series, startAge: startAge, endAge: endAge, pensionAccessAge: bp.pensionAccessAge,
+             infl: (cp.inflation != null ? cp.inflation : (bp.inflation || 0)) };
+  }
+
   var Engine = {
     DEFAULTS: DEFAULTS,
     BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
@@ -1215,6 +1245,7 @@
     COAST_DEFAULTS: COAST_DEFAULTS,
     coastPlan: coastPlan,
     coastProject: coastProject,
+    combinedPlan: combinedPlan,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,
     sustainableOptionalityAge: sustainableOptionalityAge,

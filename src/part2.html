@@ -730,6 +730,12 @@ function App() {
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
   const setCp = (patch) => setCoastInputs(prev => Object.assign({}, prev, patch));
   const coast = useMemo(() => Engine.coastPlan(coastInputs), [coastInputs]);
+  const combined = useMemo(() => Engine.combinedPlan(bridgeInputs, coastInputs), [bridgeInputs, coastInputs]);
+  const cwData = combined.series.map(function(r){
+    var nf = realTerms ? 1 : Math.pow(1 + combined.infl, r.age - combined.startAge);
+    return { age:r.age, pension:r.pension*nf, accessible:r.accessible*nf, netWorth:r.netWorth*nf,
+             pensionIn:r.pensionIn, accessibleIn:r.accessibleIn };
+  });
 
   const result = useMemo(() => Engine.compute(inputs), [inputs]);
   const opps = useMemo(() => Engine.opportunities(inputs), [inputs]);
@@ -910,464 +916,89 @@ function App() {
       <div className="section-title">When can my pension look after itself?</div>
       <CoastPlanner cp={coastInputs} setCp={setCp} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
-      {/* ===== YOUR PLAN — the personal-CFO narrative ===== */}
-      <div className="panel cfo-plan">
-        <div className="plan-head">
-          <h2>📋 Your Plan</h2>
-          <span className={'pill '+onTrackChip.cls}><span className="ic"></span>{onTrackChip.label}</span>
-        </div>
-        <div className="plan-narrative">{
-          result.achievable
-            ? <span>You’re about <b>{Math.round(yearsToFreedom)} year{Math.round(yearsToFreedom)===1?'':'s'}</b> from financial freedom (age <b>{ageStr(result.effectiveStop)}</b>). Your pension is <b style={{color:pensionStatus.cls==='g'?'var(--good-text)':pensionStatus.cls==='a'?'var(--warning)':'var(--critical)'}}>{pensionStatus.label.toLowerCase()}</b>. Your biggest priority now is <b>{priority}</b>.</span>
-            : <span>On your current assumptions the plan doesn’t yet fund your lifestyle to age {inputs.lifeExpectancy}. The priority is {priority} — the opportunities below show the biggest levers.</span>
-        }</div>
-        {planLines.length>0 && <div className="plan-actions">
-          <div className="pa-title">This year — {gbp(rec.amount)} of savings</div>
-          {planLines.map((l,i)=>(<div className="pa-line" key={i}><span className="pa-tick">✓</span> {l}</div>))}
-          <div className="pa-foot">{balDelta>0
-            ? 'Following this brings your Freedom Age forward by about '+monthsStr(balDelta)+' vs your current split. '
-            : 'This keeps you at your earliest Freedom Age. '}
-            <span className="muted">Balanced plan — optimised for the earliest Freedom Age that keeps your pension on target. Excludes tax effects.</span></div>
-        </div>}
-      </div>
-
-      {/* LIFE TIMELINE */}
-      <div className="panel timeline-panel">
-        <div className="chart-h" style={{marginBottom:12}}><h2>Life timeline</h2>
-          <span className="muted" style={{fontSize:12}}>your plan's key milestones · click to jump to its inputs</span></div>
-        <div className="timeline">
-          <div className="tl-line"></div>
-          {mstones.filter(m=>m.key!=='coast').map((m,i) => (
-            <button className={'tl-node '+(m.highlight?'hi':'')+' tl-'+m.key} key={i}
-              onClick={()=>openSection(m.section)} title={m.label+' — age '+ageStr(m.age)}>
-              <span className="tl-dot"></span>
-              <span className="tl-age">{Math.round(m.age)}</span>
-              <span className="tl-lbl">{m.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ===== BEST USE OF YOUR SAVINGS — the savings plan leads ===== */}
-      <div className="section-title">Best use of your savings</div>
-
-      {/* SAVINGS PLAN — the core interactive panel */}
-      <div className="panel savings-panel">
-        <div className="chart-h" style={{marginBottom:2}}><h2>⭐ Your savings plan</h2>
-          <button className="btn primary opt-btn" onClick={optimiseSavings} title="Keep your yearly amounts, find the split that reaches Freedom earliest">⚡ Optimise allocation</button></div>
-        <div className="desc">How much you save each year and how it splits between <b style={{color:'var(--series-pension)'}}>pension</b> and <b style={{color:'var(--series-isa)'}}>accessible</b> (ISA/GIA). Each row applies from that point until the next — so contributions and the split can change over time. Edit anything; the impact updates instantly.</div>
-        {optMsg && <div className={'opt-msg '+(optMsg.ok?'ok':'bad')}>{optMsg.text}</div>}
-
-        <div className="plan-cards">
-          {plan.map((s,i) => {
-            const al = s.allocPension != null ? s.allocPension : 0.30;
-            const fromAge = inputs.currentAge + (s.fromYear||0);
-            const toAge = (i < plan.length-1) ? inputs.currentAge + (plan[i+1].fromYear||0) : null;
-            const pensionAmt = s.amount*al, accessAmt = s.amount*(1-al);
-            return (
-            <div className="plan-card" key={i}>
-              <div className="pc-head">
-                <span className="pc-when">{toAge!=null ? ('Age '+Math.round(fromAge)+'–'+Math.round(toAge)) : ('Age '+Math.round(fromAge)+' onwards')}</span>
-                <button className="icon-btn" onClick={()=>delSeg(i)} disabled={plan.length<=1} title="Remove period">✕</button>
-              </div>
-              <div className="pc-grid">
-                <label className="pc-field">
-                  <span className="pc-lbl">Starts (years from now)</span>
-                  <div className="pc-inwrap"><NumInput value={s.fromYear||0} min={0} onChange={v=>updSeg(i,{fromYear:Math.max(0,Math.round(v))})} ariaLabel="Starts in years" /></div>
-                </label>
-                <label className="pc-field">
-                  <span className="pc-lbl">Amount saved / year</span>
-                  <div className="pc-inwrap money"><span className="pfx">£</span><NumInput value={s.amount} min={0} step={1000} onChange={v=>updSeg(i,{amount:Math.max(0,v)})} ariaLabel="Annual amount" style={{paddingLeft:18}} /></div>
-                </label>
-                <div className="pc-field pc-alloc">
-                  <span className="pc-lbl">Split — {Math.round(al*100)}% pension / {Math.round((1-al)*100)}% ISA-GIA</span>
-                  <div className="pc-slider">
-                    <span className="ps-end p">Pension</span>
-                    <input type="range" min="0" max="100" value={Math.round(al*100)} onChange={e=>updSeg(i,{allocPension:parseInt(e.target.value)/100})} />
-                    <span className="ps-end i">ISA/GIA</span>
-                  </div>
-                  <div className="pc-split"><span style={{color:'var(--series-pension)'}}>{gbp(pensionAmt)} pension</span><span style={{color:'var(--series-isa)'}}>{gbp(accessAmt)} ISA/GIA</span></div>
-                </div>
-              </div>
-            </div>
-            );
-          })}
-          <button className="add-link plan-add" onClick={addSeg}>+ Add a period (change your saving later)</button>
-        </div>
-
-        <div className="plan-impact">
-          <div className="pi-tile"><div className="pi-k">Freedom Age</div><div className="pi-v tnum" style={{color:'var(--accent)'}}>{result.achievable?ageStr(result.optionalityAge):'—'}</div></div>
-          <div className="pi-tile"><div className="pi-k">Pension @ access</div><div className="pi-v tnum">{gAcc(result.pension.atAccess)}</div></div>
-          <div className="pi-tile"><div className="pi-k">Bridge Fund @ freedom</div><div className="pi-v tnum">{gFree(result.accessible.atOptionality)}</div></div>
-          <div className="pi-tile"><div className="pi-k">Left @ access</div><div className="pi-v tnum">{gAcc(result.accessible.remainingAtAccess)}</div></div>
-          <div className="pi-tile"><div className="pi-k">Lifetime income</div><div className="pi-v tnum">{gbpC(result.retirement.sustainableIncome)}/yr</div></div>
-        </div>
-        <div className="note" style={{marginTop:8}}>New savings fill your ISA up to £20k/yr, then flow to the GIA. Savings stop automatically when you reach your Freedom Age.</div>
-      </div>
-
-      {/* ===== WHERE YOU STAND ===== */}
-      <div className="section-title">Where you stand</div>
-      <div className="desc" style={{margin:'-4px 2px 12px',fontSize:13,color:'var(--muted)'}}>Pension and Bridge Fund now have their own tools at the top — this row covers the rest of the retirement picture.</div>
-      <div className="kpis kpis-3">
-        <KpiCard title="Income after pension" status={result.retirement.status}
-          main={gbpC(result.retirement.sustainableIncome)+'/yr'}
-          reason={{good: result.retirement.sustainableIncome>=result.retirement.target, text:(result.retirement.sustainableIncome>=result.retirement.target?'+':'−')+gbpC(Math.abs(result.retirement.sustainableIncome-result.retirement.target))+'/yr vs target'}}
-          rows={[['Target spend', gbpC(result.retirement.target)+'/yr'],
-                 ['State pension', gbpC(result.retirement.statePension)+'/yr'],
-                 ['Est. legacy @ '+inputs.lifeExpectancy, gLife(result.retirement.legacy)]]} />
-        <KpiCard title="Starting withdrawal rate"
-          status={wd.status==='safe'?'ahead':wd.status==='watch'?'ontrack':'behind'}
-          main={wd.initialRate!=null?wdPct(wd.initialRate):'—'}
-          reason={{good: !wdWarn, text: wd.initialRate==null ? 'Covered by State Pension'
-            : wdWarn ? 'above your '+wdPct(wd.target)+' guide' : 'within your '+wdPct(wd.target)+' guide'}}
-          rows={[['Your sustainable guide', wdPct(wd.target)],
-                 ['First-year draw @ '+ageStr(result.effectiveStop), wd.initialRate!=null?wdPct(wd.initialRate):'—'],
-                 ['Within-guide age', wd.sustainableAge!=null?ageStr(wd.sustainableAge):'—']]} />
-        <KpiCard title="Investable net worth"
-          main={gbpC(nw.total)}
-          rows={[['Pension', gbpC(nw.pension)],
-                 ['ISA / GIA', gbpC(nw.isa+nw.gia)],
-                 ['Cash', gbpC(nw.cash)]].concat(nw.homeEquity>0?[['+ Home equity', gbpC(nw.homeEquity)]]:[])} />
-      </div>
-
-      {/* ===== DECISION TOOLS (optional add-ons) ===== */}
-      <div className="section-title">Decision tools</div>
-      <div className="panel action-panel">
-        <div className="chart-h" style={{marginBottom:4}}><h2>⭐ What should I do this year?</h2>
-          <span className="muted" style={{fontSize:13}}>this year’s savings of <b style={{color:'var(--text-primary)'}}>{gbp(rec.amount)}</b></span></div>
-        <div className="tax-flag">⚠ A planning allocation based on the numbers above — a starting point, not financial advice. It doesn’t model your personal tax position.</div>
-        <div className="strat-tabs">
-          {rec.strategies.map(s => (
-            <button key={s.key} className={'strat-tab'+(strategy===s.key?' on':'')} onClick={()=>setStrategy(s.key)}>{s.label}</button>
-          ))}
-        </div>
-        <div className="strat-def">{{
-          freedom: 'Maximise Freedom — earliest possible Freedom Age, directing savings to accessible accounts (ISA/GIA) to fund the bridge to pension access.',
-          balanced: 'Balanced (default) — the earliest Freedom Age that still keeps your pension on track to its target (+ margin). Funds the pension only as much as it needs, then sends the rest to accessible savings — so it never over-weights the locked pension.',
-          pension: 'Maximise Pension — everything into the pension for the biggest long-term pot and retirement income; your Freedom Age is later.',
-          lowrisk: 'Lowest Risk — keeps your Freedom Age near the earliest while building the largest safety buffer at life expectancy.'
-        }[strategy]}</div>
-        <div className="rec-body">
-          <div className="alloc-row">
-            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-pension)'}}>Pension</div><div className="ac-v tnum">{gbp(chosenStrat.split.pension)}</div></div>
-            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-isa)'}}>ISA</div><div className="ac-v tnum">{gbp(chosenStrat.split.isa)}</div></div>
-            <div className="alloc-cell"><div className="ac-k" style={{color:'var(--series-gia)'}}>GIA</div><div className="ac-v tnum">{gbp(chosenStrat.split.gia)}</div></div>
-          </div>
-          <div className="rec-side">
-            <div className="alloc-why">{
-              chosenStrat.age!=null
-                ? (chosenStrat.key==='freedom' ? 'Reaches Freedom Age '+ageStr(chosenStrat.age)+' — the earliest achievable with this year’s savings.'
-                  : chosenStrat.key==='pension' ? 'Biggest long-term pension pot; Freedom Age '+ageStr(chosenStrat.age)+' (later, but ~'+gbpC(chosenStrat.legacy)+' legacy).'
-                  : chosenStrat.key==='lowrisk' ? 'Keeps Freedom near the earliest ('+ageStr(chosenStrat.age)+') while building the biggest safety buffer (~'+gbpC(chosenStrat.legacy)+' at '+inputs.lifeExpectancy+').'
-                  : 'An even split — Freedom Age '+ageStr(chosenStrat.age)+', ~'+gbpC(chosenStrat.legacy)+' legacy.')
-                : 'Not achievable with these assumptions.'
-            }</div>
-            <button className="btn primary" onClick={()=>applyStrategy(chosenStrat.allocPension)}>Apply to my plan →</button>
-          </div>
-        </div>
-        <div className="checklist">
-          {rec.amount>0 && <div className="chk"><span className="ck">✓</span> Pension: <b>{gbp(chosenStrat.split.pension)}</b>{chosenStrat.split.pension>=60000?' (annual limit)':''}</div>}
-          {chosenStrat.split.isa>0 && <div className="chk"><span className="ck">✓</span> ISA: <b>{gbp(chosenStrat.split.isa)}</b>{chosenStrat.split.isa>=20000?' (£20k maxed)':''}</div>}
-          {chosenStrat.split.gia>0 && <div className="chk"><span className="ck">✓</span> GIA: <b>{gbp(chosenStrat.split.gia)}</b></div>}
-          {nextEvent && <div className="chk"><span className="ck">◷</span> {nextEvent.name} in {nextEvent.inMonths} month{nextEvent.inMonths===1?'':'s'} ({gbpC(nextEvent.amount)})</div>}
-          {inputs.mortgage>0 && <div className="chk"><span className="ck">○</span> Mortgage overpay won’t move your Freedom Age (home equity isn’t drawn on)</div>}
-        </div>
-      </div>
-
-      {/* DECISION COMPARATOR */}
-      <div className="panel comparator" style={{marginBottom:16}}>
-        <div className="chart-h" style={{marginBottom:4}}><h2>💡 I’ve got a lump sum — where should it go?</h2></div>
-        <div className="desc" style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>Compare
-          <span style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
-            <span style={{position:'absolute',left:9,color:'var(--muted)',fontSize:13,pointerEvents:'none'}}>£</span>
-            <NumInput className="inline-num" style={{paddingLeft:18,width:120}} step={5000} min={0} value={compareAmount} ariaLabel="Lump sum amount" onChange={v=>setCompareAmount(v)} />
-          </span>
-          to invest — ranked by earliest Freedom Age. <span className="muted">The lump goes straight into each account (ISA fills its £20k limit first, the rest to GIA). Accessible money can fund the bridge to pension access; pension is locked until {inputs.pensionAccessAge}.</span></div>
-        <div className="tablewrap">
-          <table className="cmp-table">
-            <thead><tr><th>Put it…</th><th>Goes in</th><th>Freedom Age</th><th>Pension @ access</th><th>Bridge Fund</th><th>Lifetime income</th></tr></thead>
-            <tbody>
-              {comparison.map((d,i)=>(
-                <tr key={i} className={d.best?'cmp-best':''}>
-                  <td style={{textAlign:'left'}}>{d.label}{d.best && <span className="best-tag">best for freedom</span>}</td>
-                  <td className="tnum">{gbpC(d.invested)}</td>
-                  <td className="tnum">{d.freedomAge!=null?ageStr(d.freedomAge):'—'}</td>
-                  <td className="tnum">{gAcc(d.pension)}</td>
-                  <td className="tnum">{gbpC(d.bridge * rf(d.freedomAge!=null?d.freedomAge:result.effectiveStop))}</td>
-                  <td className="tnum">{gbpC(d.income)}/yr</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {comparison.length>0 && (() => {
-          const best = comparison[0];
-          const penOpt = comparison.find(d=>d.key==='pension');
-          const bestIsAccessible = best.key==='isa'||best.key==='gia'||best.key==='cash';
-          return <div className="cmp-rec">
-            <b>Recommendation:</b> {bestIsAccessible
-              ? gbp(compareAmount)+' as “'+best.label+'” reaches Freedom Age '+ageStr(best.freedomAge)+(penOpt&&penOpt.freedomAge!=null&&penOpt.freedomAge>best.freedomAge?' — '+monthsStr(Math.round((penOpt.freedomAge-best.freedomAge)*12))+' sooner than pension':'')+'. Accessible money funds the bridge to pension access, which pension (locked until '+inputs.pensionAccessAge+') can’t — though pension would build a bigger pot and higher lifetime income for later.'
-              : '“'+best.label+'” gives the earliest Freedom Age ('+ageStr(best.freedomAge)+') here.'}
-          </div>;
-        })()}
-      </div>
-
       {/* ===== OUTPUTS ===== */}
       <div className="outputs-block">
-      {/* OPPORTUNITY + RISK */}
-      <div className="grid2">
-        <div className="panel">
-          <h2>⭐ Biggest opportunities</h2>
-          <div className="desc">Your top three levers to bring Freedom forward — click any to apply it.</div>
-          {opps.length===0 && <div className="muted">Set an achievable plan to see opportunities.</div>}
-          {opps.slice(0,3).map((o,i) => (
-            <button className="oppitem clickable" key={i} onClick={()=>applyPatch(o.patch)} title="Apply this change to your plan">
-              <span className="lab">{o.label}</span>
-              <span className={'delta '+(o.deltaMonths>0?'pos':'neg')}>{o.deltaMonths>0?'▲ '+monthsStr(o.deltaMonths)+' earlier':o.deltaMonths<0?'▼ later':'≈ no change'} <span className="apply-hint">apply →</span></span>
-            </button>
-          ))}
-        </div>
-        <div className="panel">
-          <h2>⚠ Biggest risks</h2>
-          <div className="desc">What pushes your Freedom Age back most — click to stress-test your plan against it.</div>
-          {rks.map((o,i) => (
-            <button className="oppitem clickable" key={i} onClick={()=>applyPatch(o.patch)} title="Apply this scenario to stress-test your plan">
-              <span className="lab">{o.label}</span>
-              <span className="delta neg">{o.breaks?'✕ plan fails':'▼ '+monthsStr(o.deltaMonths)+' later'} <span className="apply-hint">apply →</span></span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* CHARTS */}
-      <div className="section-title">Projections</div>
-      <div className="grid2" style={{gridTemplateColumns:'1fr'}}>
-        <div className="panel">
-          <div className="chart-h"><h2>Combined net worth</h2></div>
-          <div className="desc">Pension, ISA, GIA, cash{nw.homeEquity>0?' and home equity':''} over time.</div>
-          {ResponsiveContainer ? (
-          <ResponsiveContainer width="100%" height={230}>
-            <AreaChart data={chartData} margin={{top:6,right:12,left:4,bottom:0}}>
-              <CartesianGrid stroke={C.grid} vertical={false} />
-              <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
-              <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={44} />
-              <Tooltip content={<ChartTip/>} />
-              <ReferenceLine x={inputs.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" />
-              {nw.homeEquity>0 && <Area type="monotone" dataKey="home" name="Home equity" stackId="1" stroke={C.home} fill={C.home} fillOpacity={0.5} />}
-              <Area type="monotone" dataKey="cash" name="Cash" stackId="1" stroke={C.cash} fill={C.cash} fillOpacity={0.5} />
-              <Area type="monotone" dataKey="gia" name="GIA" stackId="1" stroke={C.gia} fill={C.gia} fillOpacity={0.5} />
-              <Area type="monotone" dataKey="isa" name="ISA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
-              <Area type="monotone" dataKey="pension" name="Pension" stackId="1" stroke={C.pension} fill={C.pension} fillOpacity={0.5} />
-            </AreaChart>
-          </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
-          <div className="legend-row">
-            <span><span className="sw" style={{background:C.pension}}></span>Pension</span>
-            <span><span className="sw" style={{background:C.isa}}></span>ISA</span>
-            <span><span className="sw" style={{background:C.gia}}></span>GIA</span>
-            <span><span className="sw" style={{background:C.cash}}></span>Cash</span>
-            {nw.homeEquity>0 && <span><span className="sw" style={{background:C.home}}></span>Home</span>}
-          </div>
+      {/* CHARTS — combined view from the two planners */}
+      <div className="section-title">Combined net worth</div>
+      <div className="panel">
+        <div className="chart-h"><h2>Combined net worth</h2></div>
+        <div className="desc">Your pension (Coast planner) plus accessible ISA/GIA wealth (Bridge planner), year by year. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
+        {ResponsiveContainer ? (
+        <ResponsiveContainer width="100%" height={260}>
+          <AreaChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
+            <CartesianGrid stroke={C.grid} vertical={false} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
+            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
+            <Tooltip content={<ChartTip/>} />
+            <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:'Pension access '+combined.pensionAccessAge, position:'insideTopRight', fill:C.axis, fontSize:11}} />
+            <Area type="monotone" dataKey="accessible" name="ISA / GIA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
+            <Area type="monotone" dataKey="pension" name="Pension" stackId="1" stroke={C.pension} fill={C.pension} fillOpacity={0.5} />
+          </AreaChart>
+        </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+        <div className="legend-row">
+          <span><span className="sw" style={{background:C.pension}}></span>Pension (Coast)</span>
+          <span><span className="sw" style={{background:C.isa}}></span>ISA / GIA (Bridge)</span>
+          <span className="terms-tag">{realTerms?'today\u2019s money':'future \u00a3 (nominal)'}</span>
         </div>
       </div>
 
       <div className="panel" style={{marginBottom:16}}>
         <div className="chart-h"><h2>Annual cash flow</h2></div>
-        <div className="desc">Contributions in (positive) and withdrawals out (negative), split by where the money comes from.</div>
+        <div className="desc">What you pay in each year, split by destination \u2014 from both planners\u2019 contribution phases. Shown as entered (today\u2019s money).</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={220}>
-          <ComposedChart data={chartData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
+          <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={44} />
+            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
             <Tooltip content={<ChartTip/>} />
-            <ReferenceLine y={0} stroke={C.baseline} />
-            <Bar dataKey="contributions" name="Contributions" fill={C.isa} radius={[3,3,0,0]} maxBarSize={18} stackId="cf" />
-            <Bar dataKey="withdrawals" name="ISA/GIA withdrawals" fill={C.red} radius={[0,0,0,0]} maxBarSize={18} stackId="cf" />
-            <Bar dataKey="pensionWithdrawals" name="Pension withdrawals" fill={C.gia} radius={[0,0,3,3]} maxBarSize={18} stackId="cf" />
+            <Bar dataKey="pensionIn" name="Into pension" fill={C.pension} maxBarSize={18} stackId="cf" />
+            <Bar dataKey="accessibleIn" name="Into ISA/GIA" fill={C.isa} radius={[3,3,0,0]} maxBarSize={18} stackId="cf" />
           </ComposedChart>
         </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
         <div className="legend-row">
-          <span><span className="sw" style={{background:C.isa}}></span>Contributions in</span>
-          <span><span className="sw" style={{background:C.red}}></span>ISA/GIA withdrawals</span>
-          <span><span className="sw" style={{background:C.gia}}></span>Pension withdrawals</span>
+          <span><span className="sw" style={{background:C.pension}}></span>Into pension</span>
+          <span><span className="sw" style={{background:C.isa}}></span>Into ISA / GIA</span>
         </div>
       </div>
 
-      {/* YEAR BY YEAR TABLE */}
-      <div className="section-title">Year-by-year cash flow</div>
+      {/* YEAR BY YEAR (combined) */}
+      <div className="section-title">Year-by-year</div>
       <div className="panel" style={{marginBottom:16}}>
         <div className="chart-h" style={{marginBottom:10}}>
           <div className="legend-row" style={{margin:0}}>
-            <span><span className="sw" style={{background:'var(--series-pension)'}}></span>Accumulation</span>
-            <span><span className="sw" style={{background:'var(--warning)'}}></span>Bridge</span>
-            <span><span className="sw" style={{background:'var(--series-isa)'}}></span>Retirement</span>
-            <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
+            <span><span className="sw" style={{background:C.pension}}></span>Pension</span>
+            <span><span className="sw" style={{background:C.isa}}></span>ISA / GIA</span>
+            <span className="terms-tag">{realTerms?'today\u2019s money':'future \u00a3 (nominal)'}</span>
           </div>
-          <button className="btn" onClick={()=>setShowAllRows(!showAllRows)}>{showAllRows?'Collapse':'Show all years'}</button>
         </div>
-        <div className="desc" style={{marginTop:0,marginBottom:10}}>“Out” shows where each year’s spending is drawn from — ISA/GIA/cash during the bridge, then your pension once you can access it. {realTerms?'Figures are in today’s money.':'Figures are future (nominal) pounds — toggle “Today’s money” in the toolbar to see them in today’s terms.'}</div>
-        <div className="tablewrap" style={{maxHeight:showAllRows?520:'auto'}}>
+        <div className="desc" style={{marginTop:0,marginBottom:10}}>Pension and accessible wealth side by side each year, from the two planners. Contributions shown as entered; balances and growth follow the toggle.</div>
+        <div className="tablewrap" style={{maxHeight:520}}>
           <table>
             <thead>
-              <tr className="grouprow">
-                <th></th><th colSpan={5} className="grp grp-p">Pension</th><th colSpan={5} className="grp grp-a">ISA / GIA / cash</th><th></th><th></th>
-              </tr>
-              <tr>
-                <th>Age</th>
-                <th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th>
-                <th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th>
-                <th title={'Spending drawn from your invested pot this year, as a % of the pot. Your sustainable guide is '+(inputs.withdrawalRate*100).toFixed(1)+'%. Highlighted when above it.'}>Draw&nbsp;rate</th>
-                <th>Notes</th>
-              </tr>
+              <tr className="grouprow"><th></th><th colSpan={4} className="grp grp-p">Pension</th><th colSpan={4} className="grp grp-a">ISA / GIA</th><th></th></tr>
+              <tr><th>Age</th><th>Start</th><th>In</th><th>Growth</th><th>End</th><th>Start</th><th>In</th><th>Growth</th><th>End</th><th>Net worth</th></tr>
             </thead>
             <tbody>
-              {(showAllRows?rows:rows.filter((r,i)=> i%2===0 || r.phase!=='accumulation')).map((r,i) => (
-                <tr key={i} className={r.phase}>
+              {combined.series.map(function(r,i){
+                var nf = realTerms ? 1 : Math.pow(1 + combined.infl, r.age - combined.startAge);
+                var mv = function(v){ return gbpC(v*nf); };
+                return (
+                <tr key={i}>
                   <td>{r.age}</td>
-                  <td>{money(r.pensionStart, r.age)}</td>
-                  <td>{r.pensionIn?money(r.pensionIn, r.age):'—'}</td>
-                  <td>{r.pensionWithdraw?<span style={{color:'var(--critical)'}}>{money(-r.pensionWithdraw, r.age)}</span>:'—'}</td>
-                  <td>{money(r.pensionGrowth, r.age)}</td>
-                  <td>{money(r.pensionEnd, r.age)}</td>
-                  <td>{money(r.accessStart, r.age)}</td>
-                  <td>{r.accessIn?money(r.accessIn, r.age):'—'}</td>
-                  <td>{r.accessOut?<span style={{color:'var(--critical)'}}>{money(-r.accessOut, r.age)}</span>:'—'}</td>
-                  <td>{money(r.growth, r.age)}</td>
-                  <td>{money(r.accessEnd, r.age)}</td>
-                  <td className="tnum" style={r.withdrawalRate>inputs.withdrawalRate*1.05?{color:'var(--critical)',fontWeight:600}:{color:'var(--muted)'}}>
-                    {r.withdrawalRate>0 && r.phase!=='accumulation' ? (r.withdrawalRate*100).toFixed(1)+'%' : '—'}</td>
-                  <td className="notecell">{r.notes}</td>
-                </tr>
-              ))}
+                  <td>{mv(r.pension)}</td><td>{r.pensionIn?gbpC(r.pensionIn):'\u2014'}</td><td>{mv(r.pensionGrowth)}</td><td>{mv(r.pension+r.pensionIn+r.pensionGrowth)}</td>
+                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?gbpC(r.accessibleIn):'\u2014'}</td><td>{mv(r.accessibleGrowth)}</td><td>{mv(r.accessible+r.accessibleIn+r.accessibleGrowth)}</td>
+                  <td><b>{mv(r.netWorth)}</b></td>
+                </tr>);
+              })}
             </tbody>
           </table>
         </div>
-        {!showAllRows && <div className="note">Showing a sample of years — “Show all years” for the full schedule. Export the complete table with the CSV button.</div>}
       </div>
       </div>{/* end outputs-block */}
       </main>{/* end main */}
 
-      {/* ===== SIDEBAR: all the inputs that build the simulation ===== */}
-      <aside className="sidebar">
-      <div className="sb-inner">
-        <div className="sb-head">🧮 Your inputs</div>
-        <div className="sb-note">The simulation is built from these — add your current position, assumptions and any cash events. Everything updates live.</div>
-        <div className="qedit sb-block">
-          <h3 className="sb-sec">Current position</h3>
-          <div className="qgrid">
-            <div className="qcell"><label>Pension</label>
-              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.pensionCurrent} ariaLabel="Current pension" onChange={v=>set({pensionCurrent:v})} /></div></div>
-            <div className="qcell"><label>ISA</label>
-              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.isaCurrent} ariaLabel="Current ISA" onChange={v=>set({isaCurrent:v})} /></div></div>
-            <div className="qcell"><label>GIA</label>
-              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.giaCurrent} ariaLabel="Current GIA" onChange={v=>set({giaCurrent:v})} /></div></div>
-            <div className="qcell"><label>Cash</label>
-              <div className="qin"><span>£</span><NumInput step={1000} min={0} value={inputs.cashCurrent} ariaLabel="Current cash" onChange={v=>set({cashCurrent:v})} /></div></div>
-          </div>
-        </div>
-      <div className="inputs-block">
-      <div className="inputs-grid">
-        <Section title="Personal" open id="sec-personal">
-          <Num label="Current age" value={inputs.currentAge} onChange={v=>set({currentAge:v})} />
-          <Num label="Desired optionality age (target)" value={inputs.targetOptionalityAge} onChange={v=>set({targetOptionalityAge:v})} />
-          <Num label="Pension access age" value={inputs.pensionAccessAge} onChange={v=>set({pensionAccessAge:v})} />
-          <Num label="Life expectancy" value={inputs.lifeExpectancy} onChange={v=>set({lifeExpectancy:v})} />
-          <Num label="State Pension age" value={inputs.statePensionAge} onChange={v=>set({statePensionAge:v})} />
-          <label className="switch"><input type="checkbox" checked={inputs.statePensionIncluded} onChange={e=>set({statePensionIncluded:e.target.checked})} />Include State Pension</label>
-          {inputs.statePensionIncluded && <Num label="State Pension (annual, today's £)" value={inputs.statePensionAmount} onChange={v=>set({statePensionAmount:v})} prefix="£" />}
-        </Section>
 
-        <Section title="Pension" id="sec-pension">
-          <Num label="Current pension value" value={inputs.pensionCurrent} onChange={v=>set({pensionCurrent:v})} prefix="£" />
-          <Num label="Employer contribution (annual)" value={inputs.employerContribution} onChange={v=>set({employerContribution:v})} prefix="£" />
-          <Pct label="Expected annual return (nominal)" value={inputs.pensionReturn} onChange={v=>set({pensionReturn:v})} />
-          <Pct label="Annual fee" value={inputs.pensionFee} onChange={v=>set({pensionFee:v})} />
-          <Pct label="Target withdrawal rate" value={inputs.withdrawalRate} onChange={v=>set({withdrawalRate:v})} />
-          <Pct label="Pension safety margin (on top of target)" value={inputs.pensionBuffer} onChange={v=>set({pensionBuffer:v})} />
-          <div className="note">The Coast age and pension status aim for the required pot × (1 + margin). 0% = just the target; 10–20% adds a cushion so “stop contributing” isn’t called on a razor-thin surplus.</div>
-        </Section>
-
-        <Section title="ISA">
-          <Num label="Current ISA value" value={inputs.isaCurrent} onChange={v=>set({isaCurrent:v})} prefix="£" />
-          <Pct label="Expected return" value={inputs.isaReturn} onChange={v=>set({isaReturn:v})} />
-        </Section>
-
-        <Section title="GIA">
-          <Num label="Current GIA value" value={inputs.giaCurrent} onChange={v=>set({giaCurrent:v})} prefix="£" />
-          <Pct label="Expected return" value={inputs.giaReturn} onChange={v=>set({giaReturn:v})} />
-          <Pct label="Tax drag" value={inputs.giaTaxDrag} onChange={v=>set({giaTaxDrag:v})} />
-          <Num label="Current cash" value={inputs.cashCurrent} onChange={v=>set({cashCurrent:v})} prefix="£" />
-        </Section>
-
-        <Section title="Spending">
-          <div className="note" style={{marginTop:0,marginBottom:6}}>Spending is in <b>today’s money</b> and holds its real value — the cash actually withdrawn rises with inflation, but its buying power stays constant.</div>
-          <Num label="Bridge spending / yr (before pension access)" value={inputs.bridgeSpending} onChange={v=>set({bridgeSpending:v})} prefix="£" />
-          <Num label="Retirement spending / yr (after access)" value={inputs.retirementSpending} onChange={v=>set({retirementSpending:v})} prefix="£" />
-          <Pct label="Expected return during bridge" value={inputs.bridgeReturn} onChange={v=>set({bridgeReturn:v})} />
-          <Pct label="Inflation" value={inputs.inflation} onChange={v=>set({inflation:v})} />
-          <div className="note" style={{marginTop:6}}>Returns are <b>nominal</b> (before inflation). The <b>{realTerms?'Today’s money':'Future £'}</b> toggle in the top bar shows every figure in today’s money (real) or future pounds (nominal) — real ≈ nominal return − inflation.</div>
-        </Section>
-
-        <Section title="Property (optional)">
-          <Num label="Home value" value={inputs.homeValue} onChange={v=>set({homeValue:v})} prefix="£" />
-          <Num label="Mortgage outstanding" value={inputs.mortgage} onChange={v=>set({mortgage:v})} prefix="£" />
-          <div className="note">Home equity is shown in net worth but not drawn on to fund optionality.</div>
-        </Section>
-
-        <Section title="Future cash events" open span id="sec-events">
-          <div className="note" style={{marginTop:0,marginBottom:8}}>Money <b>in</b> — earn-out, inheritance, house sale, bonus. Or one-off <b>hits (out)</b> — house purchase, school fees, new car, tax bill.
-            Timed in <b>years from now</b>: e.g. a £100k lump sum in 5 years → set amount 100000, In, 5&nbsp;yrs.</div>
-          <div className="event-row" style={{marginBottom:2}}>
-            <span className="evh">Name</span><span className="evh">In / out</span><span className="evh">Amount £</span>
-            <span className="evh">In (yrs)</span><span className="evh">Account</span><span></span>
-          </div>
-          {inputs.cashEvents.map((ev,i) => {
-            const dir = ev.direction || 'in';
-            const acct = ev.account || ev.destination || 'gia';
-            const yrs = ev.yearsFromNow != null ? ev.yearsFromNow
-              : (ev.age != null ? Math.max(0, Math.round(ev.age - inputs.currentAge)) : 0);
-            return (
-            <div className="event-row" key={i}>
-              <input type="text" value={ev.name} onChange={e=>updEvent(i,{name:e.target.value})} title="Name" />
-              <select value={dir} onChange={e=>updEvent(i,{direction:e.target.value})} title="Direction"
-                style={dir==='out'?{color:'var(--critical)',fontWeight:600}:{color:'var(--good-text)',fontWeight:600}}>
-                <option value="in">In +</option><option value="out">Out −</option>
-              </select>
-              <NumInput value={ev.amount} min={0} onChange={v=>updEvent(i,{amount:Math.abs(v)})} title="Amount" ariaLabel="Amount" />
-              <div style={{position:'relative',display:'flex',alignItems:'center'}}>
-                <NumInput value={yrs} min={0} style={{paddingRight:26}}
-                  onChange={v=>updEvent(i,{yearsFromNow:Math.max(0,v)})}
-                  title={'In how many years from now (→ age '+(inputs.currentAge+yrs)+')'} ariaLabel="Years from now" />
-                <span style={{position:'absolute',right:7,fontSize:11,color:'var(--muted)',pointerEvents:'none'}}>yrs</span>
-              </div>
-              <select value={acct} onChange={e=>updEvent(i,{account:e.target.value,destination:e.target.value})} title={dir==='out'?'Paid from':'Paid into'}>
-                <option value="pension">Pension</option><option value="isa">ISA</option>
-                <option value="gia">GIA</option><option value="cash">Cash</option>
-              </select>
-              <button className="icon-btn" onClick={()=>delEvent(i)} title="Remove">✕</button>
-            </div>
-            );
-          })}
-          <button className="add-link" onClick={addEvent}>+ Add cash event</button>
-        </Section>
-      </div>
-      </div>{/* end inputs-block */}
-
-      <div className="foot-block">
-      <div className="assumptions">
-        <b>How the optionality age is calculated.</b> The engine finds the earliest age at which you can stop
-        earning permanently and still fund spending every year to age {inputs.lifeExpectancy}, drawing on
-        accessible wealth (ISA/GIA/cash) during the bridge to age {inputs.pensionAccessAge}, then pension plus
-        any remainder — with the State Pension from age {inputs.statePensionAge}{inputs.statePensionIncluded?'':' (excluded)'}.
-        Returns are entered nominal; spending is in today’s money and holds its real value. Every figure is shown in
-        <b> {realTerms?'today’s money (real)':'future £ (nominal)'}</b> — switch with the toggle in the top bar.
-        This is a planning model, not financial advice — sense-check the assumptions against your own circumstances and tax position.
-      </div>
-
-      <div className="note" style={{textAlign:'center',marginTop:20}}>Inputs auto-save to this browser. Financial Optionality Dashboard.</div>
-      </div>{/* end foot-block */}
-      </div>{/* end sb-inner */}
-      </aside>{/* end sidebar */}
       </div>{/* end layout */}
     </div>
   );
