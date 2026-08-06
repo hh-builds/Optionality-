@@ -2254,7 +2254,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
                 <td>{r.age}</td>
                 <td>{m(r.balance, r.age)}</td>
                 <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
-                <td className="bp-growth">{r.growth!=null?(r.growth>=0?'+':'−')+m(Math.abs(r.growth), r.age):'—'}</td>
+                <td className="bp-growth">{(function(){var w=r.withdraw||0;var g=(r.balance+r.contribution-w+r.growth)*bf(r.age+1)-r.balance*bf(r.age)-r.contribution*bf(r.age)+w*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
                 <td>{m(r.target, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
                 <td>{m(r.income, r.age)}/yr</td>
@@ -2333,7 +2333,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 
       {/* 1) HEADLINE */}
       <div className="bp-headline">
-        <div className={'bp-big '+(base.reached?'reached':'missed')}>{base.coasting ? 'Coasting now' : base.reached ? 'Age '+base.coastAge : 'Not by '+base.objAge}</div>
+        <div className={'bp-big '+(base.reached?'reached':'missed')}>{base.coasting ? 'Coasting now — pension self-funds' : base.reached ? (base.yearsUntilCoast===0 ? 'Coast achieved at '+base.coastAge : (base.yearsUntilCoast + ' more year' + (base.yearsUntilCoast===1?'':'s') + ' of contributions — coast achieved at ' + base.coastAge)) : 'Not reached by '+base.objAge}</div>
         <div className="bp-cap">{base.reached
           ? 'Pension becomes self-sustaining — at '+(base.coasting?'your current balance':('age '+base.coastAge))+' it reaches '+m(base.coastBalance, base.coastAge)+', enough to grow to your '+gbpC(plan.targetPot*bf(base.objAge))+' target by age '+base.objAge+(realTerms?'':' (that’s your '+gbpC(plan.targetPot)+' target in today’s money, grown by inflation to age '+base.objAge+')')+', with no further contributions.'
           : 'On these assumptions your pension doesn’t reach the '+gbpC(plan.targetPot)+' target by age '+base.objAge+' even with your planned contributions. Increase contributions, growth, or push the retirement age.'}</div>
@@ -2414,7 +2414,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Retirement age (objective)</label><BpNum value={cp.retirementAge} onChange={v=>setCp({retirementAge:Math.round(v)})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={cp.pensionAccessAge} onChange={v=>setCp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Required coast balance at each age = target ÷ (1+growth)^(years to {base.objAge}) — the pot that would grow to your target with <b>no more contributions</b>. Growth is a <b>real</b> return, so the coast age is the same in today’s money or nominal.</div>
+      <div className="bp-note">Required coast balance at each age = target ÷ (1+growth)^(years to {base.objAge}) — the pot that would grow to your target with <b>no more contributions</b>. The engine converts the nominal return into a real return after inflation. Coast age is unchanged by the display toggle because targets and balances are converted consistently.</div>
 
       {/* CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -2490,7 +2490,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
                 <td>{m(r.required, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
                 <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
-                <td className="bp-growth">{r.growth!=null?(r.growth>=0?'+':'−')+m(Math.abs(r.growth), r.age):'—'}</td>
+                <td className="bp-growth">{(function(){var g=(r.projected+r.contribution+r.growth)*bf(r.age+1)-r.projected*bf(r.age)-r.contribution*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
                 <td><span className={'bp-status '+st[0]}>{st[1]}</span></td>
               </tr>
             ); })}
@@ -2867,11 +2867,13 @@ function App() {
               {combined.series.map(function(r,i){
                 var nf = realTerms ? 1 : Math.pow(1 + combined.infl, r.age - combined.startAge);
                 var mv = function(v){ return gbpC(v*nf); };
+                var nf1 = realTerms ? 1 : Math.pow(1 + combined.infl, r.age + 1 - combined.startAge);
+                var gv = function(end,start,inn,out){ return gbpC(end*nf1 - start*nf - inn*nf + out*nf); };
                 return (
                 <tr key={i}>
                   <td>{r.age}</td>
-                  <td>{mv(r.pension)}</td><td>{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td>{r.pensionOut?<span style={{color:'var(--critical)'}}>{mv(-r.pensionOut)}</span>:'\u2014'}</td><td>{mv(r.pensionGrowth)}</td><td>{mv(r.pensionEnd)}</td>
-                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td>{r.accessibleOut?<span style={{color:'var(--critical)'}}>{mv(-r.accessibleOut)}</span>:'\u2014'}</td><td>{mv(r.accessibleGrowth)}</td><td>{mv(r.accessibleEnd)}</td>
+                  <td>{mv(r.pension)}</td><td>{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td>{r.pensionOut?<span style={{color:'var(--critical)'}}>{mv(-r.pensionOut)}</span>:'\u2014'}</td><td>{gv(r.pensionEnd,r.pension,r.pensionIn,r.pensionOut)}</td><td>{gbpC(r.pensionEnd*nf1)}</td>
+                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td>{r.accessibleOut?<span style={{color:'var(--critical)'}}>{mv(-r.accessibleOut)}</span>:'\u2014'}</td><td>{gv(r.accessibleEnd,r.accessible,r.accessibleIn,r.accessibleOut)}</td><td>{gbpC(r.accessibleEnd*nf1)}</td>
                   <td><b>{mv(r.netWorth)}</b></td>
                 </tr>);
               })}
