@@ -96,3 +96,30 @@ bassert(Engine.bridgePlan(bpFull).base.crossAge < 46, 'bridge full-depletion is 
 const bpPres = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'preserve' });
 bassert(Engine.bridgePlan(bpPres).base.crossAge === 46, 'bridge preserve-capital equals perpetual');
 console.log(bfails === 0 ? 'ALL BRIDGE ASSERTIONS PASSED' : (bfails + ' BRIDGE ASSERTION(S) FAILED'));
+
+// ===== Pension Coast FIRE Planner =====
+line();
+console.log('COAST PLANNER — worked example');
+const cp = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+const cplan = Engine.coastPlan(cp);
+console.log('Coast age         :', cplan.base.coastAge, '(expected 40)');
+console.log('Coast balance     :', money(cplan.base.coastBalance));
+console.log('Target pot        :', money(cplan.targetPot), 'at', cplan.objAge);
+console.log('Pot @ objective   :', money(cplan.base.potAtObj));
+let cfails = 0;
+function cassert(c,m){ if(!c){ console.log('FAIL:', m); cfails++; } }
+cassert(cplan.base.coastAge === 40, 'worked example coasts at age 40');
+cassert(Math.abs(cplan.base.coastBalance - 775000) < 2000, 'coast balance ≈ £775k');
+cassert(cplan.targetPot === 3000000, 'pot-mode target = £3m');
+const cInc = Object.assign({}, JSON.parse(JSON.stringify(cp)), { goalMode:'income' });
+cassert(Math.abs(Engine.coastPlan(cInc).targetPot - 2000000) < 1, 'income mode £80k / 4% = £2m required');
+cassert(cplan.stopSchedule.find(s=>s.stopAge===40).meetsTarget, 'contributing to 40 meets the target');
+cassert(!cplan.stopSchedule.find(s=>s.stopAge===39).meetsTarget, 'stopping at 39 misses the target');
+cassert(cplan.optimistic.coastAge < cplan.base.coastAge, 'optimistic coasts earlier than base');
+console.log(cfails === 0 ? 'ALL COAST ASSERTIONS PASSED' : (cfails + ' COAST ASSERTION(S) FAILED'));
+
+// bridge drawdown option leaves the crossover age unchanged, changes later pot
+const bpd = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), { drawdownFromOptionality:true });
+const bBase = Engine.bridgePlan(JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))).base;
+const bDraw = Engine.bridgePlan(bpd).base;
+console.log('Bridge drawdown: crossover', bDraw.crossAge, '(unchanged '+ (bDraw.crossAge===bBase.crossAge) +') · balance@access', money(bDraw.balanceAtAccess), 'vs', money(bBase.balanceAtAccess), 'without');
