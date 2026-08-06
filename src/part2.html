@@ -735,7 +735,7 @@ function App() {
   const cwData = combined.series.map(function(r){
     var nf = realTerms ? 1 : Math.pow(1 + combined.infl, r.age - combined.startAge);
     return { age:r.age, pension:r.pension*nf, accessible:r.accessible*nf, netWorth:r.netWorth*nf,
-             pensionIn:r.pensionIn*nf, accessibleIn:r.accessibleIn*nf };
+             pensionIn:r.pensionIn*nf, accessibleIn:r.accessibleIn*nf, pensionOut:-r.pensionOut*nf, accessibleOut:-r.accessibleOut*nf };
   });
 
   const result = useMemo(() => Engine.compute(inputs), [inputs]);
@@ -923,7 +923,7 @@ function App() {
       <div className="section-title">Combined net worth</div>
       <div className="panel">
         <div className="chart-h"><h2>Combined net worth</h2></div>
-        <div className="desc">Your pension (Coast planner) plus accessible ISA/GIA wealth (Bridge planner), year by year. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
+        <div className="desc">Pension + accessible ISA/GIA wealth to age 90 \u2014 building until you go work-optional (age {combined.retireAge}), then drawn down for retirement income. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={260}>
           <AreaChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
@@ -931,6 +931,7 @@ function App() {
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
             <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
             <Tooltip content={<ChartTip/>} />
+            <ReferenceLine x={combined.retireAge} stroke={C.good} strokeDasharray="3 3" label={{value:'Work-optional '+combined.retireAge, position:'insideTopLeft', fill:C.good, fontSize:11}} />
             <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:'Pension access '+combined.pensionAccessAge, position:'insideTopRight', fill:C.axis, fontSize:11}} />
             <Area type="monotone" dataKey="accessible" name="ISA / GIA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
             <Area type="monotone" dataKey="pension" name="Pension" stackId="1" stroke={C.pension} fill={C.pension} fillOpacity={0.5} />
@@ -945,21 +946,26 @@ function App() {
 
       <div className="panel" style={{marginBottom:16}}>
         <div className="chart-h"><h2>Annual cash flow</h2></div>
-        <div className="desc">What you pay in each year, split by destination \u2014 from both planners\u2019 contribution phases. Shown as entered (today\u2019s money).</div>
+        <div className="desc">Money <b>in</b> (contributions, above the line) and <b>out</b> (retirement income drawn, below the line), by pot \u2014 to age 90.</div>
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={220}>
-          <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
             <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
             <Tooltip content={<ChartTip/>} />
-            <Bar dataKey="pensionIn" name="Into pension" fill={C.pension} maxBarSize={18} stackId="cf" />
-            <Bar dataKey="accessibleIn" name="Into ISA/GIA" fill={C.isa} radius={[3,3,0,0]} maxBarSize={18} stackId="cf" />
+            <ReferenceLine y={0} stroke={C.baseline} />
+            <Bar dataKey="pensionIn" name="Into pension" fill={C.pension} maxBarSize={16} stackId="cf" />
+            <Bar dataKey="accessibleIn" name="Into ISA/GIA" fill={C.isa} maxBarSize={16} stackId="cf" />
+            <Bar dataKey="accessibleOut" name="From ISA/GIA" fill={C.red} maxBarSize={16} stackId="cf" />
+            <Bar dataKey="pensionOut" name="From pension" fill={C.gia} maxBarSize={16} stackId="cf" />
           </ComposedChart>
         </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
         <div className="legend-row">
           <span><span className="sw" style={{background:C.pension}}></span>Into pension</span>
           <span><span className="sw" style={{background:C.isa}}></span>Into ISA / GIA</span>
+          <span><span className="sw" style={{background:C.gia}}></span>From pension</span>
+          <span><span className="sw" style={{background:C.red}}></span>From ISA / GIA</span>
         </div>
       </div>
 
@@ -977,8 +983,8 @@ function App() {
         <div className="tablewrap" style={{maxHeight:520}}>
           <table>
             <thead>
-              <tr className="grouprow"><th></th><th colSpan={4} className="grp grp-p">Pension</th><th colSpan={4} className="grp grp-a">ISA / GIA</th><th></th></tr>
-              <tr><th>Age</th><th>Start</th><th>In</th><th>Growth</th><th>End</th><th>Start</th><th>In</th><th>Growth</th><th>End</th><th>Net worth</th></tr>
+              <tr className="grouprow"><th></th><th colSpan={5} className="grp grp-p">Pension</th><th colSpan={5} className="grp grp-a">ISA / GIA</th><th></th></tr>
+              <tr><th>Age</th><th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th><th>Start</th><th>In</th><th>Out</th><th>Growth</th><th>End</th><th>Net worth</th></tr>
             </thead>
             <tbody>
               {combined.series.map(function(r,i){
@@ -987,8 +993,8 @@ function App() {
                 return (
                 <tr key={i}>
                   <td>{r.age}</td>
-                  <td>{mv(r.pension)}</td><td>{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td>{mv(r.pensionGrowth)}</td><td>{mv(r.pension+r.pensionIn+r.pensionGrowth)}</td>
-                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td>{mv(r.accessibleGrowth)}</td><td>{mv(r.accessible+r.accessibleIn+r.accessibleGrowth)}</td>
+                  <td>{mv(r.pension)}</td><td>{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td>{r.pensionOut?<span style={{color:'var(--critical)'}}>{mv(-r.pensionOut)}</span>:'\u2014'}</td><td>{mv(r.pensionGrowth)}</td><td>{mv(r.pensionEnd)}</td>
+                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td>{r.accessibleOut?<span style={{color:'var(--critical)'}}>{mv(-r.accessibleOut)}</span>:'\u2014'}</td><td>{mv(r.accessibleGrowth)}</td><td>{mv(r.accessibleEnd)}</td>
                   <td><b>{mv(r.netWorth)}</b></td>
                 </tr>);
               })}

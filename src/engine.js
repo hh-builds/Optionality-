@@ -1213,35 +1213,48 @@
     };
   }
 
-  // Combined view over BOTH planners: pension (Coast) + accessible ISA/GIA (Bridge),
-  // aligned by age. Beyond a planner's modelled range it compounds the last balance at
-  // that planner's real growth with no further contributions. All values are REAL.
+  // Combined LIFETIME view: accumulate both pots to the work-optional (retire) age,
+  // then draw the target income down to age 90 — the accessible ISA/GIA pot bridges
+  // the years until pension access, then the pension takes over. Values are REAL
+  // (today's money); nominal returns are netted off inflation.
   function combinedPlan(bp, cp) {
-    var b = bridgePlan(bp).base, c = coastPlan(cp).base, i;
-    var bMap = {}, cMap = {};
-    for (i = 0; i < b.rows.length; i++) bMap[b.rows[i].age] = b.rows[i];
-    for (i = 0; i < c.rows.length; i++) cMap[c.rows[i].age] = c.rows[i];
-    var bLast = b.rows.length ? b.rows[b.rows.length - 1] : { age: bp.currentAge, balance: bp.currentBalance || 0 };
-    var cLast = c.rows.length ? c.rows[c.rows.length - 1] : { age: cp.currentAge, projected: cp.currentPension || 0 };
-    var bG = (1 + bp.growth) / (1 + (bp.inflation || 0)) - 1, cG = (1 + cp.growth) / (1 + (cp.inflation || 0)) - 1;
+    var inflB = bp.inflation || 0, inflC = cp.inflation || 0;
+    var gB = (1 + bp.growth) / (1 + inflB) - 1;   // real return, accessible (ISA/GIA)
+    var gC = (1 + cp.growth) / (1 + inflC) - 1;   // real return, pension
     var startAge = Math.min(bp.currentAge, cp.currentAge);
-    var endAge = Math.max(cp.retirementAge || cp.pensionAccessAge, bp.pensionAccessAge);
+    var endAge = 90;
+    var accessAge = bp.pensionAccessAge;
+    var income = bp.targetIncome || 0;            // real annual retirement spend
+    var bx = bridgePlan(bp).base.crossAge;        // work-optional age (accessible funds optionality)
+    var retireAge = (bx != null) ? bx : accessAge;
+    var pen = cp.currentPension || 0, acc = bp.currentBalance || 0;   // real balances
     var series = [];
     for (var a = startAge; a <= endAge; a++) {
-      var acc, accIn = 0, accG = 0;
-      if (bMap[a]) { acc = bMap[a].balance; accIn = bMap[a].contribution || 0; accG = bMap[a].growth || 0; }
-      else if (a < bp.currentAge) { acc = 0; }
-      else { acc = bLast.balance * Math.pow(1 + bG, a - bLast.age); accG = acc - acc / (1 + bG); }
-      var pen, penIn = 0, penG = 0;
-      if (cMap[a]) { pen = cMap[a].projected; penIn = cMap[a].contribution || 0; penG = cMap[a].growth || 0; }
-      else if (a < cp.currentAge) { pen = 0; }
-      else { pen = cLast.projected * Math.pow(1 + cG, a - cLast.age); penG = pen - pen / (1 + cG); }
-      series.push({ age: a, pension: pen, accessible: acc, netWorth: pen + acc,
-                    pensionIn: penIn, accessibleIn: accIn, pensionGrowth: penG, accessibleGrowth: accG,
-                    contributions: penIn + accIn });
+      var penStart = pen, accStart = acc;
+      var penIn = 0, accIn = 0, penOut = 0, accOut = 0;
+      if (a < retireAge) {                          // accumulation
+        penIn = coastContribAt(cp, a) / Math.pow(1 + inflC, a - cp.currentAge);
+        accIn = bridgeContribAt(bp, a) / Math.pow(1 + inflB, a - bp.currentAge);
+      } else if (income > 0) {                      // decumulation — draw the target income
+        if (a < accessAge) {                        // pension locked -> from accessible only
+          accOut = Math.min(accStart, income);
+        } else {                                    // pension first, then top up from accessible
+          penOut = Math.min(penStart, income);
+          accOut = Math.min(accStart, income - penOut);
+        }
+      }
+      var penMid = penStart + penIn - penOut, accMid = accStart + accIn - accOut;
+      var penGrowth = penMid * gC, accGrowth = accMid * gB;
+      var penEnd = Math.max(0, penMid + penGrowth), accEnd = Math.max(0, accMid + accGrowth);
+      series.push({ age: a, pension: penStart, accessible: accStart, netWorth: penStart + accStart,
+                    pensionIn: penIn, accessibleIn: accIn, pensionOut: penOut, accessibleOut: accOut,
+                    pensionGrowth: penGrowth, accessibleGrowth: accGrowth,
+                    pensionEnd: penEnd, accessibleEnd: accEnd,
+                    contributions: penIn + accIn, withdrawals: penOut + accOut });
+      pen = penEnd; acc = accEnd;
     }
-    return { series: series, startAge: startAge, endAge: endAge, pensionAccessAge: bp.pensionAccessAge,
-             infl: (cp.inflation != null ? cp.inflation : (bp.inflation || 0)) };
+    return { series: series, startAge: startAge, endAge: endAge, pensionAccessAge: accessAge,
+             retireAge: retireAge, infl: inflC };
   }
 
   var Engine = {
