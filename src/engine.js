@@ -957,7 +957,7 @@
   function bridgeTargetAt(bp, sc, age, perpetualPot) {
     if (bp.mode !== 'bridge') return perpetualPot;
     if (bp.bridgeDepletion === 'preserve') return perpetualPot; // never touch capital
-    var dr = sc.growth;                       // real drawdown return
+    var dr = (1 + sc.growth) / (1 + (bp.inflation || 0)) - 1; // real drawdown return (nominal − inflation)
     var N = bp.pensionAccessAge - age;        // years of bridge left
     var desiredRemain = bp.bridgeDepletion === 'full' ? 0
       : perpetualPot * (bp.partialRemainPct != null ? bp.partialRemainPct : 0.5);
@@ -973,7 +973,8 @@
   function bridgeProject(bp, sc) {
     var curAge = bp.currentAge;
     var endAge = Math.max(bp.pensionAccessAge, curAge + 1);
-    var g = sc.growth;
+    var infl = bp.inflation || 0;
+    var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
     var wr = sc.withdrawalRate;
     var scale = sc.contribScale != null ? sc.contribScale : 1;
     var perpetualPot = wr > 0 ? bp.targetIncome / wr : Infinity;
@@ -992,7 +993,8 @@
       if (!crossedInline && isFinite(target) && running >= target) crossedInline = true;
       var drawing = drawdown && crossedInline;
       var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn
-      var c = drawing ? 0 : bridgeContribAt(bp, a) * scale;    // stop saving once optional
+      var cNom = drawing ? 0 : bridgeContribAt(bp, a) * scale; // entered contribution (constant nominal £)
+      var c = cNom / Math.pow(1 + infl, a - curAge);           // its real value this year (declines with inflation)
       var prevBal = running, nextBal;
       if (monthly) {
         var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, wm = wdraw / 12, r = running;
@@ -1108,16 +1110,19 @@
   }
   // Pension at the objective age if contributions cease at `stopAge`.
   function coastFinalIfStop(cp, sc, stopAge) {
-    var g = sc.growth, objAge = coastObjAge(cp, sc), running = cp.currentPension;
+    var infl = cp.inflation || 0;
+    var g = (1 + sc.growth) / (1 + infl) - 1, objAge = coastObjAge(cp, sc), running = cp.currentPension;
     for (var a = cp.currentAge; a < objAge; a++) {
-      var c = (a < stopAge) ? coastContribAt(cp, a) : 0;
+      var cNom = (a < stopAge) ? coastContribAt(cp, a) : 0;
+      var c = cNom / Math.pow(1 + infl, a - cp.currentAge);
       running = (running + c) * (1 + g);
     }
     return running;
   }
 
   function coastProject(cp, sc) {
-    var g = sc.growth;
+    var infl = cp.inflation || 0;
+    var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
     var objAge = coastObjAge(cp, sc);
     var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
     var targetPot = coastTargetPot(cp, sc);
@@ -1125,8 +1130,9 @@
     var rows = [], running = cp.currentPension;
     for (var a = cp.currentAge; a <= objAge; a++) {
       var yrsLeft = objAge - a;
-      var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance at this age
-      var c = coastContribAt(cp, a);
+      var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance (today's money)
+      var cNom = coastContribAt(cp, a);
+      var c = cNom / Math.pow(1 + infl, a - cp.currentAge);  // constant-nominal contribution in real terms
       var prevProj = running, nextProj = (running + c) * (1 + g);
       rows.push({ age: a, projected: prevProj, required: required,
                   surplus: prevProj - required, contribution: c,
@@ -1217,6 +1223,7 @@
     for (i = 0; i < c.rows.length; i++) cMap[c.rows[i].age] = c.rows[i];
     var bLast = b.rows.length ? b.rows[b.rows.length - 1] : { age: bp.currentAge, balance: bp.currentBalance || 0 };
     var cLast = c.rows.length ? c.rows[c.rows.length - 1] : { age: cp.currentAge, projected: cp.currentPension || 0 };
+    var bG = (1 + bp.growth) / (1 + (bp.inflation || 0)) - 1, cG = (1 + cp.growth) / (1 + (cp.inflation || 0)) - 1;
     var startAge = Math.min(bp.currentAge, cp.currentAge);
     var endAge = Math.max(cp.retirementAge || cp.pensionAccessAge, bp.pensionAccessAge);
     var series = [];
@@ -1224,11 +1231,11 @@
       var acc, accIn = 0, accG = 0;
       if (bMap[a]) { acc = bMap[a].balance; accIn = bMap[a].contribution || 0; accG = bMap[a].growth || 0; }
       else if (a < bp.currentAge) { acc = 0; }
-      else { acc = bLast.balance * Math.pow(1 + bp.growth, a - bLast.age); accG = acc - acc / (1 + bp.growth); }
+      else { acc = bLast.balance * Math.pow(1 + bG, a - bLast.age); accG = acc - acc / (1 + bG); }
       var pen, penIn = 0, penG = 0;
       if (cMap[a]) { pen = cMap[a].projected; penIn = cMap[a].contribution || 0; penG = cMap[a].growth || 0; }
       else if (a < cp.currentAge) { pen = 0; }
-      else { pen = cLast.projected * Math.pow(1 + cp.growth, a - cLast.age); penG = pen - pen / (1 + cp.growth); }
+      else { pen = cLast.projected * Math.pow(1 + cG, a - cLast.age); penG = pen - pen / (1 + cG); }
       series.push({ age: a, pension: pen, accessible: acc, netWorth: pen + acc,
                     pensionIn: penIn, accessibleIn: accIn, pensionGrowth: penG, accessibleGrowth: accG,
                     contributions: penIn + accIn });

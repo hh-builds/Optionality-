@@ -229,8 +229,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="optimistic" label="Optimistic" color={C.isa} res={opt} toggleable={true} />
       </div>
       <div className={'bp-basis '+(realTerms?'real':'nom')}>{realTerms
-        ? <span><b>Today’s money.</b> All figures are adjusted for inflation and shown in today’s purchasing power — the way you enter them. This is the simplest view.</span>
-        : <span><b>Nominal (future £).</b> Figures are shown in future pounds and are <b>not</b> adjusted for inflation — same buying power, bigger numbers. You still enter amounts in today’s money.</span>}</div>
+        ? <span><b>Today’s money (real).</b> Every figure is deflated by inflation into today’s purchasing power. Your return is nominal, so higher inflation means less real growth — raising inflation makes these figures worse.</span>
+        : <span><b>Nominal (future £).</b> The actual pounds of each future year, projected at your nominal return. Not adjusted for inflation, so they look bigger than their real worth.</span>}</div>
 
       {/* result tiles */}
       <div className="bp-results">
@@ -274,10 +274,11 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Current ISA / GIA</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
         <div className="bp-fld"><label>Target income / yr (today’s money)</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Expected return (real, after inflation)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
+        <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
+        <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is a <b>real</b> (after-inflation) return, so the crossover age is the same in today’s money or nominal — the Nominal view only re-inflates the figures. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
+      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is your <b>nominal</b> return; the engine nets off inflation to get the real return that drives the projection, so raising inflation pushes the crossover age <b>later</b>. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
 
       {/* 4) CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -348,7 +349,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:sc.color}}></span>{sc.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(sc.key,{enabled:!scEnabled[sc.key]})}>{scEnabled[sc.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
-            <div className="bp-fld"><label>Expected return (real)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+            <div className="bp-fld"><label>Expected return (nominal)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
               onChange={v=> isBase ? setBp({growth:(v||0)/100}) : updScen(sc.key,{growth:(v||0)/100})} /></div>
             <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+((s.withdrawalRate||0)*100).toFixed(2)} step="0.1"
               onChange={v=> isBase ? setBp({withdrawalRate:(v||0)/100}) : updScen(sc.key,{withdrawalRate:(v||0)/100})} /></div>
@@ -375,7 +376,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               <tr key={i} className={rowClass(r)+(r.age===base.crossAge?' bp-cross-row':'')}>
                 <td>{r.age}</td>
                 <td>{m(r.balance, r.age)}</td>
-                <td>{r.contribution?gbpC(r.contribution):'—'}</td>
+                <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
                 <td className="bp-growth">{r.growth!=null?(r.growth>=0?'+':'−')+m(Math.abs(r.growth), r.age):'—'}</td>
                 <td>{m(r.target, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
@@ -466,8 +467,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="optimistic" label="Optimistic" color={C.isa} res={opt} toggleable={true} />
       </div>
       <div className={'bp-basis '+(realTerms?'real':'nom')}>{realTerms
-        ? <span><b>Today’s money.</b> All figures are adjusted for inflation and shown in today’s purchasing power — the way you enter them. This is the simplest view.</span>
-        : <span><b>Nominal (future £).</b> Figures are shown in future pounds and are <b>not</b> adjusted for inflation — same buying power, bigger numbers. You still enter amounts in today’s money.</span>}</div>
+        ? <span><b>Today’s money (real).</b> Every figure is deflated by inflation into today’s purchasing power. Your return is nominal, so higher inflation means less real growth — raising inflation makes these figures worse.</span>
+        : <span><b>Nominal (future £).</b> The actual pounds of each future year, projected at your nominal return. Not adjusted for inflation, so they look bigger than their real worth.</span>}</div>
 
       <div className="bp-worked"><b>Worked example:</b> {gbpC(base.potAtObj)} in today’s money is about {gbpC(base.potAtObj*Math.pow(1+cp.inflation, Math.max(0,base.objAge-cp.currentAge)))} in future pounds by age {base.objAge} (at {(cp.inflation*100).toFixed(1)}% inflation over {Math.max(0,base.objAge-cp.currentAge)} years) — same pot, the toggle just relabels the units.</div>
 
@@ -531,8 +532,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} onChange={v=>setCp({currentAge:Math.round(v)})} /></div>
         <div className="bp-fld"><label>Current pension</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
-        <div className="bp-fld"><label>Expected return (real, after inflation)</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Inflation (Nominal view only)</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
+        <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /></div>
+        <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Retirement age (objective)</label><BpNum value={cp.retirementAge} onChange={v=>setCp({retirementAge:Math.round(v)})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={cp.pensionAccessAge} onChange={v=>setCp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
@@ -611,7 +612,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
                 <td>{m(r.projected, r.age)}</td>
                 <td>{m(r.required, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
-                <td>{r.contribution?gbpC(r.contribution):'—'}</td>
+                <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
                 <td className="bp-growth">{r.growth!=null?(r.growth>=0?'+':'−')+m(Math.abs(r.growth), r.age):'—'}</td>
                 <td><span className={'bp-status '+st[0]}>{st[1]}</span></td>
               </tr>
@@ -634,7 +635,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:scn.color}}></span>{scn.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(scn.key,{enabled:!scEnabled[scn.key]})}>{scEnabled[scn.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
-            <div className="bp-fld"><label>Expected return (real)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+            <div className="bp-fld"><label>Expected return (nominal)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
               onChange={v=> isBase ? setCp({growth:(v||0)/100}) : updScen(scn.key,{growth:(v||0)/100})} /></div>
             <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(((s.withdrawalRate!=null?s.withdrawalRate:cp.withdrawalRate))*100).toFixed(2)} step="0.1"
               onChange={v=> isBase ? setCp({withdrawalRate:(v||0)/100}) : updScen(scn.key,{withdrawalRate:(v||0)/100})} /></div>
@@ -734,7 +735,7 @@ function App() {
   const cwData = combined.series.map(function(r){
     var nf = realTerms ? 1 : Math.pow(1 + combined.infl, r.age - combined.startAge);
     return { age:r.age, pension:r.pension*nf, accessible:r.accessible*nf, netWorth:r.netWorth*nf,
-             pensionIn:r.pensionIn, accessibleIn:r.accessibleIn };
+             pensionIn:r.pensionIn*nf, accessibleIn:r.accessibleIn*nf };
   });
 
   const result = useMemo(() => Engine.compute(inputs), [inputs]);
@@ -986,8 +987,8 @@ function App() {
                 return (
                 <tr key={i}>
                   <td>{r.age}</td>
-                  <td>{mv(r.pension)}</td><td>{r.pensionIn?gbpC(r.pensionIn):'\u2014'}</td><td>{mv(r.pensionGrowth)}</td><td>{mv(r.pension+r.pensionIn+r.pensionGrowth)}</td>
-                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?gbpC(r.accessibleIn):'\u2014'}</td><td>{mv(r.accessibleGrowth)}</td><td>{mv(r.accessible+r.accessibleIn+r.accessibleGrowth)}</td>
+                  <td>{mv(r.pension)}</td><td>{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td>{mv(r.pensionGrowth)}</td><td>{mv(r.pension+r.pensionIn+r.pensionGrowth)}</td>
+                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td>{mv(r.accessibleGrowth)}</td><td>{mv(r.accessible+r.accessibleIn+r.accessibleGrowth)}</td>
                   <td><b>{mv(r.netWorth)}</b></td>
                 </tr>);
               })}

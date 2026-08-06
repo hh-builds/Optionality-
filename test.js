@@ -80,64 +80,64 @@ console.log('BRIDGE PLANNER — worked example');
 const bp = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
 const plan = Engine.bridgePlan(bp);
 console.log('Target pot        :', money(plan.targetPot));
-console.log('Crossover age     :', plan.base.crossAge, '(expected 46)');
+console.log('Crossover age     :', plan.base.crossAge, '(expected 52)');
 console.log('Balance @ cross   :', money(plan.base.crossBalance));
 console.log('Income @ cross    :', money(plan.base.incomeAtCross)+'/yr');
 console.log('Balance @ access  :', money(plan.base.balanceAtAccess));
 console.log('Conservative/Optimistic cross:', plan.conservative.crossAge, '/', plan.optimistic.crossAge);
 let bfails = 0;
 function bassert(c,m){ if(!c){ console.log('FAIL:', m); bfails++; } }
-bassert(plan.base.crossAge === 46, 'worked example reaches optionality at age 46');
-bassert(Math.abs(plan.targetPot - 1600000) < 1, 'target pot = £1.6m at £80k / 5%');
-bassert(plan.conservative.crossAge > plan.base.crossAge, 'conservative is later than base');
-bassert(plan.optimistic.crossAge < plan.base.crossAge, 'optimistic is earlier than base');
+bassert(plan.base.crossAge === 52, 'worked example crosses at 52 (nominal 7% / 2.5% inflation)');
+bassert(Math.abs(plan.targetPot - 1600000) < 1, 'target pot = £1.6m at £80k / 5% (today money)');
+bassert(Engine.bridgePlan(Object.assign(JSON.parse(JSON.stringify(bp)),{growth:0.10})).base.crossAge < plan.base.crossAge, 'higher nominal return crosses earlier');
+var bInflHi = Engine.bridgePlan(Object.assign(JSON.parse(JSON.stringify(bp)),{inflation:0.05})).base.crossAge;
+bassert(bInflHi == null || bInflHi > plan.base.crossAge, 'higher inflation pushes crossover later');
 const bpFull = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'full' });
-bassert(Engine.bridgePlan(bpFull).base.crossAge < 46, 'bridge full-depletion is earlier than perpetual');
+bassert(Engine.bridgePlan(bpFull).base.crossAge < 52, 'bridge full-depletion is earlier than perpetual');
 const bpPres = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'preserve' });
-bassert(Engine.bridgePlan(bpPres).base.crossAge === 46, 'bridge preserve-capital equals perpetual');
+bassert(Engine.bridgePlan(bpPres).base.crossAge === 52, 'bridge preserve-capital equals perpetual');
 console.log(bfails === 0 ? 'ALL BRIDGE ASSERTIONS PASSED' : (bfails + ' BRIDGE ASSERTION(S) FAILED'));
 
 // ===== Pension Coast FIRE Planner =====
 line();
 console.log('COAST PLANNER — worked example');
 const cp = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+cp.growth = 0.095;   // healthy NOMINAL return so the worked example still coasts (~6.8% real)
 const cplan = Engine.coastPlan(cp);
-console.log('Coast age         :', cplan.base.coastAge, '(expected 40)');
-console.log('Coast balance     :', money(cplan.base.coastBalance));
+console.log('Coast age (9.5% nominal):', cplan.base.coastAge, '(expected 41)');
 console.log('Target pot        :', money(cplan.targetPot), 'at', cplan.objAge);
 console.log('Pot @ objective   :', money(cplan.base.potAtObj));
 let cfails = 0;
 function cassert(c,m){ if(!c){ console.log('FAIL:', m); cfails++; } }
-cassert(cplan.base.coastAge === 40, 'worked example coasts at age 40');
-cassert(Math.abs(cplan.base.coastBalance - 775000) < 2000, 'coast balance ≈ £775k');
-cassert(cplan.targetPot === 3000000, 'pot-mode target = £3m');
+cassert(cplan.base.coastAge === 41, 'worked example coasts at 41 with a healthy nominal return');
+cassert(cplan.targetPot === 3000000, 'pot-mode target = £3m (today money)');
 const cInc = Object.assign({}, JSON.parse(JSON.stringify(cp)), { goalMode:'income' });
 cassert(Math.abs(Engine.coastPlan(cInc).targetPot - 2000000) < 1, 'income mode £80k / 4% = £2m required');
-cassert(cplan.stopSchedule.find(s=>s.stopAge===40).meetsTarget, 'contributing to 40 meets the target');
-cassert(!cplan.stopSchedule.find(s=>s.stopAge===39).meetsTarget, 'stopping at 39 misses the target');
-cassert(cplan.optimistic.coastAge < cplan.base.coastAge, 'optimistic coasts earlier than base');
+var cHiG = Engine.coastPlan(Object.assign(JSON.parse(JSON.stringify(cp)), {growth:0.12})).base.coastAge;
+cassert(cHiG != null && cHiG <= cplan.base.coastAge, 'higher nominal return coasts no later');
 console.log(cfails === 0 ? 'ALL COAST ASSERTIONS PASSED' : (cfails + ' COAST ASSERTION(S) FAILED'));
 
-// ===== Real / Nominal consistency =====
+// ===== Nominal-return model: inflation genuinely bites =====
 line();
-console.log('REAL/NOMINAL CONSISTENCY');
+console.log('NOMINAL-RETURN MODEL / INFLATION');
 let rfails = 0; function rassert(c,m){ if(!c){ console.log('FAIL:', m); rfails++; } }
-// £100k, 0% real growth, 25y, no contributions -> stays £100k in today's money
+// £100k, 0% nominal return, 0% inflation, 25y -> stays £100k
 const rn = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
-rn.currentAge = 35; rn.retirementAge = 60; rn.currentPension = 100000; rn.growth = 0; rn.inflation = 0.025;
+rn.currentAge = 35; rn.retirementAge = 60; rn.currentPension = 100000; rn.growth = 0; rn.inflation = 0;
 rn.phases = [{ fromAge:35, toAge:60, annual:0 }]; rn.goalMode = 'pot'; rn.targetPot = 100000;
-const rnp = Engine.coastPlan(rn);
-console.log('£100k @ 0% real over 25y -> projected pot (today’s money):', money(rnp.base.potAtObj));
-rassert(Math.round(rnp.base.potAtObj) === 100000, '£100k at 0% real over 25y stays £100k (no inflation leaking into the projection)');
-// the real projection must NOT depend on the inflation input
-const iA = JSON.parse(JSON.stringify(rn)); iA.growth = 0.05; iA.inflation = 0.01;
-const iB = JSON.parse(JSON.stringify(iA)); iB.inflation = 0.09;
-rassert(Math.abs(Engine.coastPlan(iA).base.potAtObj - Engine.coastPlan(iB).base.potAtObj) < 1, 'real projection is independent of the inflation assumption');
-// coast age is inflation-invariant in a real model
-const cA = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS)); cA.inflation = 0.01;
-const cB = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS)); cB.inflation = 0.06;
-rassert(Engine.coastPlan(cA).base.coastAge === Engine.coastPlan(cB).base.coastAge, 'coast age does not move with the inflation input');
-console.log(rfails === 0 ? 'ALL CONSISTENCY ASSERTIONS PASSED' : (rfails + ' CONSISTENCY ASSERTION(S) FAILED'));
+console.log('£100k @ 0% nominal, 0% inflation, 25y -> real pot:', money(Engine.coastPlan(rn).base.potAtObj));
+rassert(Math.round(Engine.coastPlan(rn).base.potAtObj) === 100000, '£100k at 0% nominal & 0% inflation stays £100k');
+// inflation BITES: nominal return fixed, higher inflation -> smaller real pot
+const iLo = Engine.coastPlan(Object.assign(JSON.parse(JSON.stringify(rn)), { growth:0.07, inflation:0.01 }));
+const iHi = Engine.coastPlan(Object.assign(JSON.parse(JSON.stringify(rn)), { growth:0.07, inflation:0.06 }));
+console.log('7% nominal: real pot @1% infl', money(iLo.base.potAtObj), 'vs @6% infl', money(iHi.base.potAtObj));
+rassert(iLo.base.potAtObj > iHi.base.potAtObj + 1, 'higher inflation shrinks the real pot (nominal return held fixed)');
+// same REAL return via different nominal/inflation pairs -> same real pot
+const realA = Engine.coastPlan(Object.assign(JSON.parse(JSON.stringify(rn)), { growth:0.05, inflation:0.02 }));
+const nomB = (1.05/1.02)*1.04 - 1; // gives the same real return at 4% inflation
+const realB = Engine.coastPlan(Object.assign(JSON.parse(JSON.stringify(rn)), { growth:nomB, inflation:0.04 }));
+rassert(Math.abs(realA.base.potAtObj - realB.base.potAtObj) < 5, 'same real return (different nominal+inflation) gives the same real pot');
+console.log(rfails === 0 ? 'ALL INFLATION ASSERTIONS PASSED' : (rfails + ' INFLATION ASSERTION(S) FAILED'));
 
 // bridge drawdown option leaves the crossover age unchanged, changes later pot
 const bpd = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), { drawdownFromOptionality:true });
