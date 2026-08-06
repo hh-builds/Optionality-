@@ -73,3 +73,53 @@ const noEarn = JSON.parse(JSON.stringify(inp));
 noEarn.cashEvents = [];
 const ne = Engine.compute(noEarn);
 console.log('No earn-out optionality age       :', ne.optionalityAge);
+
+// ===== ISA/GIA Bridge Planner =====
+line();
+console.log('BRIDGE PLANNER — worked example');
+const bp = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
+const plan = Engine.bridgePlan(bp);
+console.log('Target pot        :', money(plan.targetPot));
+console.log('Crossover age     :', plan.base.crossAge, '(expected 46)');
+console.log('Balance @ cross   :', money(plan.base.crossBalance));
+console.log('Income @ cross    :', money(plan.base.incomeAtCross)+'/yr');
+console.log('Balance @ access  :', money(plan.base.balanceAtAccess));
+console.log('Conservative/Optimistic cross:', plan.conservative.crossAge, '/', plan.optimistic.crossAge);
+let bfails = 0;
+function bassert(c,m){ if(!c){ console.log('FAIL:', m); bfails++; } }
+bassert(plan.base.crossAge === 46, 'worked example reaches optionality at age 46');
+bassert(Math.abs(plan.targetPot - 1600000) < 1, 'target pot = £1.6m at £80k / 5%');
+bassert(plan.conservative.crossAge > plan.base.crossAge, 'conservative is later than base');
+bassert(plan.optimistic.crossAge < plan.base.crossAge, 'optimistic is earlier than base');
+const bpFull = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'full' });
+bassert(Engine.bridgePlan(bpFull).base.crossAge < 46, 'bridge full-depletion is earlier than perpetual');
+const bpPres = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'preserve' });
+bassert(Engine.bridgePlan(bpPres).base.crossAge === 46, 'bridge preserve-capital equals perpetual');
+console.log(bfails === 0 ? 'ALL BRIDGE ASSERTIONS PASSED' : (bfails + ' BRIDGE ASSERTION(S) FAILED'));
+
+// ===== Pension Coast FIRE Planner =====
+line();
+console.log('COAST PLANNER — worked example');
+const cp = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+const cplan = Engine.coastPlan(cp);
+console.log('Coast age         :', cplan.base.coastAge, '(expected 40)');
+console.log('Coast balance     :', money(cplan.base.coastBalance));
+console.log('Target pot        :', money(cplan.targetPot), 'at', cplan.objAge);
+console.log('Pot @ objective   :', money(cplan.base.potAtObj));
+let cfails = 0;
+function cassert(c,m){ if(!c){ console.log('FAIL:', m); cfails++; } }
+cassert(cplan.base.coastAge === 40, 'worked example coasts at age 40');
+cassert(Math.abs(cplan.base.coastBalance - 775000) < 2000, 'coast balance ≈ £775k');
+cassert(cplan.targetPot === 3000000, 'pot-mode target = £3m');
+const cInc = Object.assign({}, JSON.parse(JSON.stringify(cp)), { goalMode:'income' });
+cassert(Math.abs(Engine.coastPlan(cInc).targetPot - 2000000) < 1, 'income mode £80k / 4% = £2m required');
+cassert(cplan.stopSchedule.find(s=>s.stopAge===40).meetsTarget, 'contributing to 40 meets the target');
+cassert(!cplan.stopSchedule.find(s=>s.stopAge===39).meetsTarget, 'stopping at 39 misses the target');
+cassert(cplan.optimistic.coastAge < cplan.base.coastAge, 'optimistic coasts earlier than base');
+console.log(cfails === 0 ? 'ALL COAST ASSERTIONS PASSED' : (cfails + ' COAST ASSERTION(S) FAILED'));
+
+// bridge drawdown option leaves the crossover age unchanged, changes later pot
+const bpd = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), { drawdownFromOptionality:true });
+const bBase = Engine.bridgePlan(JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))).base;
+const bDraw = Engine.bridgePlan(bpd).base;
+console.log('Bridge drawdown: crossover', bDraw.crossAge, '(unchanged '+ (bDraw.crossAge===bBase.crossAge) +') · balance@access', money(bDraw.balanceAtAccess), 'vs', money(bBase.balanceAtAccess), 'without');

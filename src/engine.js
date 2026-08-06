@@ -883,8 +883,326 @@
     return m;
   }
 
+  // =====================================================================
+  //  ISA / GIA BRIDGE PLANNER  ("Accessible Wealth")
+  //  Independent module answering: at what age does my accessible (ISA/GIA)
+  //  wealth first reach the portfolio needed to support my target income —
+  //  i.e. full optionality before pension access?
+  //
+  //  All amounts are REAL (today's money) and `growth` is a REAL
+  //  (after-inflation) return, so the crossover AGE is inflation-invariant.
+  //  The UI's nominal view simply re-inflates every figure by (1+infl)^t,
+  //  which scales the balance and the target equally and never moves the
+  //  crossover — the correct behaviour for a real target.
+  //
+  //  Convention (documented in the UI):
+  //   • Contributions come only from the phases, which STACK (are summed). A
+  //     one-off — e.g. a lump sum — is just a single-year phase.
+  //   • Contributions are ANNUAL (a Monthly option compounds 1/12 monthly),
+  //     deployed during the year with growth applied AFTER, so a contribution
+  //     appears — grown — in the next age's balance. These are the assumptions
+  //     behind the worked example.
+  // =====================================================================
+  var BRIDGE_DEFAULTS = {
+    currentAge: 35,
+    currentBalance: 122000,        // current ISA/GIA
+    targetIncome: 80000,           // target annual withdrawal (today's money)
+    withdrawalRate: 0.05,          // safe withdrawal rate → sizes the target pot
+    growth: 0.07,                  // real investment growth (Base scenario)
+    pensionAccessAge: 60,          // bridge end age / pension access age
+    inflation: 0.025,              // used only for the nominal display
+    // Contribution phases: each applies for fromAge..toAge inclusive and phases
+    // STACK (are summed), so a one-off — e.g. a £400k lump at 36 — is just a
+    // single-year phase (from 36 to 36) layered on top of the recurring saving.
+    phases: [
+      { fromAge: 35, toAge: 36, annual: 20000 },
+      { fromAge: 36, toAge: 36, annual: 400000 },   // one-off lump sum at 36
+      { fromAge: 37, toAge: 45, annual: 40000 },
+      { fromAge: 46, toAge: 60, annual: 0 }
+    ],
+    frequency: 'annual',           // 'annual' | 'monthly'
+    // bridge framing
+    mode: 'perpetual',             // 'perpetual' | 'bridge'
+    bridgeDepletion: 'full',       // 'preserve' | 'partial' | 'full' (bridge mode only)
+    partialRemainPct: 0.5,         // remaining capital at access (partial mode)
+    // secondary view: draw the target income from optionality age onward
+    drawdownFromOptionality: false,
+    // scenarios — Base is the top-level growth/withdrawalRate; the other two
+    // carry their own assumptions and can be toggled on/off on the chart.
+    scenarios: {
+      conservative: { growth: 0.05, withdrawalRate: 0.04, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.09, withdrawalRate: 0.06, contribScale: 1, enabled: false }
+    }
+  };
+
+  // Phases STACK: the contribution at an age is the SUM of every phase whose
+  // range covers it. This lets a one-off (a single-year phase) sit on top of a
+  // recurring phase without editing the recurring amount.
+  function bridgeContribAt(bp, age) {
+    var ph = bp.phases || [], total = 0;
+    for (var i = 0; i < ph.length; i++) {
+      if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
+    }
+    return total;
+  }
+
+  // Target portfolio at a given age. Perpetual: a constant pot = income / rate.
+  // Bridge: the pot needed AT THIS AGE to fund the target income each year until
+  // pension access, leaving a chosen remaining balance — so it falls as access
+  // nears (fewer years left to self-fund), and the crossover comes earlier.
+  function bridgeTargetAt(bp, sc, age, perpetualPot) {
+    if (bp.mode !== 'bridge') return perpetualPot;
+    if (bp.bridgeDepletion === 'preserve') return perpetualPot; // never touch capital
+    var dr = sc.growth;                       // real drawdown return
+    var N = bp.pensionAccessAge - age;        // years of bridge left
+    var desiredRemain = bp.bridgeDepletion === 'full' ? 0
+      : perpetualPot * (bp.partialRemainPct != null ? bp.partialRemainPct : 0.5);
+    if (N <= 0) return desiredRemain;
+    var income = bp.targetIncome;
+    var pv;
+    if (Math.abs(dr) < 1e-9) pv = income * N;
+    else pv = income * (1 - Math.pow(1 + dr, -N)) / dr * (1 + dr); // annuity-due
+    return pv + desiredRemain / Math.pow(1 + dr, N);
+  }
+
+  // Project one scenario year by year and locate the optionality crossover.
+  function bridgeProject(bp, sc) {
+    var curAge = bp.currentAge;
+    var endAge = Math.max(bp.pensionAccessAge, curAge + 1);
+    var g = sc.growth;
+    var wr = sc.withdrawalRate;
+    var scale = sc.contribScale != null ? sc.contribScale : 1;
+    var perpetualPot = wr > 0 ? bp.targetIncome / wr : Infinity;
+    var monthly = bp.frequency === 'monthly';
+
+    // Optional secondary view: once optionality is reached, stop contributing
+    // and start drawing the target income, to show how withdrawals shape the
+    // pot in the years after optionality (up to pension access).
+    var drawdown = !!bp.drawdownFromOptionality;
+    var crossedInline = false;
+
+    var rows = [];
+    var running = bp.currentBalance;
+    for (var a = curAge; a <= endAge; a++) {
+      var target = bridgeTargetAt(bp, sc, a, perpetualPot);
+      if (!crossedInline && isFinite(target) && running >= target) crossedInline = true;
+      var drawing = drawdown && crossedInline;
+      var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn
+      rows.push({ age: a, balance: running, target: target,
+                  surplus: running - target, income: running * wr,
+                  withdraw: wdraw, drawing: drawing });
+      var c = drawing ? 0 : bridgeContribAt(bp, a) * scale;    // stop saving once optional
+      if (monthly) {
+        var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, wm = wdraw / 12, r = running;
+        for (var mo = 0; mo < 12; mo++) r = (r + cm - wm) * (1 + mg);
+        running = Math.max(0, r);
+      } else {
+        running = Math.max(0, (running + c - wdraw) * (1 + g)); // net cashflow, then grow
+      }
+    }
+
+    // crossover: first age at which the projected balance meets the target
+    var crossAge = null, crossBalance = null, crossTarget = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (isFinite(rows[i].target) && rows[i].balance >= rows[i].target) {
+        crossAge = rows[i].age; crossBalance = rows[i].balance; crossTarget = rows[i].target; break;
+      }
+    }
+    var accessRow = null;
+    for (var j = 0; j < rows.length; j++) if (rows[j].age === bp.pensionAccessAge) { accessRow = rows[j]; break; }
+    if (!accessRow && rows.length) accessRow = rows[rows.length - 1];
+
+    return {
+      rows: rows,
+      perpetualPot: perpetualPot,
+      reached: crossAge !== null,
+      crossAge: crossAge,
+      crossBalance: crossBalance,
+      crossTarget: crossTarget,
+      yearsUntil: crossAge !== null ? crossAge - curAge : null,
+      incomeAtCross: crossBalance !== null ? crossBalance * wr : null,
+      surplusAtCross: crossBalance !== null ? crossBalance - crossTarget : null,
+      balanceAtAccess: accessRow ? accessRow.balance : null,
+      targetAtAccess: accessRow ? accessRow.target : perpetualPot,
+      incomeAtAccess: accessRow ? accessRow.balance * wr : null
+    };
+  }
+
+  // Full bridge plan: Base (top-level assumptions) + the two side scenarios.
+  function bridgePlan(bp) {
+    var base = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
+    var sc = bp.scenarios || {};
+    var cons = sc.conservative || BRIDGE_DEFAULTS.scenarios.conservative;
+    var opt = sc.optimistic || BRIDGE_DEFAULTS.scenarios.optimistic;
+    return {
+      base: base,
+      conservative: bridgeProject(bp, cons),
+      optimistic: bridgeProject(bp, opt),
+      targetPot: bp.withdrawalRate > 0 ? bp.targetIncome / bp.withdrawalRate : Infinity
+    };
+  }
+
+  // =====================================================================
+  //  PENSION COAST FIRE PLANNER
+  //  Answers: when does my pension become self-sustaining — i.e. at what age
+  //  can I stop (or cut) contributions and still hit my retirement objective?
+  //
+  //  The "required coast balance" at an age is the pension you'd need THEN to
+  //  reach the target pot by the objective age with ZERO further contributions:
+  //      required(age) = targetPot / (1 + g)^(objAge − age)
+  //  It rises to `targetPot` at objAge. The projected pension (with your
+  //  contributions) also rises; where the two meet is the COAST point.
+  //  Same real-terms convention as the Bridge Planner (growth is real, so the
+  //  coast age is inflation-invariant; the nominal view only re-inflates).
+  // =====================================================================
+  var COAST_DEFAULTS = {
+    currentAge: 35,
+    currentPension: 232000,
+    // contribution phases stack (are summed); a one-off is a single-year phase
+    phases: [
+      { fromAge: 35, toAge: 36, annual: 90000 },
+      { fromAge: 37, toAge: 40, annual: 60000 },
+      { fromAge: 41, toAge: 60, annual: 20000 }
+    ],
+    growth: 0.07,                  // real investment return (Base)
+    inflation: 0.025,              // nominal display only
+    pensionAccessAge: 57,          // when the pension can be accessed
+    retirementAge: 60,             // objective age — when you want the target pot
+    goalMode: 'pot',               // 'pot' | 'income'
+    targetPot: 3000000,            // target pension value (pot mode)
+    targetIncome: 80000,           // desired annual income (income mode)
+    withdrawalRate: 0.04,          // income ÷ rate = required pot (income mode)
+    impactLevels: [20000, 40000, 60000],   // contribution-impact comparison
+    scenarios: {
+      conservative: { growth: 0.05, withdrawalRate: 0.035, retirementAge: 62, enabled: false },
+      optimistic:   { growth: 0.09, withdrawalRate: 0.045, retirementAge: 58, enabled: false }
+    }
+  };
+
+  function coastContribAt(cp, age) {
+    var ph = cp.phases || [], total = 0;
+    for (var i = 0; i < ph.length; i++) {
+      if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
+    }
+    return total;
+  }
+  function coastObjAge(cp, sc) {
+    var ra = (sc && sc.retirementAge != null) ? sc.retirementAge
+      : (cp.retirementAge != null ? cp.retirementAge : cp.pensionAccessAge);
+    return Math.max(cp.currentAge + 1, ra);
+  }
+  function coastTargetPot(cp, sc) {
+    var wr = (sc && sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
+    return cp.goalMode === 'income' ? (wr > 0 ? cp.targetIncome / wr : Infinity) : cp.targetPot;
+  }
+  // Pension at the objective age if contributions cease at `stopAge`.
+  function coastFinalIfStop(cp, sc, stopAge) {
+    var g = sc.growth, objAge = coastObjAge(cp, sc), running = cp.currentPension;
+    for (var a = cp.currentAge; a < objAge; a++) {
+      var c = (a < stopAge) ? coastContribAt(cp, a) : 0;
+      running = (running + c) * (1 + g);
+    }
+    return running;
+  }
+
+  function coastProject(cp, sc) {
+    var g = sc.growth;
+    var objAge = coastObjAge(cp, sc);
+    var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
+    var targetPot = coastTargetPot(cp, sc);
+
+    var rows = [], running = cp.currentPension;
+    for (var a = cp.currentAge; a <= objAge; a++) {
+      var yrsLeft = objAge - a;
+      var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance at this age
+      rows.push({ age: a, projected: running, required: required,
+                  surplus: running - required, contribution: coastContribAt(cp, a),
+                  income: running * wr });
+      var c = coastContribAt(cp, a);
+      running = (running + c) * (1 + g);
+    }
+
+    // coast crossover: first age where projected ≥ required coast balance
+    var coastAge = null, coastBalance = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].projected >= rows[i].required) { coastAge = rows[i].age; coastBalance = rows[i].required; break; }
+    }
+    var finalProjected = rows.length ? (function () {
+      // pension at objAge WITH all contributions (roll the last row forward)
+      var last = rows[rows.length - 1]; return (last.projected + last.contribution) * (1 + g);
+    })() : running;
+    // objAge row projected is the value entering objAge; final pot at objAge:
+    var potAtObj = rows.length ? rows[rows.length - 1].projected : running;
+
+    var requiredNow = rows.length ? rows[0].required : targetPot;
+    var yearsToObj = objAge - cp.currentAge;
+    var meetsTarget = potAtObj >= targetPot - 1;
+
+    return {
+      rows: rows,
+      objAge: objAge,
+      targetPot: targetPot,
+      withdrawalRate: wr,
+      coastAge: coastAge,
+      coasting: coastAge !== null && coastAge <= cp.currentAge,
+      reached: coastAge !== null,
+      coastBalance: coastBalance,
+      yearsUntilCoast: coastAge !== null ? Math.max(0, coastAge - cp.currentAge) : null,
+      shortfallNow: Math.max(0, requiredNow - cp.currentPension),
+      potAtObj: potAtObj,
+      incomeAtObj: potAtObj * wr,
+      meetsTarget: meetsTarget,
+      requiredNow: requiredNow
+    };
+  }
+
+  // "If I stopped contributing at age X…" — pension at objAge for each stop age.
+  function coastStopSchedule(cp, sc) {
+    var objAge = coastObjAge(cp, sc), targetPot = coastTargetPot(cp, sc), out = [];
+    for (var a = cp.currentAge; a <= objAge; a++) {
+      var fin = coastFinalIfStop(cp, sc, a);
+      out.push({ stopAge: a, finalPension: fin, meetsTarget: fin >= targetPot - 1,
+                 yearsContributing: a - cp.currentAge });
+    }
+    return out;
+  }
+
+  // Compare flat annual contribution levels: coast age, final pot, income.
+  function coastContributionImpact(cp, sc) {
+    var levels = cp.impactLevels || [20000, 40000, 60000];
+    return levels.map(function (lvl) {
+      var x = JSON.parse(JSON.stringify(cp));
+      x.phases = [{ fromAge: cp.currentAge, toAge: coastObjAge(cp, sc), annual: lvl }];
+      var r = coastProject(x, sc);
+      return { level: lvl, coastAge: r.coastAge, finalPension: r.potAtObj, income: r.incomeAtObj };
+    });
+  }
+
+  function coastPlan(cp) {
+    var baseSc = { growth: cp.growth, withdrawalRate: cp.withdrawalRate, retirementAge: cp.retirementAge };
+    var sc = cp.scenarios || {};
+    var cons = Object.assign({}, COAST_DEFAULTS.scenarios.conservative, sc.conservative);
+    var opt = Object.assign({}, COAST_DEFAULTS.scenarios.optimistic, sc.optimistic);
+    var base = coastProject(cp, baseSc);
+    return {
+      base: base,
+      conservative: coastProject(cp, cons),
+      optimistic: coastProject(cp, opt),
+      stopSchedule: coastStopSchedule(cp, baseSc),
+      contributionImpact: coastContributionImpact(cp, baseSc),
+      targetPot: base.targetPot,
+      objAge: base.objAge
+    };
+  }
+
   var Engine = {
     DEFAULTS: DEFAULTS,
+    BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
+    bridgePlan: bridgePlan,
+    bridgeProject: bridgeProject,
+    COAST_DEFAULTS: COAST_DEFAULTS,
+    coastPlan: coastPlan,
+    coastProject: coastProject,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,
     sustainableOptionalityAge: sustainableOptionalityAge,
