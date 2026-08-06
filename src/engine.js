@@ -939,6 +939,10 @@
   // range covers it. This lets a one-off (a single-year phase) sit on top of a
   // recurring phase without editing the recurring amount.
   function bridgeContribAt(bp, age) {
+    // Phases are INCLUSIVE (From..To covers both ends) and STACK: the amount at an
+    // age is the sum of every phase covering it. Overlaps add together on purpose
+    // (a one-off lump is just a single-year phase); the per-row totals and the
+    // year-by-year table make the combined figure visible.
     var ph = bp.phases || [], total = 0;
     for (var i = 0; i < ph.length; i++) {
       if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
@@ -988,17 +992,20 @@
       if (!crossedInline && isFinite(target) && running >= target) crossedInline = true;
       var drawing = drawdown && crossedInline;
       var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn
-      rows.push({ age: a, balance: running, target: target,
-                  surplus: running - target, income: running * wr,
-                  withdraw: wdraw, drawing: drawing });
       var c = drawing ? 0 : bridgeContribAt(bp, a) * scale;    // stop saving once optional
+      var prevBal = running, nextBal;
       if (monthly) {
         var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, wm = wdraw / 12, r = running;
         for (var mo = 0; mo < 12; mo++) r = (r + cm - wm) * (1 + mg);
-        running = Math.max(0, r);
+        nextBal = Math.max(0, r);
       } else {
-        running = Math.max(0, (running + c - wdraw) * (1 + g)); // net cashflow, then grow
+        nextBal = Math.max(0, (running + c - wdraw) * (1 + g)); // net cashflow, then grow
       }
+      rows.push({ age: a, balance: prevBal, target: target,
+                  surplus: prevBal - target, income: prevBal * wr,
+                  contribution: c, growth: nextBal - prevBal - c + wdraw, // market growth this year
+                  withdraw: wdraw, drawing: drawing });
+      running = nextBal;
     }
 
     // crossover: first age at which the projected balance meets the target
@@ -1080,6 +1087,10 @@
   };
 
   function coastContribAt(cp, age) {
+    // Phases are INCLUSIVE (From..To covers both ends) and STACK: the amount at an
+    // age is the sum of every phase covering it. Overlaps add together on purpose
+    // (a one-off lump is a single-year phase); per-row totals and the year-by-year
+    // table make the combined figure visible.
     var ph = cp.phases || [], total = 0;
     for (var i = 0; i < ph.length; i++) {
       if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
@@ -1115,11 +1126,12 @@
     for (var a = cp.currentAge; a <= objAge; a++) {
       var yrsLeft = objAge - a;
       var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance at this age
-      rows.push({ age: a, projected: running, required: required,
-                  surplus: running - required, contribution: coastContribAt(cp, a),
-                  income: running * wr });
       var c = coastContribAt(cp, a);
-      running = (running + c) * (1 + g);
+      var prevProj = running, nextProj = (running + c) * (1 + g);
+      rows.push({ age: a, projected: prevProj, required: required,
+                  surplus: prevProj - required, contribution: c,
+                  growth: nextProj - prevProj - c, income: prevProj * wr }); // growth = market gain this year
+      running = nextProj;
     }
 
     // coast crossover: first age where projected ≥ required coast balance

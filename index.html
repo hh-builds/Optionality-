@@ -555,6 +555,19 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   body{background:#fff} .acc{break-inside:avoid} .panel,.card,.hero{box-shadow:none;border:1px solid #ddd}
   .wrap{max-width:100%}
 }
+
+/* --- collapsible planner sections --- */
+details.bp-collapse{margin:0}
+summary.bp-summary{cursor:pointer;list-style:none}
+summary.bp-summary::-webkit-details-marker{display:none}
+summary.bp-summary::before{content:"▸";flex:0 0 auto;margin-right:4px;font-size:10px;color:var(--muted);transition:transform .15s ease}
+details.bp-collapse[open]>summary.bp-summary::before{transform:rotate(90deg)}
+summary.bp-summary:hover{color:var(--text)}
+/* --- per-phase year/total readout --- */
+.bp-phase-sum{font-size:11.5px;color:var(--muted);margin:-2px 0 4px 2px;line-height:1.45}
+.bp-phase-sum b{color:var(--text);font-weight:600}
+/* --- market-growth column --- */
+td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -1502,6 +1515,10 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   // range covers it. This lets a one-off (a single-year phase) sit on top of a
   // recurring phase without editing the recurring amount.
   function bridgeContribAt(bp, age) {
+    // Phases are INCLUSIVE (From..To covers both ends) and STACK: the amount at an
+    // age is the sum of every phase covering it. Overlaps add together on purpose
+    // (a one-off lump is just a single-year phase); the per-row totals and the
+    // year-by-year table make the combined figure visible.
     var ph = bp.phases || [], total = 0;
     for (var i = 0; i < ph.length; i++) {
       if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
@@ -1551,17 +1568,20 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
       if (!crossedInline && isFinite(target) && running >= target) crossedInline = true;
       var drawing = drawdown && crossedInline;
       var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn
-      rows.push({ age: a, balance: running, target: target,
-                  surplus: running - target, income: running * wr,
-                  withdraw: wdraw, drawing: drawing });
       var c = drawing ? 0 : bridgeContribAt(bp, a) * scale;    // stop saving once optional
+      var prevBal = running, nextBal;
       if (monthly) {
         var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, wm = wdraw / 12, r = running;
         for (var mo = 0; mo < 12; mo++) r = (r + cm - wm) * (1 + mg);
-        running = Math.max(0, r);
+        nextBal = Math.max(0, r);
       } else {
-        running = Math.max(0, (running + c - wdraw) * (1 + g)); // net cashflow, then grow
+        nextBal = Math.max(0, (running + c - wdraw) * (1 + g)); // net cashflow, then grow
       }
+      rows.push({ age: a, balance: prevBal, target: target,
+                  surplus: prevBal - target, income: prevBal * wr,
+                  contribution: c, growth: nextBal - prevBal - c + wdraw, // market growth this year
+                  withdraw: wdraw, drawing: drawing });
+      running = nextBal;
     }
 
     // crossover: first age at which the projected balance meets the target
@@ -1643,6 +1663,10 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   };
 
   function coastContribAt(cp, age) {
+    // Phases are INCLUSIVE (From..To covers both ends) and STACK: the amount at an
+    // age is the sum of every phase covering it. Overlaps add together on purpose
+    // (a one-off lump is a single-year phase); per-row totals and the year-by-year
+    // table make the combined figure visible.
     var ph = cp.phases || [], total = 0;
     for (var i = 0; i < ph.length; i++) {
       if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
@@ -1678,11 +1702,12 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
     for (var a = cp.currentAge; a <= objAge; a++) {
       var yrsLeft = objAge - a;
       var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance at this age
-      rows.push({ age: a, projected: running, required: required,
-                  surplus: running - required, contribution: coastContribAt(cp, a),
-                  income: running * wr });
       var c = coastContribAt(cp, a);
-      running = (running + c) * (1 + g);
+      var prevProj = running, nextProj = (running + c) * (1 + g);
+      rows.push({ age: a, projected: prevProj, required: required,
+                  surplus: prevProj - required, contribution: c,
+                  growth: nextProj - prevProj - c, income: prevProj * wr }); // growth = market gain this year
+      running = nextProj;
     }
 
     // coast crossover: first age where projected ≥ required coast balance
@@ -2067,20 +2092,26 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-sub">Contribution phases</div>
       <div className="bp-phases">
         <div className="bp-phase-head"><span>From age</span><span>To age</span><span>Annual contribution</span><span></span></div>
-        {bp.phases.map((p,i)=>(
-          <div className="bp-phase" key={i}>
+        {bp.phases.map((p,i)=>{
+          const yrs = (p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
+          return (
+          <React.Fragment key={i}>
+          <div className="bp-phase">
             <BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} />
             <BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} />
             <BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} />
             <button className="icon-btn" onClick={()=>delPhase(i)} disabled={bp.phases.length<=1} title="Remove phase">✕</button>
           </div>
-        ))}
+          <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
+          </React.Fragment>
+          );
+        })}
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
-      <div className="bp-note">Each phase applies for its age range (inclusive) and phases <b>stack</b> (are summed). A one-off — like the <b>£400k lump at 36</b> — is just a single-year phase (from 36 to 36) layered on the recurring saving. Contributions are annual and deployed during the year; growth is applied after. A £0 phase stops contributions (e.g. once you’ve reached optionality).</div>
+      <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years (ages 35 and 36). Phases <b>stack</b>: if two ranges cover the same age, their amounts add there — so a one-off like a <b>£400k lump at 36</b> is just a single-year phase (36 to 36) on top of recurring saving. The year-by-year table shows the combined amount at each age. Contributions are in today’s money and shown as entered (not inflated). A £0 phase stops contributions.</div>
 
       {/* 6) ADVANCED — bridge framing, frequency, scenarios */}
-      <div className="bp-sub">Advanced · bridge framing &amp; scenarios</div>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · bridge framing &amp; scenarios</summary>
       <div className="bp-toggles">
         <div className="bp-tgroup"><span className="tl">Model</span>
           <div className="bp-seg">
@@ -2137,13 +2168,14 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           );
         })}
       </div>
+      </details>
 
       {/* 5) YEAR-BY-YEAR TABLE */}
-      <div className="bp-sub">Year-by-year · age {bp.currentAge}–{bp.pensionAccessAge}</div>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {bp.currentAge}–{bp.pensionAccessAge}</summary>
       <div className="tablewrap">
         <table>
           <thead><tr>
-            <th>Age</th><th>Projected ISA/GIA</th><th>Target balance</th><th>Surplus / shortfall</th><th>Supported income</th><th>Status</th>
+            <th>Age</th><th>Projected ISA/GIA</th><th>Contribution</th><th>Market growth</th><th>Target balance</th><th>Surplus / shortfall</th><th>Supported income</th><th>Status</th>
           </tr></thead>
           <tbody>
             {base.rows.map((r,i)=>{
@@ -2152,6 +2184,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               <tr key={i} className={rowClass(r)+(r.age===base.crossAge?' bp-cross-row':'')}>
                 <td>{r.age}</td>
                 <td>{m(r.balance, r.age)}</td>
+                <td>{r.contribution?gbpC(r.contribution):'—'}</td>
+                <td className="bp-growth">{r.growth!=null?(r.growth>=0?'+':'−')+m(Math.abs(r.growth), r.age):'—'}</td>
                 <td>{m(r.target, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
                 <td>{m(r.income, r.age)}/yr</td>
@@ -2163,13 +2197,14 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </table>
       </div>
       <div className="bp-note">Red below target · amber within 10% · green once the target is reached. Figures in {realTerms?'today’s money':'future £ (nominal)'}. This is a planning model, not financial advice.</div>
+      </details>
     </div>
   );
 }
 
 /* =============================================================
-   PENSION COAST FIRE PLANNER
-   "Have I reached Pension Coast FIRE?" — when does the pension
+   PENSION COAST PLANNER
+   "Have I reached Pension Coast?" — when does the pension
    become self-sustaining (reaches the retirement objective with
    zero further contributions)? Reuses the .bridge-planner / bp-*
    styling. Real-terms model; nominal view only re-inflates.
@@ -2216,8 +2251,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
     <div className="bridge-planner">
       <div className="bp-topline">
         <div>
-          <div className="bp-q">Pension Coast FIRE · self-sustaining pension</div>
-          <div className="bp-title"><span className="bp-star">⭐</span> Have I reached Pension Coast FIRE?</div>
+          <div className="bp-q">Pension Coast · self-sustaining pension</div>
+          <div className="bp-title"><span className="bp-star">⭐</span> Have I reached Pension Coast?</div>
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
@@ -2276,7 +2311,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       </div>
 
       {base.coasting && <div className="cmp-rec" style={{marginTop:12}}>
-        <b>You’ve reached Pension Coast FIRE.</b> Your pension is projected to meet your retirement objective without further contributions. Additional pension contributions may raise retirement income, but likely add less <i>flexibility</i> than investing into accessible assets (your ISA/GIA Bridge Fund), which can fund the years before pension access. Not advice — just noting the optimisation problem has changed.</div>}
+        <b>You’ve reached Pension Coast.</b> Your pension is projected to meet your retirement objective without further contributions. Additional pension contributions may raise retirement income, but likely add less <i>flexibility</i> than investing into accessible assets (your ISA/GIA Bridge Fund), which can fund the years before pension access. Not advice — just noting the optimisation problem has changed.</div>}
 
       {/* 3) OBJECTIVE + KEY ASSUMPTIONS */}
       <div className="bp-sub">Objective</div>
@@ -2311,19 +2346,26 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-sub">Contribution phases</div>
       <div className="bp-phases">
         <div className="bp-phase-head"><span>From age</span><span>To age</span><span>Annual contribution</span><span></span></div>
-        {cp.phases.map((p,i)=>(
-          <div className="bp-phase" key={i}>
+        {cp.phases.map((p,i)=>{
+          const yrs = (p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
+          return (
+          <React.Fragment key={i}>
+          <div className="bp-phase">
             <BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} />
             <BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} />
             <BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} />
             <button className="icon-btn" onClick={()=>delPhase(i)} disabled={cp.phases.length<=1} title="Remove phase">✕</button>
           </div>
-        ))}
+          <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
+          </React.Fragment>
+          );
+        })}
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
+      <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years. Phases <b>stack</b>: overlapping ranges add at the shared age (the year-by-year table shows the combined amount). Contributions are shown as entered — not inflation-adjusted.</div>
 
       {/* OPTIONALITY — stop-each-year */}
-      <div className="bp-sub">How many more years must I contribute?</div>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">How many more years must I contribute?</summary>
       <div className="bp-chart">
         <div className="bp-note" style={{marginTop:0,marginBottom:8}}>Each point: your pension at age {base.objAge} <b>if you stopped contributing at that age</b>. Where it meets the target is the last year you need to keep paying in — <b>{base.reached ? (base.yearsUntilCoast===0?'you can stop now':'about '+base.yearsUntilCoast+' more year'+(base.yearsUntilCoast===1?'':'s')) : 'not reached on these assumptions'}</b>.</div>
         {ResponsiveContainer ? (
@@ -2341,7 +2383,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       </div>
 
       {/* CONTRIBUTION IMPACT */}
-      <div className="bp-sub">Does another £20k move the needle?</div>
+      </details>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Does another £20k move the needle?</summary>
       <div className="tablewrap">
         <table>
           <thead><tr><th>Flat annual contribution</th><th>Coast age</th><th>Pension @ {base.objAge}</th><th>Retirement income</th></tr></thead>
@@ -2360,10 +2403,11 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-note">Flat contribution from now to age {base.objAge}, replacing your phases, so you can see the marginal effect of saving more. Income = pot × withdrawal rate.</div>
 
       {/* YEAR-BY-YEAR */}
-      <div className="bp-sub">Year-by-year · age {cp.currentAge}–{base.objAge}</div>
+      </details>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.objAge}</summary>
       <div className="tablewrap">
         <table>
-          <thead><tr><th>Age</th><th>Projected pension</th><th>Coast balance required</th><th>Surplus / shortfall</th><th>Annual contribution</th><th>Status</th></tr></thead>
+          <thead><tr><th>Age</th><th>Projected pension</th><th>Coast balance required</th><th>Surplus / shortfall</th><th>Annual contribution</th><th>Market growth</th><th>Status</th></tr></thead>
           <tbody>
             {base.rows.map((r,i)=>{ const st = rowStat(r); return (
               <tr key={i} className={rowClass(r)+(r.age===base.coastAge?' bp-cross-row':'')}>
@@ -2371,7 +2415,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
                 <td>{m(r.projected, r.age)}</td>
                 <td>{m(r.required, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
-                <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
+                <td>{r.contribution?gbpC(r.contribution):'—'}</td>
+                <td className="bp-growth">{r.growth!=null?(r.growth>=0?'+':'−')+m(Math.abs(r.growth), r.age):'—'}</td>
                 <td><span className={'bp-status '+st[0]}>{st[1]}</span></td>
               </tr>
             ); })}
@@ -2380,7 +2425,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       </div>
 
       {/* ADVANCED — scenarios */}
-      <div className="bp-sub">Advanced · scenarios</div>
+      </details>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · scenarios</summary>
       <div className="bp-scenarios">
         {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(scn=>{
           const isBase = scn.key==='base';
@@ -2404,6 +2450,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         })}
       </div>
       <div className="bp-note">Red below the coast line · amber within 10% · green once self-sustaining. Figures in {realTerms?'today’s money':'future £ (nominal)'}. This is a planning model, not financial advice.</div>
+      </details>
     </div>
   );
 }
@@ -2475,7 +2522,7 @@ function App() {
   const setBp = (patch) => setBridgeInputs(prev => Object.assign({}, prev, patch));
   const bridge = useMemo(() => Engine.bridgePlan(bridgeInputs), [bridgeInputs]);
 
-  // Pension Coast FIRE Planner — independent inputs, seeded from its worked example
+  // Pension Coast Planner — independent inputs, seeded from its worked example
   const [coastInputs, setCoastInputs] = useState(() => {
     let c = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
     try { const s = localStorage.getItem('optionality.coast');
@@ -2660,75 +2707,11 @@ function App() {
       <div className="layout">
       <main className="main">
 
-      {/* HERO — when can I go optional · when can I stop paying into pension · how solid */}
-      <div className="hero">
-        <div className="hero-main">
-          <div className="lbl">🎯 Freedom Age {result.overridden && <span className="manual-tag">manual</span>}</div>
-          <div className="big tnum">{heroAge != null ? ageStr(heroAge) : 'Not yet'}
-            {heroAge != null && <span className="yrs"> years</span>}</div>
-          <div className="sub">{
-            result.overridden
-              ? (result.planSurvives
-                  ? 'Your chosen stop age — funds your lifestyle to age '+inputs.lifeExpectancy+'. Earliest possible is '+ageStr(result.optionalityAge)+'.'
-                  : (result.failPhase==='bridge'
-                      ? '⚠ Can’t bridge to pension access at this age — accessible savings run dry near age '+(result.failAge!=null?Math.floor(result.failAge):'—')+' (pension locked until '+inputs.pensionAccessAge+'). Earliest workable age is '+(result.achievable?ageStr(result.optionalityAge):'later')+'.'
-                      : '⚠ Stopping this early runs out of money near age '+(result.failAge!=null?Math.floor(result.failAge):inputs.lifeExpectancy)+'. Earliest sustainable age is '+(result.achievable?ageStr(result.optionalityAge):'later than shown')+'.'))
-              : (result.achievable
-                  ? 'The earliest age you can stop for good and keep your lifestyle to age '+inputs.lifeExpectancy+'. Assumes all employment income and new savings stop at that age.'
-                  : 'On current assumptions the plan never fully funds age '+inputs.lifeExpectancy+'. Adjust savings, spending or returns below.')
-          }</div>
-          {wdWarn && <div className={'wd-guard '+(wd.status==='high'?'wd-high':'wd-watch')}>
-            <span className="wd-ic">{wd.status==='high'?'⚠':'⚡'}</span>
-            <span><b>Withdrawal-rate check:</b> {wdMsg}</span>
-            {wd.sustainableAge!=null && wd.sustainableAge>result.effectiveStop+0.1 &&
-              <button className="wd-btn" onClick={()=>set({plannedStopAge: Math.round(wd.sustainableAge*10)/10})}
-                title="Pin your plan to the age that stays within the sustainable rate">Use {ageStr(wd.sustainableAge)}</button>}
-          </div>}
-          <div className="hero-plan">
-            <span className="hp-lbl">Plan to stop at</span>
-            <NumInput className="inline-num" style={{width:76,padding:'5px 8px',fontSize:15,textAlign:'center'}} min={0} step="0.1"
-              value={result.effectiveStop} ariaLabel="Planned stop age" onChange={v => set({ plannedStopAge: v })} />
-            <button className="btn primary" onClick={()=>set({ plannedStopAge: null })} title="Snap to the earliest achievable age">⚡ Optimise</button>
-            <span className="hp-dot">·</span>
-            <span className="hp-lbl">Target</span>
-            <NumInput className="inline-num" style={{width:56,padding:'5px 7px',fontSize:14,textAlign:'center'}} min={0}
-              value={inputs.targetOptionalityAge} ariaLabel="Target age" onChange={v => set({ targetOptionalityAge: v })} />
-            {result.achievable && inputs.targetOptionalityAge ?
-              (result.yearsEarlyLate >= 0
-                ? <b className="hp-ok">{monthsStr(result.yearsEarlyLate*12)} early</b>
-                : <b className="hp-bad">{monthsStr(result.yearsEarlyLate*12)} late</b>) : null}
-          </div>
-        </div>
-        <div className="hero-stats">
-          <div className="hstat">
-            <div className="hs-k">Pension status {result.pension.buffer>0 && <span className="hs-badge">+{Math.round(result.pension.buffer*100)}% margin</span>}
-              <button className="why-btn" onClick={()=>setShowWhy(!showWhy)}>Why?</button></div>
-            <span className={'pill '+(pensionStatus.cls==='g'?'good':pensionStatus.cls==='a'?'med':'low')} style={{margin:'3px 0'}}><span className="ic"></span>{pensionStatus.label}</span>
-            <div className="hs-s">{gAcc(result.pension.atAccess)} projected vs {gAcc(result.pension.required)} target. See the Pension Coast FIRE tool above for when it becomes self-funding.</div>
-            {showWhy && <div className="why-box">
-              <div className="why-row"><span>Current pension</span><b>{gbpC(result.pension.current)}</b></div>
-              <div className="why-row"><span>Net return (after fee)</span><b>{(result.pension.netReturn*100).toFixed(1)}%</b></div>
-              <div className="why-row"><span>Years to access ({inputs.pensionAccessAge})</span><b>{Math.round(result.pension.yearsToAccess)}</b></div>
-              <div className="why-row"><span>Target pot at access</span><b>{gbpC(result.pension.rawRequired)}</b></div>
-              <div className="why-row"><span>+ {Math.round(result.pension.buffer*100)}% safety margin</span><b>{gbpC(result.pension.required)}</b></div>
-              <div className="why-row"><span>State Pension</span><b>{inputs.statePensionIncluded?gbpC(inputs.statePensionAmount)+'/yr from '+inputs.statePensionAge:'excluded'}</b></div>
-              <div className="why-row"><span>Retirement spend · withdrawal</span><b>{gbpC(inputs.retirementSpending)}/yr · {(inputs.withdrawalRate*100).toFixed(1)}%</b></div>
-            </div>}
-          </div>
-          <div className="hstat">
-            <div className="hs-k">Plan resilience</div>
-            <span className={'pill '+conf[0]} title={confidenceWhy}><span className="ic"></span>{conf[1]}</span>
-            <div className="hs-s">{buffer && result.planSurvives
-              ? 'Deterministic sensitivity, not a probability: your Freedom Age slips by a year if returns run '+(buffer.returnHeadroom*100).toFixed(1)+'% lower or spending is '+gbpC(buffer.spendHeadroom)+'/yr higher.'
-              : confidenceWhy}</div>
-          </div>
-        </div>
-      </div>
 
       {/* ===== THE TWO HEADLINE OPTIONALITY TOOLS ===== */}
-      <div className="section-title">Accessible wealth · when work becomes optional</div>
+      <div className="section-title">When can I walk away from work?</div>
       <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
-      <div className="section-title">Pension Coast FIRE · when the pension self-funds</div>
+      <div className="section-title">When can my pension look after itself?</div>
       <CoastPlanner cp={coastInputs} setCp={setCp} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
       {/* ===== YOUR PLAN — the personal-CFO narrative ===== */}
