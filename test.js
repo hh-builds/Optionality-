@@ -118,6 +118,27 @@ cassert(!cplan.stopSchedule.find(s=>s.stopAge===39).meetsTarget, 'stopping at 39
 cassert(cplan.optimistic.coastAge < cplan.base.coastAge, 'optimistic coasts earlier than base');
 console.log(cfails === 0 ? 'ALL COAST ASSERTIONS PASSED' : (cfails + ' COAST ASSERTION(S) FAILED'));
 
+// ===== Real / Nominal consistency =====
+line();
+console.log('REAL/NOMINAL CONSISTENCY');
+let rfails = 0; function rassert(c,m){ if(!c){ console.log('FAIL:', m); rfails++; } }
+// £100k, 0% real growth, 25y, no contributions -> stays £100k in today's money
+const rn = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+rn.currentAge = 35; rn.retirementAge = 60; rn.currentPension = 100000; rn.growth = 0; rn.inflation = 0.025;
+rn.phases = [{ fromAge:35, toAge:60, annual:0 }]; rn.goalMode = 'pot'; rn.targetPot = 100000;
+const rnp = Engine.coastPlan(rn);
+console.log('£100k @ 0% real over 25y -> projected pot (today’s money):', money(rnp.base.potAtObj));
+rassert(Math.round(rnp.base.potAtObj) === 100000, '£100k at 0% real over 25y stays £100k (no inflation leaking into the projection)');
+// the real projection must NOT depend on the inflation input
+const iA = JSON.parse(JSON.stringify(rn)); iA.growth = 0.05; iA.inflation = 0.01;
+const iB = JSON.parse(JSON.stringify(iA)); iB.inflation = 0.09;
+rassert(Math.abs(Engine.coastPlan(iA).base.potAtObj - Engine.coastPlan(iB).base.potAtObj) < 1, 'real projection is independent of the inflation assumption');
+// coast age is inflation-invariant in a real model
+const cA = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS)); cA.inflation = 0.01;
+const cB = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS)); cB.inflation = 0.06;
+rassert(Engine.coastPlan(cA).base.coastAge === Engine.coastPlan(cB).base.coastAge, 'coast age does not move with the inflation input');
+console.log(rfails === 0 ? 'ALL CONSISTENCY ASSERTIONS PASSED' : (rfails + ' CONSISTENCY ASSERTION(S) FAILED'));
+
 // bridge drawdown option leaves the crossover age unchanged, changes later pot
 const bpd = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), { drawdownFromOptionality:true });
 const bBase = Engine.bridgePlan(JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))).base;
