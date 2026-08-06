@@ -556,13 +556,17 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .wrap{max-width:100%}
 }
 
-/* --- collapsible planner sections --- */
-details.bp-collapse{margin:0}
-summary.bp-summary{cursor:pointer;list-style:none}
+/* --- collapsible planner sections (obvious expander bar) --- */
+details.bp-collapse{margin:10px 0;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);overflow:hidden}
+details.bp-collapse[open]{border-color:var(--baseline)}
+summary.bp-summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:9px;padding:11px 13px;margin:0;color:var(--text)}
 summary.bp-summary::-webkit-details-marker{display:none}
-summary.bp-summary::before{content:"▸";flex:0 0 auto;margin-right:4px;font-size:10px;color:var(--muted);transition:transform .15s ease}
+summary.bp-summary::before{content:"▸";flex:0 0 auto;font-size:12px;color:var(--accent);transition:transform .15s ease}
 details.bp-collapse[open]>summary.bp-summary::before{transform:rotate(90deg)}
-summary.bp-summary:hover{color:var(--text)}
+summary.bp-summary::after{content:"Show ›";flex:0 0 auto;margin-left:auto;background:none;height:auto;font-size:11px;text-transform:none;letter-spacing:0;font-weight:600;color:var(--accent);white-space:nowrap}
+details.bp-collapse[open]>summary.bp-summary::after{content:"Hide ‹"}
+summary.bp-summary:hover{background:var(--surface-1)}
+details.bp-collapse[open]>summary.bp-summary{border-bottom:1px solid var(--border)}
 /* --- per-phase year/total readout --- */
 .bp-phase-sum{font-size:11.5px;color:var(--muted);margin:-2px 0 4px 2px;line-height:1.45}
 .bp-phase-sum b{color:var(--text);font-weight:600}
