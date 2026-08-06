@@ -241,14 +241,14 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       {/* 2) GRAPH */}
       <div className="bp-chart">
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data} margin={{top:6,right:14,left:6,bottom:2}}>
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={48} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} />
+            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
             <Tooltip content={<ChartTip/>} />
             {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
-              label={{ value:'Optionality '+base.crossAge, position:'top', fill:C.good, fontSize:11, fontWeight:700 }} />}
+              label={{ value:'Optionality '+base.crossAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="target" name="Target portfolio" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -272,11 +272,9 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Target income / yr</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Growth (Base, real)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Lump sum</label><BpNum money value={bp.lumpSum} step={1000} onChange={v=>setBp({lumpSum:v})} /></div>
-        <div className="bp-fld"><label>Lump sum at age</label><BpNum value={bp.lumpSumAge} onChange={v=>setBp({lumpSumAge:Math.round(v)})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is a <b>real</b> (after-inflation) return, so the crossover age is the same in today’s money or nominal — the Nominal view only re-inflates the figures.</div>
+      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is a <b>real</b> (after-inflation) return, so the crossover age is the same in today’s money or nominal — the Nominal view only re-inflates the figures. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
 
       {/* 4) CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -292,7 +290,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         ))}
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
-      <div className="bp-note">Each phase applies for its age range (inclusive). Contributions are annual and deployed during the year; growth is applied after. A phase with £0 stops contributions (e.g. once you’ve reached optionality).</div>
+      <div className="bp-note">Each phase applies for its age range (inclusive) and phases <b>stack</b> (are summed). A one-off — like the <b>£400k lump at 36</b> — is just a single-year phase (from 36 to 36) layered on the recurring saving. Contributions are annual and deployed during the year; growth is applied after. A £0 phase stops contributions (e.g. once you’ve reached optionality).</div>
 
       {/* 6) ADVANCED — bridge framing, frequency, scenarios */}
       <div className="bp-sub">Advanced · bridge framing &amp; scenarios</div>
@@ -430,6 +428,12 @@ function App() {
       if (s) b = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), JSON.parse(s)); } catch(e){}
     if (!Array.isArray(b.phases) || !b.phases.length) b.phases = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.phases));
     if (!b.scenarios) b.scenarios = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.scenarios));
+    // migrate any previously-saved separate lump sum into a one-off phase
+    if (b.lumpSum > 0 && b.lumpSumAge != null) {
+      const exists = b.phases.some(p => p.fromAge === b.lumpSumAge && p.toAge === b.lumpSumAge && p.annual === b.lumpSum);
+      if (!exists) b.phases = b.phases.concat([{ fromAge: b.lumpSumAge, toAge: b.lumpSumAge, annual: b.lumpSum }]);
+    }
+    delete b.lumpSum; delete b.lumpSumAge;
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);

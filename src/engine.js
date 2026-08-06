@@ -896,25 +896,27 @@
   //  crossover — the correct behaviour for a real target.
   //
   //  Convention (documented in the UI):
-  //   • Contributions are ANNUAL (a Monthly option compounds 1/12 monthly).
-  //   • A one-off lump sum lands at the START of its age (shown in that age's
-  //     balance); each year's contribution is deployed during the year, so it
-  //     appears — grown — in the next age's balance. Growth is applied AFTER
-  //     contributions. These are the assumptions behind the worked example.
+  //   • Contributions come only from the phases, which STACK (are summed). A
+  //     one-off — e.g. a lump sum — is just a single-year phase.
+  //   • Contributions are ANNUAL (a Monthly option compounds 1/12 monthly),
+  //     deployed during the year with growth applied AFTER, so a contribution
+  //     appears — grown — in the next age's balance. These are the assumptions
+  //     behind the worked example.
   // =====================================================================
   var BRIDGE_DEFAULTS = {
     currentAge: 35,
     currentBalance: 122000,        // current ISA/GIA
-    lumpSum: 400000,               // one-off future lump sum
-    lumpSumAge: 36,                // age the lump sum is received
     targetIncome: 80000,           // target annual withdrawal (today's money)
     withdrawalRate: 0.05,          // safe withdrawal rate → sizes the target pot
     growth: 0.07,                  // real investment growth (Base scenario)
     pensionAccessAge: 60,          // bridge end age / pension access age
     inflation: 0.025,              // used only for the nominal display
-    // multi-phase contributions: each phase applies for fromAge..toAge inclusive
+    // Contribution phases: each applies for fromAge..toAge inclusive and phases
+    // STACK (are summed), so a one-off — e.g. a £400k lump at 36 — is just a
+    // single-year phase (from 36 to 36) layered on top of the recurring saving.
     phases: [
       { fromAge: 35, toAge: 36, annual: 20000 },
+      { fromAge: 36, toAge: 36, annual: 400000 },   // one-off lump sum at 36
       { fromAge: 37, toAge: 45, annual: 40000 },
       { fromAge: 46, toAge: 60, annual: 0 }
     ],
@@ -931,12 +933,15 @@
     }
   };
 
+  // Phases STACK: the contribution at an age is the SUM of every phase whose
+  // range covers it. This lets a one-off (a single-year phase) sit on top of a
+  // recurring phase without editing the recurring amount.
   function bridgeContribAt(bp, age) {
-    var ph = bp.phases || [];
+    var ph = bp.phases || [], total = 0;
     for (var i = 0; i < ph.length; i++) {
-      if (age >= ph[i].fromAge && age <= ph[i].toAge) return ph[i].annual || 0;
+      if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
     }
-    return 0;
+    return total;
   }
 
   // Target portfolio at a given age. Perpetual: a constant pot = income / rate.
@@ -971,7 +976,6 @@
     var rows = [];
     var running = bp.currentBalance;
     for (var a = curAge; a <= endAge; a++) {
-      if (a === bp.lumpSumAge) running += bp.lumpSum;          // lump lands at start of age
       var target = bridgeTargetAt(bp, sc, a, perpetualPot);
       rows.push({ age: a, balance: running, target: target,
                   surplus: running - target, income: running * wr });

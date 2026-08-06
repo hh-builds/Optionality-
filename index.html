@@ -1458,25 +1458,27 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   //  crossover — the correct behaviour for a real target.
   //
   //  Convention (documented in the UI):
-  //   • Contributions are ANNUAL (a Monthly option compounds 1/12 monthly).
-  //   • A one-off lump sum lands at the START of its age (shown in that age's
-  //     balance); each year's contribution is deployed during the year, so it
-  //     appears — grown — in the next age's balance. Growth is applied AFTER
-  //     contributions. These are the assumptions behind the worked example.
+  //   • Contributions come only from the phases, which STACK (are summed). A
+  //     one-off — e.g. a lump sum — is just a single-year phase.
+  //   • Contributions are ANNUAL (a Monthly option compounds 1/12 monthly),
+  //     deployed during the year with growth applied AFTER, so a contribution
+  //     appears — grown — in the next age's balance. These are the assumptions
+  //     behind the worked example.
   // =====================================================================
   var BRIDGE_DEFAULTS = {
     currentAge: 35,
     currentBalance: 122000,        // current ISA/GIA
-    lumpSum: 400000,               // one-off future lump sum
-    lumpSumAge: 36,                // age the lump sum is received
     targetIncome: 80000,           // target annual withdrawal (today's money)
     withdrawalRate: 0.05,          // safe withdrawal rate → sizes the target pot
     growth: 0.07,                  // real investment growth (Base scenario)
     pensionAccessAge: 60,          // bridge end age / pension access age
     inflation: 0.025,              // used only for the nominal display
-    // multi-phase contributions: each phase applies for fromAge..toAge inclusive
+    // Contribution phases: each applies for fromAge..toAge inclusive and phases
+    // STACK (are summed), so a one-off — e.g. a £400k lump at 36 — is just a
+    // single-year phase (from 36 to 36) layered on top of the recurring saving.
     phases: [
       { fromAge: 35, toAge: 36, annual: 20000 },
+      { fromAge: 36, toAge: 36, annual: 400000 },   // one-off lump sum at 36
       { fromAge: 37, toAge: 45, annual: 40000 },
       { fromAge: 46, toAge: 60, annual: 0 }
     ],
@@ -1493,12 +1495,15 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
     }
   };
 
+  // Phases STACK: the contribution at an age is the SUM of every phase whose
+  // range covers it. This lets a one-off (a single-year phase) sit on top of a
+  // recurring phase without editing the recurring amount.
   function bridgeContribAt(bp, age) {
-    var ph = bp.phases || [];
+    var ph = bp.phases || [], total = 0;
     for (var i = 0; i < ph.length; i++) {
-      if (age >= ph[i].fromAge && age <= ph[i].toAge) return ph[i].annual || 0;
+      if (age >= ph[i].fromAge && age <= ph[i].toAge) total += (ph[i].annual || 0);
     }
-    return 0;
+    return total;
   }
 
   // Target portfolio at a given age. Perpetual: a constant pot = income / rate.
@@ -1533,7 +1538,6 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
     var rows = [];
     var running = bp.currentBalance;
     for (var a = curAge; a <= endAge; a++) {
-      if (a === bp.lumpSumAge) running += bp.lumpSum;          // lump lands at start of age
       var target = bridgeTargetAt(bp, sc, a, perpetualPot);
       rows.push({ age: a, balance: running, target: target,
                   surplus: running - target, income: running * wr });
@@ -1855,14 +1859,14 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       {/* 2) GRAPH */}
       <div className="bp-chart">
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data} margin={{top:6,right:14,left:6,bottom:2}}>
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={48} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} />
+            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
             <Tooltip content={<ChartTip/>} />
             {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
-              label={{ value:'Optionality '+base.crossAge, position:'top', fill:C.good, fontSize:11, fontWeight:700 }} />}
+              label={{ value:'Optionality '+base.crossAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="target" name="Target portfolio" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -1886,11 +1890,9 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Target income / yr</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Growth (Base, real)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Lump sum</label><BpNum money value={bp.lumpSum} step={1000} onChange={v=>setBp({lumpSum:v})} /></div>
-        <div className="bp-fld"><label>Lump sum at age</label><BpNum value={bp.lumpSumAge} onChange={v=>setBp({lumpSumAge:Math.round(v)})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is a <b>real</b> (after-inflation) return, so the crossover age is the same in today’s money or nominal — the Nominal view only re-inflates the figures.</div>
+      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is a <b>real</b> (after-inflation) return, so the crossover age is the same in today’s money or nominal — the Nominal view only re-inflates the figures. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
 
       {/* 4) CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -1906,7 +1908,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         ))}
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
-      <div className="bp-note">Each phase applies for its age range (inclusive). Contributions are annual and deployed during the year; growth is applied after. A phase with £0 stops contributions (e.g. once you’ve reached optionality).</div>
+      <div className="bp-note">Each phase applies for its age range (inclusive) and phases <b>stack</b> (are summed). A one-off — like the <b>£400k lump at 36</b> — is just a single-year phase (from 36 to 36) layered on the recurring saving. Contributions are annual and deployed during the year; growth is applied after. A £0 phase stops contributions (e.g. once you’ve reached optionality).</div>
 
       {/* 6) ADVANCED — bridge framing, frequency, scenarios */}
       <div className="bp-sub">Advanced · bridge framing &amp; scenarios</div>
@@ -2044,6 +2046,12 @@ function App() {
       if (s) b = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), JSON.parse(s)); } catch(e){}
     if (!Array.isArray(b.phases) || !b.phases.length) b.phases = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.phases));
     if (!b.scenarios) b.scenarios = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.scenarios));
+    // migrate any previously-saved separate lump sum into a one-off phase
+    if (b.lumpSum > 0 && b.lumpSumAge != null) {
+      const exists = b.phases.some(p => p.fromAge === b.lumpSumAge && p.toAge === b.lumpSumAge && p.annual === b.lumpSum);
+      if (!exists) b.phases = b.phases.concat([{ fromAge: b.lumpSumAge, toAge: b.lumpSumAge, annual: b.lumpSum }]);
+    }
+    delete b.lumpSum; delete b.lumpSumAge;
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
