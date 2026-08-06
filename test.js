@@ -73,3 +73,26 @@ const noEarn = JSON.parse(JSON.stringify(inp));
 noEarn.cashEvents = [];
 const ne = Engine.compute(noEarn);
 console.log('No earn-out optionality age       :', ne.optionalityAge);
+
+// ===== ISA/GIA Bridge Planner =====
+line();
+console.log('BRIDGE PLANNER — worked example');
+const bp = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
+const plan = Engine.bridgePlan(bp);
+console.log('Target pot        :', money(plan.targetPot));
+console.log('Crossover age     :', plan.base.crossAge, '(expected 46)');
+console.log('Balance @ cross   :', money(plan.base.crossBalance));
+console.log('Income @ cross    :', money(plan.base.incomeAtCross)+'/yr');
+console.log('Balance @ access  :', money(plan.base.balanceAtAccess));
+console.log('Conservative/Optimistic cross:', plan.conservative.crossAge, '/', plan.optimistic.crossAge);
+let bfails = 0;
+function bassert(c,m){ if(!c){ console.log('FAIL:', m); bfails++; } }
+bassert(plan.base.crossAge === 46, 'worked example reaches optionality at age 46');
+bassert(Math.abs(plan.targetPot - 1600000) < 1, 'target pot = £1.6m at £80k / 5%');
+bassert(plan.conservative.crossAge > plan.base.crossAge, 'conservative is later than base');
+bassert(plan.optimistic.crossAge < plan.base.crossAge, 'optimistic is earlier than base');
+const bpFull = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'full' });
+bassert(Engine.bridgePlan(bpFull).base.crossAge < 46, 'bridge full-depletion is earlier than perpetual');
+const bpPres = Object.assign({}, JSON.parse(JSON.stringify(bp)), { mode:'bridge', bridgeDepletion:'preserve' });
+bassert(Engine.bridgePlan(bpPres).base.crossAge === 46, 'bridge preserve-capital equals perpetual');
+console.log(bfails === 0 ? 'ALL BRIDGE ASSERTIONS PASSED' : (bfails + ' BRIDGE ASSERTION(S) FAILED'));

@@ -883,8 +883,154 @@
     return m;
   }
 
+  // =====================================================================
+  //  ISA / GIA BRIDGE PLANNER  ("Accessible Wealth")
+  //  Independent module answering: at what age does my accessible (ISA/GIA)
+  //  wealth first reach the portfolio needed to support my target income —
+  //  i.e. full optionality before pension access?
+  //
+  //  All amounts are REAL (today's money) and `growth` is a REAL
+  //  (after-inflation) return, so the crossover AGE is inflation-invariant.
+  //  The UI's nominal view simply re-inflates every figure by (1+infl)^t,
+  //  which scales the balance and the target equally and never moves the
+  //  crossover — the correct behaviour for a real target.
+  //
+  //  Convention (documented in the UI):
+  //   • Contributions are ANNUAL (a Monthly option compounds 1/12 monthly).
+  //   • A one-off lump sum lands at the START of its age (shown in that age's
+  //     balance); each year's contribution is deployed during the year, so it
+  //     appears — grown — in the next age's balance. Growth is applied AFTER
+  //     contributions. These are the assumptions behind the worked example.
+  // =====================================================================
+  var BRIDGE_DEFAULTS = {
+    currentAge: 35,
+    currentBalance: 122000,        // current ISA/GIA
+    lumpSum: 400000,               // one-off future lump sum
+    lumpSumAge: 36,                // age the lump sum is received
+    targetIncome: 80000,           // target annual withdrawal (today's money)
+    withdrawalRate: 0.05,          // safe withdrawal rate → sizes the target pot
+    growth: 0.07,                  // real investment growth (Base scenario)
+    pensionAccessAge: 60,          // bridge end age / pension access age
+    inflation: 0.025,              // used only for the nominal display
+    // multi-phase contributions: each phase applies for fromAge..toAge inclusive
+    phases: [
+      { fromAge: 35, toAge: 36, annual: 20000 },
+      { fromAge: 37, toAge: 45, annual: 40000 },
+      { fromAge: 46, toAge: 60, annual: 0 }
+    ],
+    frequency: 'annual',           // 'annual' | 'monthly'
+    // bridge framing
+    mode: 'perpetual',             // 'perpetual' | 'bridge'
+    bridgeDepletion: 'full',       // 'preserve' | 'partial' | 'full' (bridge mode only)
+    partialRemainPct: 0.5,         // remaining capital at access (partial mode)
+    // scenarios — Base is the top-level growth/withdrawalRate; the other two
+    // carry their own assumptions and can be toggled on/off on the chart.
+    scenarios: {
+      conservative: { growth: 0.05, withdrawalRate: 0.04, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.09, withdrawalRate: 0.06, contribScale: 1, enabled: false }
+    }
+  };
+
+  function bridgeContribAt(bp, age) {
+    var ph = bp.phases || [];
+    for (var i = 0; i < ph.length; i++) {
+      if (age >= ph[i].fromAge && age <= ph[i].toAge) return ph[i].annual || 0;
+    }
+    return 0;
+  }
+
+  // Target portfolio at a given age. Perpetual: a constant pot = income / rate.
+  // Bridge: the pot needed AT THIS AGE to fund the target income each year until
+  // pension access, leaving a chosen remaining balance — so it falls as access
+  // nears (fewer years left to self-fund), and the crossover comes earlier.
+  function bridgeTargetAt(bp, sc, age, perpetualPot) {
+    if (bp.mode !== 'bridge') return perpetualPot;
+    if (bp.bridgeDepletion === 'preserve') return perpetualPot; // never touch capital
+    var dr = sc.growth;                       // real drawdown return
+    var N = bp.pensionAccessAge - age;        // years of bridge left
+    var desiredRemain = bp.bridgeDepletion === 'full' ? 0
+      : perpetualPot * (bp.partialRemainPct != null ? bp.partialRemainPct : 0.5);
+    if (N <= 0) return desiredRemain;
+    var income = bp.targetIncome;
+    var pv;
+    if (Math.abs(dr) < 1e-9) pv = income * N;
+    else pv = income * (1 - Math.pow(1 + dr, -N)) / dr * (1 + dr); // annuity-due
+    return pv + desiredRemain / Math.pow(1 + dr, N);
+  }
+
+  // Project one scenario year by year and locate the optionality crossover.
+  function bridgeProject(bp, sc) {
+    var curAge = bp.currentAge;
+    var endAge = Math.max(bp.pensionAccessAge, curAge + 1);
+    var g = sc.growth;
+    var wr = sc.withdrawalRate;
+    var scale = sc.contribScale != null ? sc.contribScale : 1;
+    var perpetualPot = wr > 0 ? bp.targetIncome / wr : Infinity;
+    var monthly = bp.frequency === 'monthly';
+
+    var rows = [];
+    var running = bp.currentBalance;
+    for (var a = curAge; a <= endAge; a++) {
+      if (a === bp.lumpSumAge) running += bp.lumpSum;          // lump lands at start of age
+      var target = bridgeTargetAt(bp, sc, a, perpetualPot);
+      rows.push({ age: a, balance: running, target: target,
+                  surplus: running - target, income: running * wr });
+      var c = bridgeContribAt(bp, a) * scale;                 // this year's contribution
+      if (monthly) {
+        var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, r = running;
+        for (var mo = 0; mo < 12; mo++) r = (r + cm) * (1 + mg);
+        running = r;
+      } else {
+        running = (running + c) * (1 + g);                     // grow AFTER contributing
+      }
+    }
+
+    // crossover: first age at which the projected balance meets the target
+    var crossAge = null, crossBalance = null, crossTarget = null;
+    for (var i = 0; i < rows.length; i++) {
+      if (isFinite(rows[i].target) && rows[i].balance >= rows[i].target) {
+        crossAge = rows[i].age; crossBalance = rows[i].balance; crossTarget = rows[i].target; break;
+      }
+    }
+    var accessRow = null;
+    for (var j = 0; j < rows.length; j++) if (rows[j].age === bp.pensionAccessAge) { accessRow = rows[j]; break; }
+    if (!accessRow && rows.length) accessRow = rows[rows.length - 1];
+
+    return {
+      rows: rows,
+      perpetualPot: perpetualPot,
+      reached: crossAge !== null,
+      crossAge: crossAge,
+      crossBalance: crossBalance,
+      crossTarget: crossTarget,
+      yearsUntil: crossAge !== null ? crossAge - curAge : null,
+      incomeAtCross: crossBalance !== null ? crossBalance * wr : null,
+      surplusAtCross: crossBalance !== null ? crossBalance - crossTarget : null,
+      balanceAtAccess: accessRow ? accessRow.balance : null,
+      targetAtAccess: accessRow ? accessRow.target : perpetualPot,
+      incomeAtAccess: accessRow ? accessRow.balance * wr : null
+    };
+  }
+
+  // Full bridge plan: Base (top-level assumptions) + the two side scenarios.
+  function bridgePlan(bp) {
+    var base = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
+    var sc = bp.scenarios || {};
+    var cons = sc.conservative || BRIDGE_DEFAULTS.scenarios.conservative;
+    var opt = sc.optimistic || BRIDGE_DEFAULTS.scenarios.optimistic;
+    return {
+      base: base,
+      conservative: bridgeProject(bp, cons),
+      optimistic: bridgeProject(bp, opt),
+      targetPot: bp.withdrawalRate > 0 ? bp.targetIncome / bp.withdrawalRate : Infinity
+    };
+  }
+
   var Engine = {
     DEFAULTS: DEFAULTS,
+    BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
+    bridgePlan: bridgePlan,
+    bridgeProject: bridgeProject,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,
     sustainableOptionalityAge: sustainableOptionalityAge,
