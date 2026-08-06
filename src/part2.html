@@ -228,6 +228,9 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="conservative" label="Conservative" color={C.gia} res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" color={C.isa} res={opt} toggleable={true} />
       </div>
+      <div className={'bp-basis '+(realTerms?'real':'nom')}>{realTerms
+        ? <span><b>You’re seeing “today’s money.”</b> Every figure is in today’s prices — the way you type your inputs. This is the simplest view.</span>
+        : <span><b>You’re seeing “Nominal” (future £).</b> Figures are grown by inflation to the year they happen, so they look bigger than today’s money even though the buying power is the same. You still enter amounts in today’s money. Switch to “Today’s money” (top of this card) for the simpler view.</span>}</div>
 
       {/* result tiles */}
       <div className="bp-results">
@@ -269,7 +272,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} onChange={v=>setBp({currentAge:Math.round(v)})} /></div>
         <div className="bp-fld"><label>Current ISA / GIA</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
-        <div className="bp-fld"><label>Target income / yr</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
+        <div className="bp-fld"><label>Target income / yr (today’s money)</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Growth (Base, real)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
@@ -454,7 +457,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-headline">
         <div className={'bp-big '+(base.reached?'reached':'missed')}>{base.coasting ? 'Coasting now' : base.reached ? 'Age '+base.coastAge : 'Not by '+base.objAge}</div>
         <div className="bp-cap">{base.reached
-          ? 'Pension becomes self-sustaining — at '+(base.coasting?'your current balance':('age '+base.coastAge))+' it reaches '+m(base.coastBalance, base.coastAge)+', enough to grow to your '+gbpC(plan.targetPot*bf(base.objAge))+' target by age '+base.objAge+' with no further contributions.'
+          ? 'Pension becomes self-sustaining — at '+(base.coasting?'your current balance':('age '+base.coastAge))+' it reaches '+m(base.coastBalance, base.coastAge)+', enough to grow to your '+gbpC(plan.targetPot*bf(base.objAge))+' target by age '+base.objAge+(realTerms?'':' (that’s your '+gbpC(plan.targetPot)+' target in today’s money, grown by inflation to age '+base.objAge+')')+', with no further contributions.'
           : 'On these assumptions your pension doesn’t reach the '+gbpC(plan.targetPot)+' target by age '+base.objAge+' even with your planned contributions. Increase contributions, growth, or push the retirement age.'}</div>
       </div>
       <div className="bp-scen-chips">
@@ -462,12 +465,15 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="conservative" label="Conservative" color={C.gia} res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" color={C.isa} res={opt} toggleable={true} />
       </div>
+      <div className={'bp-basis '+(realTerms?'real':'nom')}>{realTerms
+        ? <span><b>You’re seeing “today’s money.”</b> Every figure is in today’s prices — the way you type your inputs. This is the simplest view.</span>
+        : <span><b>You’re seeing “Nominal” (future £).</b> Figures are grown by inflation to the year they happen, so they look bigger than today’s money even though the buying power is the same. You still enter amounts in today’s money. Switch to “Today’s money” (top of this card) for the simpler view.</span>}</div>
 
       {/* status tiles */}
       <div className="bp-results">
         <div className="bp-tile"><div className="bt-k">Status</div><div className={'bt-v '+(base.reached?'pos':'neg')}>{statusText}</div></div>
         <div className="bp-tile"><div className="bt-k">Coast balance needed</div><div className="bt-v">{base.coastBalance!=null?m(base.coastBalance, base.coastAge):'—'}</div></div>
-        <div className="bp-tile"><div className="bt-k">Target pension @ {base.objAge}</div><div className="bt-v">{gbpC(plan.targetPot*bf(base.objAge))}</div></div>
+        <div className="bp-tile"><div className="bt-k">Target pension @ {base.objAge}{realTerms?'':' (future £)'}</div><div className="bt-v">{gbpC(plan.targetPot*bf(base.objAge))}</div>{!realTerms && <div className="bt-sub">= {gbpC(plan.targetPot)} in today’s money</div>}</div>
         <div className="bp-tile"><div className="bt-k">Projected pot @ {base.objAge}</div><div className="bt-v">{m(base.potAtObj, base.objAge)}</div></div>
         <div className="bp-tile"><div className="bt-k">More years to contribute</div><div className="bt-v">{base.reached?(base.yearsUntilCoast===0?'0 — done':base.yearsUntilCoast):'—'}</div></div>
       </div>
@@ -511,7 +517,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           </div>
         </div>
         {cp.goalMode==='pot'
-          ? <div className="bp-tgroup"><span className="tl">Target pension pot</span><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
+          ? <div className="bp-tgroup"><span className="tl">Target pension pot (today’s money)</span><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
           : <React.Fragment>
               <div className="bp-tgroup"><span className="tl">Desired income / yr</span><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /></div>
               <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(cp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setCp({withdrawalRate:(v||0)/100})} /></div>
