@@ -239,7 +239,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <ol>
           <li>The bridge fund only has to cover the years <b>between stopping work and pension access ({bp.pensionAccessAge})</b> — from {bp.pensionAccessAge} your pension can take over the income.</li>
           <li>The chart keeps drawing from your ISA/GIA <b>past {bp.pensionAccessAge}</b> to stress-test it alone, so it can show the accessible pot emptying later{base.depletionAge?<span> (age {base.depletionAge})</span>:''} — but in reality your pension covers you from {bp.pensionAccessAge}, so that "run-out" is just the bridge on its own.</li>
-          <li>Everything is in today's money: your <b>nominal return minus inflation</b> gives the real growth. A lower return or higher inflation shrinks the real pot and pushes these ages out.</li>
+          <li>These figures are <b>live from your inputs</b> — right now that's {(bp.growth*100).toFixed(1)}% nominal return − {((bp.inflation||0)*100).toFixed(1)}% inflation ≈ <b>{(((1+bp.growth)/(1+(bp.inflation||0))-1)*100).toFixed(1)}% real growth</b>. Change the return, inflation, contributions, target or ages above and every age, balance and the chart recompute instantly. The Today's money / Nominal toggle only relabels the units — it doesn't change the plan.</li>
         </ol>
       </details>
       <div className="bp-scen-chips">
@@ -503,7 +503,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <ol>
           <li><b>Coast</b> is the point where your existing pot, left to grow on its own, would still hit your target by age {base.objAge} — <b>with no further contributions</b>. It's not when you retire, it's when saving becomes optional.</li>
           <li>It lands early when your <b>real return is high</b> — a big pot compounding for {Math.max(0, base.objAge-cp.currentAge)} years does the heavy lifting, so even a modest balance today can coast.</li>
-          <li>From your target age ({base.objAge}) the pension is <b>drawn down</b> for income (less State Pension once it starts at {cp.statePensionAge}); a lower return or higher inflation moves the coast age later and the drawdown harder.</li>
+          <li>From your target age ({base.objAge}) the pension is <b>drawn down</b> for income (less State Pension once it starts at {cp.statePensionAge}). Everything here is <b>live from your inputs</b> — right now {(cp.growth*100).toFixed(1)}% − {((cp.inflation||0)*100).toFixed(1)}% ≈ {(((1+cp.growth)/(1+(cp.inflation||0))-1)*100).toFixed(1)}% real; change the return, inflation, contributions or target age above and the coast age, chart and drawdown recompute instantly.</li>
         </ol>
       </details>
       <div className="bp-scen-chips">
