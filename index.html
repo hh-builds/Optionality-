@@ -2599,6 +2599,8 @@ function App() {
       if (!exists) b.phases = b.phases.concat([{ fromAge: b.lumpSumAge, toAge: b.lumpSumAge, annual: b.lumpSum }]);
     }
     delete b.lumpSum; delete b.lumpSumAge;
+    // one-time migration: turn on the drawdown showcase for saved states that pre-date it
+    if (!b._bv || b._bv < 2) { b.drawdownFromOptionality = true; if (b.lifeExpectancy == null) b.lifeExpectancy = 90; b._bv = 2; }
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
@@ -2612,6 +2614,8 @@ function App() {
       if (s) c = Object.assign({}, JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS)), JSON.parse(s)); } catch(e){}
     if (!Array.isArray(c.phases) || !c.phases.length) c.phases = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.phases));
     if (!c.scenarios) c.scenarios = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.scenarios));
+    // one-time migration: seed the State Pension for saved states that pre-date it
+    if (!c._cv || c._cv < 2) { if (c.statePensionAmount == null) c.statePensionAmount = 11900; if (c.statePensionAge == null) c.statePensionAge = 67; c._cv = 2; }
     return c;
   });
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
