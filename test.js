@@ -77,7 +77,10 @@ console.log('No earn-out optionality age       :', ne.optionalityAge);
 // ===== ISA/GIA Bridge Planner =====
 line();
 console.log('BRIDGE PLANNER — worked example');
-const bp = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
+const bp = { currentAge:35, currentBalance:122000, targetIncome:80000, withdrawalRate:0.05, growth:0.07, pensionAccessAge:60, inflation:0.025,
+  phases:[{fromAge:35,toAge:36,annual:20000},{fromAge:36,toAge:36,annual:400000},{fromAge:37,toAge:45,annual:40000},{fromAge:46,toAge:60,annual:0}],
+  frequency:'annual', mode:'perpetual', bridgeDepletion:'full', partialRemainPct:0.5, drawdownFromOptionality:false,
+  scenarios:{ conservative:{growth:0.05,withdrawalRate:0.04,contribScale:1,enabled:false}, optimistic:{growth:0.09,withdrawalRate:0.06,contribScale:1,enabled:false} } };
 const plan = Engine.bridgePlan(bp);
 console.log('Target pot        :', money(plan.targetPot));
 console.log('Crossover age     :', plan.base.crossAge, '(expected 52)');
@@ -101,8 +104,9 @@ console.log(bfails === 0 ? 'ALL BRIDGE ASSERTIONS PASSED' : (bfails + ' BRIDGE A
 // ===== Pension Coast FIRE Planner =====
 line();
 console.log('COAST PLANNER — worked example');
-const cp = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
-cp.growth = 0.095;   // healthy NOMINAL return so the worked example still coasts (~6.8% real)
+const cp = { currentAge:35, currentPension:232000, growth:0.095, inflation:0.025, pensionAccessAge:57, retirementAge:60, goalMode:'pot', targetPot:3000000, targetIncome:80000, withdrawalRate:0.04, impactLevels:[20000,40000,60000],
+  phases:[{fromAge:35,toAge:36,annual:90000},{fromAge:37,toAge:40,annual:60000},{fromAge:41,toAge:60,annual:20000}],
+  scenarios:{ conservative:{growth:0.05,withdrawalRate:0.035,retirementAge:62,enabled:false}, optimistic:{growth:0.09,withdrawalRate:0.045,retirementAge:58,enabled:false} } };
 const cplan = Engine.coastPlan(cp);
 console.log('Coast age (9.5% nominal):', cplan.base.coastAge, '(expected 41)');
 console.log('Target pot        :', money(cplan.targetPot), 'at', cplan.objAge);

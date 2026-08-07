@@ -905,33 +905,24 @@
   // =====================================================================
   var BRIDGE_DEFAULTS = {
     currentAge: 35,
-    currentBalance: 122000,        // current ISA/GIA
-    targetIncome: 80000,           // target annual withdrawal (today's money)
-    withdrawalRate: 0.05,          // safe withdrawal rate → sizes the target pot
-    growth: 0.07,                  // real investment growth (Base scenario)
-    pensionAccessAge: 60,          // bridge end age / pension access age
-    inflation: 0.025,              // used only for the nominal display
-    // Contribution phases: each applies for fromAge..toAge inclusive and phases
-    // STACK (are summed), so a one-off — e.g. a £400k lump at 36 — is just a
-    // single-year phase (from 36 to 36) layered on top of the recurring saving.
+    currentBalance: 10000,         // typical UK ISA/GIA savings in your 30s
+    targetIncome: 31000,           // PLSA 'moderate' single, today's money
+    withdrawalRate: 0.04,          // safe withdrawal rate -> sizes the target pot
+    growth: 0.06,                  // NOMINAL investment return (Base scenario)
+    pensionAccessAge: 57,          // bridge end / pension access age (rises to 57 in 2028)
+    inflation: 0.025,              // netted off the nominal return; also drives the display toggle
+    // Contribution phases: From..To inclusive; overlapping ranges STACK (add).
     phases: [
-      { fromAge: 35, toAge: 36, annual: 20000 },
-      { fromAge: 36, toAge: 36, annual: 400000 },   // one-off lump sum at 36
-      { fromAge: 37, toAge: 45, annual: 40000 },
-      { fromAge: 46, toAge: 60, annual: 0 }
+      { fromAge: 35, toAge: 57, annual: 3600 }   // ~300/month into ISA/GIA
     ],
-    frequency: 'annual',           // 'annual' | 'monthly'
-    // bridge framing
-    mode: 'perpetual',             // 'perpetual' | 'bridge'
-    bridgeDepletion: 'full',       // 'preserve' | 'partial' | 'full' (bridge mode only)
-    partialRemainPct: 0.5,         // remaining capital at access (partial mode)
-    // secondary view: draw the target income from optionality age onward
+    frequency: 'annual',
+    mode: 'perpetual',
+    bridgeDepletion: 'full',
+    partialRemainPct: 0.5,
     drawdownFromOptionality: false,
-    // scenarios — Base is the top-level growth/withdrawalRate; the other two
-    // carry their own assumptions and can be toggled on/off on the chart.
     scenarios: {
-      conservative: { growth: 0.05, withdrawalRate: 0.04, contribScale: 1, enabled: false },
-      optimistic:   { growth: 0.09, withdrawalRate: 0.06, contribScale: 1, enabled: false }
+      conservative: { growth: 0.04, withdrawalRate: 0.035, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.08, withdrawalRate: 0.045, contribScale: 1, enabled: false }
     }
   };
 
@@ -1066,25 +1057,22 @@
   // =====================================================================
   var COAST_DEFAULTS = {
     currentAge: 35,
-    currentPension: 232000,
-    // contribution phases stack (are summed); a one-off is a single-year phase
+    currentPension: 30000,         // ~median UK pension pot at 35-39
     phases: [
-      { fromAge: 35, toAge: 36, annual: 90000 },
-      { fromAge: 37, toAge: 40, annual: 60000 },
-      { fromAge: 41, toAge: 60, annual: 20000 }
+      { fromAge: 35, toAge: 65, annual: 5000 }   // ~auto-enrolment on a typical salary (employee + employer)
     ],
-    growth: 0.07,                  // real investment return (Base)
-    inflation: 0.025,              // nominal display only
+    growth: 0.06,                  // NOMINAL investment return (Base)
+    inflation: 0.025,              // netted off the nominal return; also drives the display toggle
     pensionAccessAge: 57,          // when the pension can be accessed
-    retirementAge: 60,             // objective age — when you want the target pot
-    goalMode: 'pot',               // 'pot' | 'income'
-    targetPot: 3000000,            // target pension value (pot mode)
-    targetIncome: 80000,           // desired annual income (income mode)
-    withdrawalRate: 0.04,          // income ÷ rate = required pot (income mode)
-    impactLevels: [20000, 40000, 60000],   // contribution-impact comparison
+    retirementAge: 65,             // objective age - when you want the target pot
+    goalMode: 'income',            // 'pot' | 'income' (income is friendlier for new users)
+    targetPot: 775000,             // fallback for pot mode (= 31k / 4%)
+    targetIncome: 31000,           // PLSA 'moderate' single (today's money)
+    withdrawalRate: 0.04,          // income / rate = required pot (income mode)
+    impactLevels: [3000, 6000, 9000],
     scenarios: {
-      conservative: { growth: 0.05, withdrawalRate: 0.035, retirementAge: 62, enabled: false },
-      optimistic:   { growth: 0.09, withdrawalRate: 0.045, retirementAge: 58, enabled: false }
+      conservative: { growth: 0.04, withdrawalRate: 0.035, retirementAge: 67, enabled: false },
+      optimistic:   { growth: 0.08, withdrawalRate: 0.045, retirementAge: 60, enabled: false }
     }
   };
 

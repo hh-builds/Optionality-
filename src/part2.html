@@ -270,7 +270,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       {/* 3) KEY ASSUMPTIONS */}
       <div className="bp-sub">Key assumptions</div>
       <div className="bp-assump">
-        <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} onChange={v=>setBp({currentAge:Math.round(v)})} /></div>
+        <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} step="0.1" onChange={v=>setBp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>Current ISA / GIA</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
         <div className="bp-fld"><label>Target income / yr (today’s money)</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>
@@ -530,7 +530,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 
       <div className="bp-sub">Key assumptions</div>
       <div className="bp-assump">
-        <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} onChange={v=>setCp({currentAge:Math.round(v)})} /></div>
+        <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setCp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>Current pension</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
         <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
