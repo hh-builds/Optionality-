@@ -919,6 +919,7 @@
     bridgeDepletion: 'full',
     partialRemainPct: 0.5,
     drawdownFromOptionality: true, // from optionality, draw the income and show the pot deplete
+    stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
     lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
       conservative: { growth: 0.05, withdrawalRate: 0.035, contribScale: 1, enabled: false },
@@ -983,9 +984,10 @@
     for (var a = curAge; a <= endAge; a++) {
       var target = bridgeTargetAt(bp, sc, a, perpetualPot);
       if (!crossedInline && isFinite(target) && running >= target) crossedInline = true;
-      var drawing = drawdown && crossedInline;
-      var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn
-      var cNom = drawing ? 0 : bridgeContribAt(bp, a) * scale; // entered contribution (constant nominal £)
+      var walkedAway = drawdown && crossedInline;             // reached optionality and stopped saving
+      var drawing = walkedAway && !((bp.stopDrawAtAccess === true) && a >= bp.pensionAccessAge); // optionally stop drawing at pension access
+      var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn (constant real -> keeps pace with inflation)
+      var cNom = walkedAway ? 0 : bridgeContribAt(bp, a) * scale; // contribution (constant nominal £; stops at optionality)
       var c = cNom / Math.pow(1 + infl, a - curAge);           // its real value this year (declines with inflation)
       var prevBal = running, nextBal;
       if (monthly) {
