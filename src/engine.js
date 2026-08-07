@@ -1005,10 +1005,20 @@
     }
 
     // crossover: first age at which the projected balance meets the target
-    var crossAge = null, crossBalance = null, crossTarget = null;
+    var crossAge = null, crossAgeExact = null, crossBalance = null, crossTarget = null;
     for (var i = 0; i < rows.length; i++) {
       if (isFinite(rows[i].target) && rows[i].balance >= rows[i].target) {
-        crossAge = rows[i].age; crossBalance = rows[i].balance; crossTarget = rows[i].target; break;
+        crossAge = rows[i].age; crossBalance = rows[i].balance; crossTarget = rows[i].target;
+        // interpolate a fractional age between the last shortfall year and this one
+        if (i === 0) { crossAgeExact = rows[0].age; }
+        else {
+          var gp = rows[i-1].balance - rows[i-1].target;   // gap the year before (< 0)
+          var gc = rows[i].balance - rows[i].target;       // gap this year (>= 0)
+          var denom = gc - gp;
+          var f = denom !== 0 ? (-gp / denom) : 0;          // fraction of the year to the crossing
+          crossAgeExact = Math.round((rows[i-1].age + Math.max(0, Math.min(1, f))) * 10) / 10;
+        }
+        break;
       }
     }
     var accessRow = null;
@@ -1024,6 +1034,7 @@
       perpetualPot: perpetualPot,
       reached: crossAge !== null,
       crossAge: crossAge,
+      crossAgeExact: crossAgeExact,
       crossBalance: crossBalance,
       crossTarget: crossTarget,
       yearsUntil: crossAge !== null ? crossAge - curAge : null,
@@ -1126,30 +1137,47 @@
     var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
     var targetPot = coastTargetPot(cp, sc);
 
-    var rows = [], running = cp.currentPension;
-    for (var a = cp.currentAge; a <= objAge; a++) {
+    // Project to a display horizon that runs a little past the objective so the
+    // chart/table show the pension continuing to grow after the target date.
+    var horizonAge = Math.max(objAge, cp.horizonAge || 70);
+    var rows = [], running = cp.currentPension, potAtObj = null, projAfterObj = null;
+    for (var a = cp.currentAge; a <= horizonAge; a++) {
       var yrsLeft = objAge - a;
-      var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance (today's money)
+      // required coast balance rises to the target at objAge, then holds flat beyond it
+      var required = yrsLeft >= 0 ? targetPot / Math.pow(1 + g, yrsLeft) : targetPot;
       var cNom = coastContribAt(cp, a);
       var c = cNom / Math.pow(1 + infl, a - cp.currentAge);  // constant-nominal contribution in real terms
       var prevProj = running, nextProj = (running + c) * (1 + g);
+      if (a === objAge) { potAtObj = prevProj; projAfterObj = nextProj; }
       rows.push({ age: a, projected: prevProj, required: required,
                   surplus: prevProj - required, contribution: c,
-                  growth: nextProj - prevProj - c, income: prevProj * wr }); // growth = market gain this year
+                  growth: nextProj - prevProj - c, income: prevProj * wr, // growth = market gain this year
+                  postObjective: a > objAge });
       running = nextProj;
     }
 
     // coast crossover: first age where projected ≥ required coast balance
-    var coastAge = null, coastBalance = null;
+    var coastAge = null, coastAgeExact = null, coastBalance = null;
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].projected >= rows[i].required) { coastAge = rows[i].age; coastBalance = rows[i].required; break; }
+      if (rows[i].age > objAge) break;   // coasting must be achievable by the objective age
+      if (rows[i].projected >= rows[i].required) {
+        coastAge = rows[i].age; coastBalance = rows[i].required;
+        if (i === 0) { coastAgeExact = rows[0].age; }
+        else {
+          var gp = rows[i-1].projected - rows[i-1].required;  // < 0
+          var gc = rows[i].projected - rows[i].required;      // >= 0
+          var denom = gc - gp;
+          var f = denom !== 0 ? (-gp / denom) : 0;
+          coastAgeExact = Math.round((rows[i-1].age + Math.max(0, Math.min(1, f))) * 10) / 10;
+        }
+        break;
+      }
     }
-    var finalProjected = rows.length ? (function () {
-      // pension at objAge WITH all contributions (roll the last row forward)
-      var last = rows[rows.length - 1]; return (last.projected + last.contribution) * (1 + g);
-    })() : running;
-    // objAge row projected is the value entering objAge; final pot at objAge:
-    var potAtObj = rows.length ? rows[rows.length - 1].projected : running;
+    // pension at objAge WITH all contributions (value leaving the objective year)
+    var finalProjected = projAfterObj != null ? projAfterObj
+      : (rows.length ? (rows[rows.length - 1].projected + rows[rows.length - 1].contribution) * (1 + g) : running);
+    // objAge row projected is the value entering objAge:
+    if (potAtObj == null) potAtObj = rows.length ? rows[rows.length - 1].projected : running;
 
     var requiredNow = rows.length ? rows[0].required : targetPot;
     var yearsToObj = objAge - cp.currentAge;
@@ -1161,6 +1189,7 @@
       targetPot: targetPot,
       withdrawalRate: wr,
       coastAge: coastAge,
+      coastAgeExact: coastAgeExact,
       coasting: coastAge !== null && coastAge <= cp.currentAge,
       reached: coastAge !== null,
       coastBalance: coastBalance,

@@ -1607,10 +1607,20 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     }
 
     // crossover: first age at which the projected balance meets the target
-    var crossAge = null, crossBalance = null, crossTarget = null;
+    var crossAge = null, crossAgeExact = null, crossBalance = null, crossTarget = null;
     for (var i = 0; i < rows.length; i++) {
       if (isFinite(rows[i].target) && rows[i].balance >= rows[i].target) {
-        crossAge = rows[i].age; crossBalance = rows[i].balance; crossTarget = rows[i].target; break;
+        crossAge = rows[i].age; crossBalance = rows[i].balance; crossTarget = rows[i].target;
+        // interpolate a fractional age between the last shortfall year and this one
+        if (i === 0) { crossAgeExact = rows[0].age; }
+        else {
+          var gp = rows[i-1].balance - rows[i-1].target;   // gap the year before (< 0)
+          var gc = rows[i].balance - rows[i].target;       // gap this year (>= 0)
+          var denom = gc - gp;
+          var f = denom !== 0 ? (-gp / denom) : 0;          // fraction of the year to the crossing
+          crossAgeExact = Math.round((rows[i-1].age + Math.max(0, Math.min(1, f))) * 10) / 10;
+        }
+        break;
       }
     }
     var accessRow = null;
@@ -1626,6 +1636,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
       perpetualPot: perpetualPot,
       reached: crossAge !== null,
       crossAge: crossAge,
+      crossAgeExact: crossAgeExact,
       crossBalance: crossBalance,
       crossTarget: crossTarget,
       yearsUntil: crossAge !== null ? crossAge - curAge : null,
@@ -1728,30 +1739,47 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
     var targetPot = coastTargetPot(cp, sc);
 
-    var rows = [], running = cp.currentPension;
-    for (var a = cp.currentAge; a <= objAge; a++) {
+    // Project to a display horizon that runs a little past the objective so the
+    // chart/table show the pension continuing to grow after the target date.
+    var horizonAge = Math.max(objAge, cp.horizonAge || 70);
+    var rows = [], running = cp.currentPension, potAtObj = null, projAfterObj = null;
+    for (var a = cp.currentAge; a <= horizonAge; a++) {
       var yrsLeft = objAge - a;
-      var required = targetPot / Math.pow(1 + g, yrsLeft);   // required coast balance (today's money)
+      // required coast balance rises to the target at objAge, then holds flat beyond it
+      var required = yrsLeft >= 0 ? targetPot / Math.pow(1 + g, yrsLeft) : targetPot;
       var cNom = coastContribAt(cp, a);
       var c = cNom / Math.pow(1 + infl, a - cp.currentAge);  // constant-nominal contribution in real terms
       var prevProj = running, nextProj = (running + c) * (1 + g);
+      if (a === objAge) { potAtObj = prevProj; projAfterObj = nextProj; }
       rows.push({ age: a, projected: prevProj, required: required,
                   surplus: prevProj - required, contribution: c,
-                  growth: nextProj - prevProj - c, income: prevProj * wr }); // growth = market gain this year
+                  growth: nextProj - prevProj - c, income: prevProj * wr, // growth = market gain this year
+                  postObjective: a > objAge });
       running = nextProj;
     }
 
     // coast crossover: first age where projected ≥ required coast balance
-    var coastAge = null, coastBalance = null;
+    var coastAge = null, coastAgeExact = null, coastBalance = null;
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].projected >= rows[i].required) { coastAge = rows[i].age; coastBalance = rows[i].required; break; }
+      if (rows[i].age > objAge) break;   // coasting must be achievable by the objective age
+      if (rows[i].projected >= rows[i].required) {
+        coastAge = rows[i].age; coastBalance = rows[i].required;
+        if (i === 0) { coastAgeExact = rows[0].age; }
+        else {
+          var gp = rows[i-1].projected - rows[i-1].required;  // < 0
+          var gc = rows[i].projected - rows[i].required;      // >= 0
+          var denom = gc - gp;
+          var f = denom !== 0 ? (-gp / denom) : 0;
+          coastAgeExact = Math.round((rows[i-1].age + Math.max(0, Math.min(1, f))) * 10) / 10;
+        }
+        break;
+      }
     }
-    var finalProjected = rows.length ? (function () {
-      // pension at objAge WITH all contributions (roll the last row forward)
-      var last = rows[rows.length - 1]; return (last.projected + last.contribution) * (1 + g);
-    })() : running;
-    // objAge row projected is the value entering objAge; final pot at objAge:
-    var potAtObj = rows.length ? rows[rows.length - 1].projected : running;
+    // pension at objAge WITH all contributions (value leaving the objective year)
+    var finalProjected = projAfterObj != null ? projAfterObj
+      : (rows.length ? (rows[rows.length - 1].projected + rows[rows.length - 1].contribution) * (1 + g) : running);
+    // objAge row projected is the value entering objAge:
+    if (potAtObj == null) potAtObj = rows.length ? rows[rows.length - 1].projected : running;
 
     var requiredNow = rows.length ? rows[0].required : targetPot;
     var yearsToObj = objAge - cp.currentAge;
@@ -1763,6 +1791,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
       targetPot: targetPot,
       withdrawalRate: wr,
       coastAge: coastAge,
+      coastAgeExact: coastAgeExact,
       coasting: coastAge !== null && coastAge <= cp.currentAge,
       reached: coastAge !== null,
       coastBalance: coastBalance,
@@ -2110,10 +2139,10 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
       {/* 1) HEADLINE */}
       <div className="bp-headline">
-        <div className={'bp-big '+(reached?'reached':'missed')}>{reached ? 'Age '+base.crossAge : 'Not by '+bp.pensionAccessAge}</div>
+        <div className={'bp-big '+(reached?'reached':'missed')}>{reached ? 'Age '+(base.crossAgeExact!=null?base.crossAgeExact.toFixed(1):base.crossAge) : 'Not by '+bp.pensionAccessAge}</div>
         <div className="bp-cap">{reached
           ? (bp.mode==='bridge'
-              ? 'Work-optional at age '+base.crossAge+' — your '+gbpC(base.crossBalance*bf(base.crossAge))+' accessible pot can fund '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr from then until pension access '+bp.pensionAccessAge+' (drawing down as you go), when your pension takes over.'
+              ? 'Work-optional at age '+(base.crossAgeExact!=null?base.crossAgeExact.toFixed(1):base.crossAge)+' — your '+gbpC(base.crossBalance*bf(base.crossAge))+' accessible pot can fund '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr from then until pension access '+bp.pensionAccessAge+' (drawing down as you go), when your pension takes over.'
               : 'Full optionality — your projected ISA/GIA first covers the '+gbpC(targetPot*bf(base.crossAge))+' portfolio needed to support '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr indefinitely at a '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal rate.')
           : 'On these assumptions your accessible wealth doesn’t yet reach the pot needed to fund '+gbpC(bp.targetIncome)+'/yr by pension access age '+bp.pensionAccessAge+'. Adjust contributions, growth or the target below.'}</div>
         {base.reached && bp.drawdownFromOptionality && (function(){
@@ -2173,18 +2202,41 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
+      {/* MODEL / FRAMING — pulled up so it drives which fields show below */}
+      <div className="bp-sub">How your target works</div>
+      <div className="bp-toggles">
+        <div className="bp-tgroup"><span className="tl">Model</span>
+          <div className="bp-seg">
+            <button className={bp.mode==='perpetual'?'on':''} onClick={()=>setBp({mode:'perpetual'})} title="Target = a perpetual pot (income ÷ withdrawal rate) you never run down">Perpetual portfolio</button>
+            <button className={bp.mode==='bridge'?'on':''} onClick={()=>setBp({mode:'bridge'})} title="Target = only the pot needed to bridge to pension access — falls as access nears">Bridge to pension access</button>
+          </div>
+        </div>
+        {bp.mode==='bridge' && <div className="bp-tgroup"><span className="tl">By pension access, I’m comfortable…</span>
+          <div className="bp-seg">
+            <button className={bp.bridgeDepletion==='preserve'?'on':''} onClick={()=>setBp({bridgeDepletion:'preserve'})}>Preserving capital</button>
+            <button className={bp.bridgeDepletion==='partial'?'on':''} onClick={()=>setBp({bridgeDepletion:'partial'})}>Partially depleting</button>
+            <button className={bp.bridgeDepletion==='full'?'on':''} onClick={()=>setBp({bridgeDepletion:'full'})}>Fully using the bridge</button>
+          </div>
+        </div>}
+        {bp.mode==='bridge' && bp.bridgeDepletion==='partial' && <div className="bp-tgroup"><span className="tl">Capital left at access</span>
+          <BpNum pct value={+(((bp.partialRemainPct!=null?bp.partialRemainPct:0.5))*100).toFixed(0)} step="5" onChange={v=>setBp({partialRemainPct:(v||0)/100})} /></div>}
+      </div>
+      <div className="bp-note" style={{marginBottom:14}}>{bp.mode==='perpetual'
+        ? 'Perpetual: target = income ÷ withdrawal rate = '+gbpC(bp.targetIncome)+' ÷ '+(bp.withdrawalRate*100).toFixed(1)+'% = '+gbpC(targetPot)+' — a pot you could live off indefinitely (a 4–5% rule).'
+        : 'Bridge: the accessible pot only needs to last until pension access '+bp.pensionAccessAge+', so the target is smaller and shrinks each year. '+(bp.bridgeDepletion==='preserve'?'Preserving capital keeps the full '+gbpC(targetPot)+' perpetual pot intact at access.':bp.bridgeDepletion==='full'?'Fully using it draws the pot to zero by access — the withdrawal rate isn’t used here.':'Partially depleting leaves '+Math.round((bp.partialRemainPct!=null?bp.partialRemainPct:0.5)*100)+'% of the perpetual pot at access.')}</div>
+
       {/* 3) KEY ASSUMPTIONS */}
       <div className="bp-sub">Key assumptions</div>
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} step="0.1" onChange={v=>setBp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>Current ISA / GIA</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
         <div className="bp-fld"><label>Target income / yr (today’s money)</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
-        <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>
+        {!(bp.mode==='bridge' && bp.bridgeDepletion==='full') && <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>}
         <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Target portfolio = target income ÷ withdrawal rate = <b>{gbpC(bp.targetIncome)} ÷ {(bp.withdrawalRate*100).toFixed(1)}% = {gbpC(targetPot)}</b> (today’s money). Growth is your <b>nominal</b> return; the engine nets off inflation to get the real return that drives the projection, so raising inflation pushes the crossover age <b>later</b>. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
+      <div className="bp-note">Growth is your <b>nominal</b> return; the engine nets off inflation to get the real return that drives the projection, so raising inflation pushes the crossover age <b>later</b>. Withdrawals rise with inflation; contributions stay as entered. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
 
       {/* 4) CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -2211,21 +2263,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       {/* 6) ADVANCED — bridge framing, frequency, scenarios */}
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · bridge framing &amp; scenarios</summary>
       <div className="bp-toggles">
-        <div className="bp-tgroup"><span className="tl">Model</span>
-          <div className="bp-seg">
-            <button className={bp.mode==='perpetual'?'on':''} onClick={()=>setBp({mode:'perpetual'})} title="Target = a perpetual pot (income ÷ withdrawal rate) you never run down">Perpetual portfolio</button>
-            <button className={bp.mode==='bridge'?'on':''} onClick={()=>setBp({mode:'bridge'})} title="Target = only the pot needed to bridge to pension access — falls as access nears">Bridge to pension access</button>
-          </div>
-        </div>
-        {bp.mode==='bridge' && <div className="bp-tgroup"><span className="tl">By pension access, I’m comfortable…</span>
-          <div className="bp-seg">
-            <button className={bp.bridgeDepletion==='preserve'?'on':''} onClick={()=>setBp({bridgeDepletion:'preserve'})}>Preserving capital</button>
-            <button className={bp.bridgeDepletion==='partial'?'on':''} onClick={()=>setBp({bridgeDepletion:'partial'})}>Partially depleting</button>
-            <button className={bp.bridgeDepletion==='full'?'on':''} onClick={()=>setBp({bridgeDepletion:'full'})}>Fully using the bridge</button>
-          </div>
-        </div>}
-        {bp.mode==='bridge' && bp.bridgeDepletion==='partial' && <div className="bp-tgroup"><span className="tl">Capital left at access</span>
-          <BpNum pct value={+(((bp.partialRemainPct!=null?bp.partialRemainPct:0.5))*100).toFixed(0)} step="5" onChange={v=>setBp({partialRemainPct:(v||0)/100})} /></div>}
         <div className="bp-tgroup"><span className="tl">Contributions</span>
           <div className="bp-seg">
             <button className={bp.frequency==='annual'?'on':''} onClick={()=>setBp({frequency:'annual'})}>Annual</button>
@@ -2246,10 +2283,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>}
       </div>
       {bp.drawdownFromOptionality && <div className="bp-note" style={{marginTop:0,marginBottom:10}}>Drawdown view: from optionality (age {base.crossAge!=null?base.crossAge:'—'}) contributions stop and the pot pays out <b>{gbpC(bp.targetIncome)}/yr</b>. {base.depletionAge ? <span>On accessible wealth alone it <b style={{color:'var(--critical)'}}>runs out at age {base.depletionAge}</b> — from pension access ({bp.pensionAccessAge}) your pension is meant to take over (see the combined charts below).</span> : <span>The pot <b>sustains</b> the withdrawals out to {bp.lifeExpectancy||90} — your drawdown is covered by growth.</span>} Turn this off in Advanced for pure accumulation.</div>}
-      <div className="bp-note" style={{marginBottom:14}}>{bp.mode==='perpetual'
-        ? 'Perpetual: a fixed target you could live off indefinitely at your withdrawal rate — a 4–5% rule.'
-        : 'Bridge: the ISA/GIA only needs to last until pension access age '+bp.pensionAccessAge+', so the required pot is smaller and shrinks each year — often bringing optionality forward. '+(bp.bridgeDepletion==='preserve'?'Preserving capital keeps the full perpetual target.':bp.bridgeDepletion==='full'?'Fully using the bridge draws it to zero by access.':'Partially depleting leaves '+Math.round((bp.partialRemainPct!=null?bp.partialRemainPct:0.5)*100)+'% of the perpetual pot at access.')}</div>
-
       <div className="bp-scenarios">
         {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(sc=>{
           const isBase = sc.key==='base';
@@ -2261,12 +2294,16 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:sc.color}}></span>{sc.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(sc.key,{enabled:!scEnabled[sc.key]})}>{scEnabled[sc.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
-            <div className="bp-fld"><label>Expected return (nominal)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
-              onChange={v=> isBase ? setBp({growth:(v||0)/100}) : updScen(sc.key,{growth:(v||0)/100})} /></div>
-            <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+((s.withdrawalRate||0)*100).toFixed(2)} step="0.1"
-              onChange={v=> isBase ? setBp({withdrawalRate:(v||0)/100}) : updScen(sc.key,{withdrawalRate:(v||0)/100})} /></div>
-            {!isBase && <div className="bp-fld"><label>Contributions (× Base)</label><BpNum pct value={+((s.contribScale!=null?s.contribScale:1)*100).toFixed(0)} step="5"
-              onChange={v=>updScen(sc.key,{contribScale:(v||0)/100})} /></div>}
+            {isBase
+              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your Key assumptions above — {(bp.growth*100).toFixed(1)}% return{!(bp.mode==='bridge' && bp.bridgeDepletion==='full') && ', '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal'}. Edit those to change this line.</div>
+              : <React.Fragment>
+                <div className="bp-fld"><label>Expected return (nominal)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(sc.key,{growth:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+((s.withdrawalRate||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(sc.key,{withdrawalRate:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Contributions (× Base)</label><BpNum pct value={+((s.contribScale!=null?s.contribScale:1)*100).toFixed(0)} step="5"
+                  onChange={v=>updScen(sc.key,{contribScale:(v||0)/100})} /></div>
+              </React.Fragment>}
             <div className="cross-line">Optionality: <b>{res.crossAge!=null?'age '+res.crossAge:'not by '+bp.pensionAccessAge}</b>{res.crossAge!=null && ' · target '+gbpC(res.perpetualPot)}</div>
           </div>
           );
@@ -2369,7 +2406,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 
       {/* 1) HEADLINE */}
       <div className="bp-headline">
-        <div className={'bp-big '+(base.reached?'reached':'missed')}>{base.coasting ? 'Coasting now — pension self-funds' : base.reached ? (base.yearsUntilCoast===0 ? 'Coast achieved at '+base.coastAge : (base.yearsUntilCoast + ' more year' + (base.yearsUntilCoast===1?'':'s') + ' of contributions — coast achieved at ' + base.coastAge)) : 'Not reached by '+base.objAge}</div>
+        <div className={'bp-big '+(base.reached?'reached':'missed')}>{base.coasting ? 'Coasting now — pension self-funds' : base.reached ? (base.yearsUntilCoast===0 ? 'Coast achieved at '+(base.coastAgeExact!=null?base.coastAgeExact.toFixed(1):base.coastAge) : (base.yearsUntilCoast + ' more year' + (base.yearsUntilCoast===1?'':'s') + ' of contributions — coast achieved at ' + (base.coastAgeExact!=null?base.coastAgeExact.toFixed(1):base.coastAge))) : 'Not reached by '+base.objAge}</div>
         <div className="bp-cap">{base.reached
           ? 'Pension becomes self-sustaining — at '+(base.coasting?'your current balance':('age '+base.coastAge))+' it reaches '+m(base.coastBalance, base.coastAge)+', enough to grow to your '+gbpC(plan.targetPot*bf(base.objAge))+' target by age '+base.objAge+(realTerms?'':' (that’s your '+gbpC(plan.targetPot)+' target in today’s money, grown by inflation to age '+base.objAge+')')+', with no further contributions.'
           : 'On these assumptions your pension doesn’t reach the '+gbpC(plan.targetPot)+' target by age '+base.objAge+' even with your planned contributions. Increase contributions, growth, or push the retirement age.'}</div>
@@ -2405,6 +2442,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
             <Tooltip content={<ChartTip/>} />
             {base.reached && !base.coasting && <ReferenceLine x={base.coastAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
               label={{ value:'Coast '+base.coastAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
+            <ReferenceLine x={base.objAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:'Target '+base.objAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
             <Line type="monotone" dataKey="required" name="Required coast balance" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -2519,7 +2557,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 
       {/* YEAR-BY-YEAR */}
       </details>
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.objAge}</summary>
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.rows.length?base.rows[base.rows.length-1].age:base.objAge}</summary>
       <div className="tablewrap">
         <table>
           <thead><tr><th>Age</th><th>Projected pension</th><th>Coast balance required</th><th>Surplus / shortfall</th><th>Annual contribution</th><th>Market growth</th><th>Status</th></tr></thead>

@@ -91,6 +91,8 @@ console.log('Conservative/Optimistic cross:', plan.conservative.crossAge, '/', p
 let bfails = 0;
 function bassert(c,m){ if(!c){ console.log('FAIL:', m); bfails++; } }
 bassert(plan.base.crossAge === 52, 'worked example crosses at 52 (nominal 7% / 2.5% inflation)');
+bassert(plan.base.crossAgeExact != null && plan.base.crossAgeExact > 51 && plan.base.crossAgeExact <= 52, 'interpolated crossover age sits in the year before the integer crossing (got '+plan.base.crossAgeExact+')');
+bassert(Math.round(plan.base.crossAgeExact*10)/10 === plan.base.crossAgeExact, 'crossAgeExact is rounded to one decimal');
 bassert(Math.abs(plan.targetPot - 1600000) < 1, 'target pot = £1.6m at £80k / 5% (today money)');
 bassert(Engine.bridgePlan(Object.assign(JSON.parse(JSON.stringify(bp)),{growth:0.10})).base.crossAge < plan.base.crossAge, 'higher nominal return crosses earlier');
 var bInflHi = Engine.bridgePlan(Object.assign(JSON.parse(JSON.stringify(bp)),{inflation:0.05})).base.crossAge;
@@ -114,6 +116,7 @@ console.log('Pot @ objective   :', money(cplan.base.potAtObj));
 let cfails = 0;
 function cassert(c,m){ if(!c){ console.log('FAIL:', m); cfails++; } }
 cassert(cplan.base.coastAge === 41, 'worked example coasts at 41 with a healthy nominal return');
+cassert(cplan.base.coastAgeExact != null && cplan.base.coastAgeExact > 40 && cplan.base.coastAgeExact <= 41, 'interpolated coast age sits in the year before the integer crossing (got '+cplan.base.coastAgeExact+')');
 cassert(cplan.targetPot === 3000000, 'pot-mode target = £3m (today money)');
 const cInc = Object.assign({}, JSON.parse(JSON.stringify(cp)), { goalMode:'income' });
 cassert(Math.abs(Engine.coastPlan(cInc).targetPot - 2000000) < 1, 'income mode £80k / 4% = £2m required');
