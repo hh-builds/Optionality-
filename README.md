@@ -1,6 +1,6 @@
-# Financial Optionality Dashboard
+# Financial Optionality — Model your path to financial independence
 
-A personal-CFO web app that answers one question: **at what age does work become optional?**
+A web app that answers one question: **at what age does work become optional?**
 
 It models pension + ISA/GIA + cash across three phases — accumulation, the *bridge* to
 pension access, and retirement — solves for your **Freedom Age**, and recommends what to
