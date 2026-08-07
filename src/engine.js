@@ -1137,22 +1137,30 @@
     var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
     var targetPot = coastTargetPot(cp, sc);
 
-    // Project to a display horizon that runs a little past the objective so the
-    // chart/table show the pension continuing to grow after the target date.
+    // Project to a display horizon that runs past the objective so the chart/table
+    // show the pension being drawn down after the target/retirement date.
     var horizonAge = Math.max(objAge, cp.horizonAge || 70);
-    var rows = [], running = cp.currentPension, potAtObj = null, projAfterObj = null;
+    var sp = cp.statePensionAmount || 0;                       // State Pension (real, today's money)
+    var spAge = cp.statePensionAge || 67;                      // age it starts
+    // income the pension is meant to pay in retirement (today's money, constant real)
+    var drawIncome = cp.goalMode === 'income' ? (cp.targetIncome || 0) : targetPot * wr;
+    var rows = [], running = cp.currentPension, potAtObj = null, projAfterObj = null, coastDepletionAge = null;
     for (var a = cp.currentAge; a <= horizonAge; a++) {
       var yrsLeft = objAge - a;
       // required coast balance rises to the target at objAge, then holds flat beyond it
       var required = yrsLeft >= 0 ? targetPot / Math.pow(1 + g, yrsLeft) : targetPot;
-      var cNom = coastContribAt(cp, a);
-      var c = cNom / Math.pow(1 + infl, a - cp.currentAge);  // constant-nominal contribution in real terms
-      var prevProj = running, nextProj = (running + c) * (1 + g);
+      var retired = a >= objAge;                               // from the objective age you stop saving and start drawing
+      var cNom = retired ? 0 : coastContribAt(cp, a);
+      var c = cNom / Math.pow(1 + infl, a - cp.currentAge);    // constant-nominal contribution in real terms
+      // withdrawal (constant real): full target income, less State Pension once it is in payment (income goals)
+      var wdraw = retired ? Math.max(0, drawIncome - ((cp.goalMode === 'income' && a >= spAge) ? sp : 0)) : 0;
+      var prevProj = running, nextProj = Math.max(0, (running + c - wdraw) * (1 + g));
       if (a === objAge) { potAtObj = prevProj; projAfterObj = nextProj; }
+      if (coastDepletionAge == null && retired && wdraw > 0 && nextProj <= 1) coastDepletionAge = a;
       rows.push({ age: a, projected: prevProj, required: required,
-                  surplus: prevProj - required, contribution: c,
-                  growth: nextProj - prevProj - c, income: prevProj * wr, // growth = market gain this year
-                  postObjective: a > objAge });
+                  surplus: prevProj - required, contribution: c, withdraw: wdraw,
+                  growth: nextProj - prevProj - c + wdraw, income: prevProj * wr, // growth = market gain this year
+                  postObjective: a > objAge, drawing: retired });
       running = nextProj;
     }
 
@@ -1197,6 +1205,8 @@
       shortfallNow: Math.max(0, requiredNow - cp.currentPension),
       potAtObj: potAtObj,
       incomeAtObj: potAtObj * wr,
+      drawIncome: drawIncome,
+      coastDepletionAge: coastDepletionAge,
       meetsTarget: meetsTarget,
       requiredNow: requiredNow
     };
