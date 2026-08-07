@@ -1032,11 +1032,11 @@ function App() {
         <div className="es-foot">Synthesised from the two planners below · figures in today’s money.</div>
       </div>
 
-      {/* ===== THE TWO HEADLINE OPTIONALITY TOOLS ===== */}
-      <div className="section-title">When can I walk away from work?</div>
-      <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      {/* ===== THE TWO HEADLINE OPTIONALITY TOOLS (pension first, then optionality) ===== */}
       <div className="section-title">When can my pension look after itself?</div>
       <CoastPlanner cp={coastInputs} setCp={setCp} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      <div className="section-title">When can I walk away from work?</div>
+      <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
       {/* ===== OUTPUTS ===== */}
       <div className="outputs-block">
