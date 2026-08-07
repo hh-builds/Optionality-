@@ -922,8 +922,9 @@
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
     lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
-      conservative: { growth: 0.07, withdrawalRate: 0.035, contribScale: 1, enabled: false },
-      optimistic:   { growth: 0.11, withdrawalRate: 0.045, contribScale: 1, enabled: false }
+      // scenarios are explicit return + inflation pairs (conservative = lower return AND higher inflation)
+      conservative: { growth: 0.07, inflation: 0.03, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.11, inflation: 0.02, contribScale: 1, enabled: false }
     }
   };
 
@@ -966,9 +967,9 @@
     var curAge = bp.currentAge;
     var endAge = Math.max(bp.pensionAccessAge, curAge + 1);
     if (bp.drawdownFromOptionality) endAge = Math.max(endAge, bp.lifeExpectancy || 90); // run drawdown out to life expectancy
-    var infl = bp.inflation || 0;
+    var infl = (sc.inflation != null ? sc.inflation : bp.inflation) || 0;   // scenarios can set their own inflation
     var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
-    var wr = sc.withdrawalRate;
+    var wr = sc.withdrawalRate != null ? sc.withdrawalRate : bp.withdrawalRate;
     var scale = sc.contribScale != null ? sc.contribScale : 1;
     var perpetualPot = wr > 0 ? bp.targetIncome / wr : Infinity;
     var monthly = bp.frequency === 'monthly';
@@ -1091,8 +1092,9 @@
     statePensionAge: 67,           // State Pension age
     impactLevels: [5000, 10000, 15000],
     scenarios: {
-      conservative: { growth: 0.07, withdrawalRate: 0.035, retirementAge: 62, enabled: false },
-      optimistic:   { growth: 0.11, withdrawalRate: 0.045, retirementAge: 58, enabled: false }
+      // scenarios are explicit return + inflation pairs (conservative = lower return AND higher inflation)
+      conservative: { growth: 0.07, inflation: 0.03, enabled: false },
+      optimistic:   { growth: 0.11, inflation: 0.02, enabled: false }
     }
   };
 
@@ -1120,7 +1122,7 @@
   }
   // Pension at the objective age if contributions cease at `stopAge`.
   function coastFinalIfStop(cp, sc, stopAge) {
-    var infl = cp.inflation || 0;
+    var infl = (sc.inflation != null ? sc.inflation : cp.inflation) || 0;
     var g = (1 + sc.growth) / (1 + infl) - 1, objAge = coastObjAge(cp, sc), running = cp.currentPension;
     for (var a = cp.currentAge; a < objAge; a++) {
       var cNom = (a < stopAge) ? coastContribAt(cp, a) : 0;
@@ -1131,7 +1133,7 @@
   }
 
   function coastProject(cp, sc) {
-    var infl = cp.inflation || 0;
+    var infl = (sc.inflation != null ? sc.inflation : cp.inflation) || 0;   // scenarios can set their own inflation
     var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
     var objAge = coastObjAge(cp, sc);
     var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;

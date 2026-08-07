@@ -122,6 +122,15 @@ const cInc = Object.assign({}, JSON.parse(JSON.stringify(cp)), { goalMode:'incom
 cassert(Math.abs(Engine.coastPlan(cInc).targetPot - 2000000) < 1, 'income mode £80k / 4% = £2m required');
 var cHiG = Engine.coastPlan(Object.assign(JSON.parse(JSON.stringify(cp)), {growth:0.12})).base.coastAge;
 cassert(cHiG != null && cHiG <= cplan.base.coastAge, 'higher nominal return coasts no later');
+// scenarios carry their own inflation (conservative = lower return AND higher inflation)
+const scDef = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+const scPlan = Engine.coastPlan(scDef);
+const realOf = (gr, inf) => (1+gr)/(1+inf)-1;
+cassert(realOf(0.07,0.03) < realOf(scDef.growth, scDef.inflation), 'conservative real return is below base');
+cassert(realOf(0.11,0.02) > realOf(scDef.growth, scDef.inflation), 'optimistic real return is above base');
+cassert(scPlan.conservative.coastAge == null || scPlan.base.coastAge == null || scPlan.conservative.coastAge >= scPlan.base.coastAge, 'conservative coasts no earlier than base');
+cassert(scPlan.optimistic.coastAge == null || (scPlan.base.coastAge != null && scPlan.optimistic.coastAge <= scPlan.base.coastAge), 'optimistic coasts no later than base');
+console.log('Scenario coast ages (defaults): base', scPlan.base.coastAge, '· conservative', scPlan.conservative.coastAge, '· optimistic', scPlan.optimistic.coastAge);
 console.log(cfails === 0 ? 'ALL COAST ASSERTIONS PASSED' : (cfails + ' COAST ASSERTION(S) FAILED'));
 
 // ===== Nominal-return model: inflation genuinely bites =====

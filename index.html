@@ -523,6 +523,8 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .bp-scard-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .bp-scard-head .sn{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700}
 .bp-scard-head .sn .cd{width:11px;height:11px;border-radius:50%}
+.bp-scard-sub{font-size:11.5px;color:var(--muted);margin:-4px 0 9px;font-variant-numeric:tabular-nums}
+.bp-scard.base .bp-scard-sub{color:var(--text-primary);font-weight:600}
 .bp-scard .bp-fld{margin-bottom:9px}
 .bp-scard .cross-line{font-size:12px;color:var(--muted);margin-top:2px}
 .bp-scard .cross-line b{color:var(--text-primary);font-weight:650}
@@ -594,6 +596,14 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-verdict.ok{background:rgba(34,150,83,0.10);border:1px solid var(--good-text,#2b8a4b)}
 .bp-verdict.bad{background:rgba(200,50,50,0.08);border:1px solid var(--critical,#c33)}
 .bp-verdict-sub{color:var(--muted);font-size:12px}
+.bp-why{margin:8px 0 2px;font-size:12.5px}
+.bp-why>summary{cursor:pointer;color:var(--accent);font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:5px;padding:2px 0}
+.bp-why>summary::-webkit-details-marker{display:none}
+.bp-why>summary::before{content:'?';display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;font-weight:700}
+.bp-why[open]>summary{margin-bottom:4px}
+.bp-why ol{margin:2px 0 4px;padding-left:20px;color:var(--muted);line-height:1.6}
+.bp-why li{margin-bottom:4px}
+.bp-why li b{color:var(--text-primary);font-weight:650}
 </style>
 </head>
 <body>
@@ -1524,8 +1534,9 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
     lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
-      conservative: { growth: 0.07, withdrawalRate: 0.035, contribScale: 1, enabled: false },
-      optimistic:   { growth: 0.11, withdrawalRate: 0.045, contribScale: 1, enabled: false }
+      // scenarios are explicit return + inflation pairs (conservative = lower return AND higher inflation)
+      conservative: { growth: 0.07, inflation: 0.03, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.11, inflation: 0.02, contribScale: 1, enabled: false }
     }
   };
 
@@ -1568,9 +1579,9 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     var curAge = bp.currentAge;
     var endAge = Math.max(bp.pensionAccessAge, curAge + 1);
     if (bp.drawdownFromOptionality) endAge = Math.max(endAge, bp.lifeExpectancy || 90); // run drawdown out to life expectancy
-    var infl = bp.inflation || 0;
+    var infl = (sc.inflation != null ? sc.inflation : bp.inflation) || 0;   // scenarios can set their own inflation
     var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
-    var wr = sc.withdrawalRate;
+    var wr = sc.withdrawalRate != null ? sc.withdrawalRate : bp.withdrawalRate;
     var scale = sc.contribScale != null ? sc.contribScale : 1;
     var perpetualPot = wr > 0 ? bp.targetIncome / wr : Infinity;
     var monthly = bp.frequency === 'monthly';
@@ -1693,8 +1704,9 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     statePensionAge: 67,           // State Pension age
     impactLevels: [5000, 10000, 15000],
     scenarios: {
-      conservative: { growth: 0.07, withdrawalRate: 0.035, retirementAge: 62, enabled: false },
-      optimistic:   { growth: 0.11, withdrawalRate: 0.045, retirementAge: 58, enabled: false }
+      // scenarios are explicit return + inflation pairs (conservative = lower return AND higher inflation)
+      conservative: { growth: 0.07, inflation: 0.03, enabled: false },
+      optimistic:   { growth: 0.11, inflation: 0.02, enabled: false }
     }
   };
 
@@ -1722,7 +1734,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
   }
   // Pension at the objective age if contributions cease at `stopAge`.
   function coastFinalIfStop(cp, sc, stopAge) {
-    var infl = cp.inflation || 0;
+    var infl = (sc.inflation != null ? sc.inflation : cp.inflation) || 0;
     var g = (1 + sc.growth) / (1 + infl) - 1, objAge = coastObjAge(cp, sc), running = cp.currentPension;
     for (var a = cp.currentAge; a < objAge; a++) {
       var cNom = (a < stopAge) ? coastContribAt(cp, a) : 0;
@@ -1733,7 +1745,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
   }
 
   function coastProject(cp, sc) {
-    var infl = cp.inflation || 0;
+    var infl = (sc.inflation != null ? sc.inflation : cp.inflation) || 0;   // scenarios can set their own inflation
     var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
     var objAge = coastObjAge(cp, sc);
     var wr = (sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
@@ -2166,6 +2178,13 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           </div>;
         })()}
       </div>
+      <details className="bp-why"><summary>Why does the bridge last to {bp.pensionAccessAge} but can run out later?</summary>
+        <ol>
+          <li>The bridge fund only has to cover the years <b>between stopping work and pension access ({bp.pensionAccessAge})</b> — from {bp.pensionAccessAge} your pension can take over the income.</li>
+          <li>The chart keeps drawing from your ISA/GIA <b>past {bp.pensionAccessAge}</b> to stress-test it alone, so it can show the accessible pot emptying later{base.depletionAge?<span> (age {base.depletionAge})</span>:''} — but in reality your pension covers you from {bp.pensionAccessAge}, so that "run-out" is just the bridge on its own.</li>
+          <li>Everything is in today's money: your <b>nominal return minus inflation</b> gives the real growth. A lower return or higher inflation shrinks the real pot and pushes these ages out.</li>
+        </ol>
+      </details>
       <div className="bp-scen-chips">
         <ScenChip name="base" label="Base" color={C.pension} res={base} toggleable={false} />
         <ScenChip name="conservative" label="Conservative" color={C.gia} res={cons} toggleable={true} />
@@ -2296,7 +2315,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-scenarios">
         {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(sc=>{
           const isBase = sc.key==='base';
-          const s = isBase ? {growth:bp.growth, withdrawalRate:bp.withdrawalRate, contribScale:1} : (bp.scenarios[sc.key]||{});
+          const s = isBase ? {growth:bp.growth, inflation:bp.inflation, contribScale:1} : (bp.scenarios[sc.key]||{});
+          const scInfl = s.inflation!=null?s.inflation:bp.inflation;
           const res = isBase ? base : (sc.key==='conservative'?cons:opt);
           return (
           <div className={'bp-scard'+(isBase?' base':'')} key={sc.key}>
@@ -2304,13 +2324,14 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:sc.color}}></span>{sc.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(sc.key,{enabled:!scEnabled[sc.key]})}>{scEnabled[sc.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
+            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
             {isBase
-              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your Key assumptions above — {(bp.growth*100).toFixed(1)}% return{!(bp.mode==='bridge' && bp.bridgeDepletion==='full') && ', '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal'}. Edit those to change this line.</div>
+              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your Key assumptions above. Edit the return / inflation there to move this line.</div>
               : <React.Fragment>
-                <div className="bp-fld"><label>Expected return (nominal)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+                <div className="bp-fld"><label>Nominal return</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
                   onChange={v=> updScen(sc.key,{growth:(v||0)/100})} /></div>
-                <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+((s.withdrawalRate||0)*100).toFixed(2)} step="0.1"
-                  onChange={v=> updScen(sc.key,{withdrawalRate:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(sc.key,{inflation:(v||0)/100})} /></div>
                 <div className="bp-fld"><label>Contributions (× Base)</label><BpNum pct value={+((s.contribScale!=null?s.contribScale:1)*100).toFixed(0)} step="5"
                   onChange={v=>updScen(sc.key,{contribScale:(v||0)/100})} /></div>
               </React.Fragment>}
@@ -2421,6 +2442,13 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           ? 'Pension becomes self-sustaining — at '+(base.coasting?'your current balance':('age '+base.coastAge))+' it reaches '+m(base.coastBalance, base.coastAge)+', enough to grow to your '+gbpC(plan.targetPot*bf(base.objAge))+' target by age '+base.objAge+(realTerms?'':' (that’s your '+gbpC(plan.targetPot)+' target in today’s money, grown by inflation to age '+base.objAge+')')+', with no further contributions.'
           : 'On these assumptions your pension doesn’t reach the '+gbpC(plan.targetPot)+' target by age '+base.objAge+' even with your planned contributions. Increase contributions, growth, or push the retirement age.'}</div>
       </div>
+      <details className="bp-why"><summary>Why does "Coast" happen so early?</summary>
+        <ol>
+          <li><b>Coast</b> is the point where your existing pot, left to grow on its own, would still hit your target by age {base.objAge} — <b>with no further contributions</b>. It's not when you retire, it's when saving becomes optional.</li>
+          <li>It lands early when your <b>real return is high</b> — a big pot compounding for {Math.max(0, base.objAge-cp.currentAge)} years does the heavy lifting, so even a modest balance today can coast.</li>
+          <li>From your target age ({base.objAge}) the pension is <b>drawn down</b> for income (less State Pension once it starts at {cp.statePensionAge}); a lower return or higher inflation moves the coast age later and the drawdown harder.</li>
+        </ol>
+      </details>
       <div className="bp-scen-chips">
         <ScenChip name="base" label="Base" color={C.pension} res={base} toggleable={false} />
         <ScenChip name="conservative" label="Conservative" color={C.gia} res={cons} toggleable={true} />
@@ -2596,7 +2624,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-scenarios">
         {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(scn=>{
           const isBase = scn.key==='base';
-          const s = isBase ? {growth:cp.growth, withdrawalRate:cp.withdrawalRate, retirementAge:cp.retirementAge} : (cp.scenarios[scn.key]||{});
+          const s = isBase ? {growth:cp.growth, inflation:cp.inflation} : (cp.scenarios[scn.key]||{});
+          const scInfl = s.inflation!=null?s.inflation:cp.inflation;
           const res = isBase ? base : (scn.key==='conservative'?cons:opt);
           return (
           <div className={'bp-scard'+(isBase?' base':'')} key={scn.key}>
@@ -2604,18 +2633,21 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:scn.color}}></span>{scn.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(scn.key,{enabled:!scEnabled[scn.key]})}>{scEnabled[scn.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
-            <div className="bp-fld"><label>Expected return (nominal)</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
-              onChange={v=> isBase ? setCp({growth:(v||0)/100}) : updScen(scn.key,{growth:(v||0)/100})} /></div>
-            <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(((s.withdrawalRate!=null?s.withdrawalRate:cp.withdrawalRate))*100).toFixed(2)} step="0.1"
-              onChange={v=> isBase ? setCp({withdrawalRate:(v||0)/100}) : updScen(scn.key,{withdrawalRate:(v||0)/100})} /></div>
-            <div className="bp-fld"><label>Retirement age</label><BpNum value={s.retirementAge!=null?s.retirementAge:cp.retirementAge}
-              onChange={v=> isBase ? setCp({retirementAge:Math.round(v)}) : updScen(scn.key,{retirementAge:Math.round(v)})} /></div>
+            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
+            {isBase
+              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your assumptions above. Edit the return / inflation there to move this line.</div>
+              : <React.Fragment>
+                <div className="bp-fld"><label>Nominal return</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(scn.key,{growth:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(scn.key,{inflation:(v||0)/100})} /></div>
+              </React.Fragment>}
             <div className="cross-line">Coast: <b>{res.coastAge!=null?'age '+res.coastAge:'not by '+res.objAge}</b></div>
           </div>
           );
         })}
       </div>
-      <div className="bp-note">Red below the coast line · amber within 10% · green once self-sustaining. Figures in {realTerms?'today’s money':'future £ (nominal)'}. This is a planning model, not financial advice.</div>
+      <div className="bp-note">Scenarios differ only by market assumptions: <b>Optimistic</b> 11% return / 2% inflation · <b>Base</b> {(cp.growth*100).toFixed(0)}% / {(cp.inflation*100).toFixed(1)}% · <b>Conservative</b> 7% / 3%. Red below the coast line · amber within 10% · green once self-sustaining. Figures in {realTerms?'today’s money':'future £ (nominal)'}. Not financial advice.</div>
       </details>
     </div>
   );
@@ -2693,6 +2725,14 @@ function App() {
       }
       b._bv = 3;
     }
+    // one-time migration: make scenarios explicit return+inflation pairs (drop old wr/retirementAge overrides)
+    if (b._bv < 4) {
+      const ds = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.scenarios));
+      const wasOn = b.scenarios || {};
+      ds.conservative.enabled = !!(wasOn.conservative && wasOn.conservative.enabled);
+      ds.optimistic.enabled = !!(wasOn.optimistic && wasOn.optimistic.enabled);
+      b.scenarios = ds; b._bv = 4;
+    }
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
@@ -2716,6 +2756,14 @@ function App() {
         if (c.scenarios.optimistic && c.scenarios.optimistic.growth === 0.09) c.scenarios.optimistic.growth = 0.11;
       }
       c._cv = 3;
+    }
+    // one-time migration: make scenarios explicit return+inflation pairs (drop old wr/retirementAge overrides)
+    if (c._cv < 4) {
+      const ds = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.scenarios));
+      const wasOn = c.scenarios || {};
+      ds.conservative.enabled = !!(wasOn.conservative && wasOn.conservative.enabled);
+      ds.optimistic.enabled = !!(wasOn.optimistic && wasOn.optimistic.enabled);
+      c.scenarios = ds; c._cv = 4;
     }
     return c;
   });
