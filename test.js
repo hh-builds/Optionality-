@@ -133,6 +133,35 @@ cassert(scPlan.optimistic.coastAge == null || (scPlan.base.coastAge != null && s
 console.log('Scenario coast ages (defaults): base', scPlan.base.coastAge, '· conservative', scPlan.conservative.coastAge, '· optimistic', scPlan.optimistic.coastAge);
 console.log(cfails === 0 ? 'ALL COAST ASSERTIONS PASSED' : (cfails + ' COAST ASSERTION(S) FAILED'));
 
+// ===== Coast: State Pension timing in the required pot =====
+line();
+console.log('COAST — State Pension timing in the required pot');
+let sfails = 0; function sassert(c,m){ if(!c){ console.log('FAIL:', m); sfails++; } }
+const spBase = { currentAge:35, currentPension:200000, growth:0.09, inflation:0.025, pensionAccessAge:57,
+  goalMode:'income', targetIncome:70000, withdrawalRate:0.04, statePensionAmount:11900, statePensionAge:67,
+  phases:[{fromAge:35,toAge:60,annual:12000}], scenarios:JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.scenarios)) };
+// retire BEFORE State Pension age -> pot must exceed the naive (income - SP)/wr,
+// because the pension has to self-fund the full income until the SP starts.
+const early = Object.assign({}, JSON.parse(JSON.stringify(spBase)), { retirementAge:60 });
+const naive = (early.targetIncome - early.statePensionAmount) / early.withdrawalRate; // 1,452,500
+const potEarly = Engine.coastPlan(early).targetPot;
+const gReal = (1+early.growth)/(1+early.inflation) - 1;
+const gapYrs = early.statePensionAge - early.retirementAge; // 7
+const expectedBridge = early.statePensionAmount * (1 - Math.pow(1+gReal, -gapYrs)) / gReal * (1+gReal); // annuity-due
+console.log('Retire 60, SP from 67: naive', money(naive), '-> corrected', money(potEarly), '( +'+money(potEarly-naive)+' bridge )');
+sassert(potEarly > naive + 1, 'required pot exceeds naive (income - SP)/wr when retiring before State Pension age');
+sassert(Math.abs(potEarly - (naive + expectedBridge)) < 1, 'corrected pot = perpetual pot + annuity-due bridge for the SP gap years');
+// retire AT/AFTER State Pension age -> no gap, pot unchanged from the naive formula
+const late = Object.assign({}, JSON.parse(JSON.stringify(spBase)), { retirementAge:67 });
+sassert(Math.abs(Engine.coastPlan(late).targetPot - naive) < 1, 'no bridge when retiring at/after State Pension age');
+// no State Pension -> no bridge, pot = income / wr
+const noSp = Object.assign({}, JSON.parse(JSON.stringify(early)), { statePensionAmount:0 });
+sassert(Math.abs(Engine.coastPlan(noSp).targetPot - early.targetIncome/early.withdrawalRate) < 1, 'no State Pension -> pot = income / wr, no bridge');
+// pot-mode target is untouched by the fix
+const potMode = Object.assign({}, JSON.parse(JSON.stringify(early)), { goalMode:'pot', targetPot:1234567 });
+sassert(Engine.coastPlan(potMode).targetPot === 1234567, 'pot-mode target unchanged by State Pension timing');
+console.log(sfails === 0 ? 'ALL SP-TIMING ASSERTIONS PASSED' : (sfails + ' SP-TIMING ASSERTION(S) FAILED'));
+
 // ===== Nominal-return model: inflation genuinely bites =====
 line();
 console.log('NOMINAL-RETURN MODEL / INFLATION');

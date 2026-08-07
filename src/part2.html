@@ -578,7 +578,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
             </React.Fragment>}
       </div>
       <div className="bp-note" style={{marginTop:8}}>{(cp.statePensionAmount||0)>0
-        ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}. The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
+        ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}.{base.objAge < (cp.statePensionAge||67) ? <span> Because you retire at {base.objAge}, before the State Pension starts at {cp.statePensionAge||67}, the pot also carries the capital to self-fund the <b>full</b> {gbpC(cp.targetIncome)}/yr for those {(cp.statePensionAge||67)-base.objAge} year{((cp.statePensionAge||67)-base.objAge)===1?'':'s'} — the year-by-year table below draws the full income until {cp.statePensionAge||67}, then nets off the State Pension.</span> : null} The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
         : <span>No State Pension included — the pension funds the full {gbpC(cp.targetIncome)}/yr. Add it above to model the ~£11.9k/yr it typically provides from age {cp.statePensionAge||67}.</span>}</div>
 
       <div className="bp-sub">Key assumptions</div>

@@ -1116,9 +1116,31 @@
   }
   function coastTargetPot(cp, sc) {
     var wr = (sc && sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
+    if (cp.goalMode !== 'income') return cp.targetPot;
     var sp = cp.statePensionAmount || 0;                       // State Pension covers part of the income
     var privateIncome = Math.max(0, (cp.targetIncome || 0) - sp);
-    return cp.goalMode === 'income' ? (wr > 0 ? privateIncome / wr : Infinity) : cp.targetPot;
+    // Perpetual pot to fund the income ABOVE the State Pension at the withdrawal rate.
+    var pot = wr > 0 ? privateIncome / wr : Infinity;
+    // Bridge-to-State-Pension: if the objective (retirement) age is BEFORE the
+    // State Pension starts, the pension must ALSO replace the not-yet-received
+    // State Pension for those in-between years — otherwise the pot is sized as
+    // if the State Pension were in payment from the objective age. Add the
+    // capital needed to self-fund the State Pension over the gap years, so the
+    // required pot agrees with the year-by-year drawdown (which only nets off
+    // the State Pension from statePensionAge). Discounted at the real return, to
+    // match the drawdown mechanics; no effect when you retire at/after SP age.
+    var objAge = coastObjAge(cp, sc);
+    var spAge = cp.statePensionAge || 67;
+    var gapYears = Math.max(0, spAge - objAge);
+    if (sp > 0 && gapYears > 0 && isFinite(pot)) {
+      var infl = (sc && sc.inflation != null ? sc.inflation : cp.inflation) || 0;
+      var g = (1 + ((sc && sc.growth != null) ? sc.growth : cp.growth)) / (1 + infl) - 1;
+      var bridge;
+      if (Math.abs(g) < 1e-9) bridge = sp * gapYears;
+      else bridge = sp * (1 - Math.pow(1 + g, -gapYears)) / g * (1 + g); // annuity-due
+      pot += bridge;
+    }
+    return pot;
   }
   // Pension at the objective age if contributions cease at `stopAge`.
   function coastFinalIfStop(cp, sc, stopAge) {
