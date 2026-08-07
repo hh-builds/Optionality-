@@ -523,10 +523,15 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           ? <div className="bp-tgroup"><span className="tl">Target pension pot (today’s money)</span><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
           : <React.Fragment>
               <div className="bp-tgroup"><span className="tl">Desired income / yr</span><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /></div>
+              <div className="bp-tgroup"><span className="tl">less State Pension / yr</span><BpNum money value={cp.statePensionAmount||0} step={500} onChange={v=>setCp({statePensionAmount:v})} /></div>
+              <div className="bp-tgroup"><span className="tl">State Pension from age</span><BpNum value={cp.statePensionAge||67} onChange={v=>setCp({statePensionAge:Math.round(v)})} /></div>
               <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(cp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setCp({withdrawalRate:(v||0)/100})} /></div>
               <div className="bp-tgroup"><span className="tl">= Required pension @ {base.objAge}</span><div className="bp-tile" style={{padding:'8px 12px'}}><div className="bt-v" style={{fontSize:16}}>{m(plan.targetPot, base.objAge)}</div></div></div>
             </React.Fragment>}
       </div>
+      <div className="bp-note" style={{marginTop:8}}>{(cp.statePensionAmount||0)>0
+        ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}. The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
+        : <span>No State Pension included — the pension funds the full {gbpC(cp.targetIncome)}/yr. Add it above to model the ~£11.9k/yr it typically provides from age {cp.statePensionAge||67}.</span>}</div>
 
       <div className="bp-sub">Key assumptions</div>
       <div className="bp-assump">

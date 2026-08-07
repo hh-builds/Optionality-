@@ -905,24 +905,23 @@
   // =====================================================================
   var BRIDGE_DEFAULTS = {
     currentAge: 35,
-    currentBalance: 10000,         // typical UK ISA/GIA savings in your 30s
-    targetIncome: 31000,           // PLSA 'moderate' single, today's money
+    currentBalance: 50000,         // engaged saver, top-quartile ISA/GIA in their 30s
+    targetIncome: 43000,           // PLSA 'comfortable' single, today's money
     withdrawalRate: 0.04,          // safe withdrawal rate -> sizes the target pot
-    growth: 0.06,                  // NOMINAL investment return (Base scenario)
+    growth: 0.07,                  // NOMINAL investment return (Base scenario)
     pensionAccessAge: 57,          // bridge end / pension access age (rises to 57 in 2028)
     inflation: 0.025,              // netted off the nominal return; also drives the display toggle
-    // Contribution phases: From..To inclusive; overlapping ranges STACK (add).
     phases: [
-      { fromAge: 35, toAge: 57, annual: 3600 }   // ~300/month into ISA/GIA
+      { fromAge: 35, toAge: 57, annual: 10000 }   // ~830/month into ISA/GIA
     ],
     frequency: 'annual',
-    mode: 'perpetual',
+    mode: 'bridge',                // fund the gap to pension access (the relevant early-retirement framing)
     bridgeDepletion: 'full',
     partialRemainPct: 0.5,
     drawdownFromOptionality: false,
     scenarios: {
-      conservative: { growth: 0.04, withdrawalRate: 0.035, contribScale: 1, enabled: false },
-      optimistic:   { growth: 0.08, withdrawalRate: 0.045, contribScale: 1, enabled: false }
+      conservative: { growth: 0.05, withdrawalRate: 0.035, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.09, withdrawalRate: 0.045, contribScale: 1, enabled: false }
     }
   };
 
@@ -1057,22 +1056,24 @@
   // =====================================================================
   var COAST_DEFAULTS = {
     currentAge: 35,
-    currentPension: 30000,         // ~median UK pension pot at 35-39
+    currentPension: 90000,         // engaged saver, top-quartile pension in their 30s
     phases: [
-      { fromAge: 35, toAge: 65, annual: 5000 }   // ~auto-enrolment on a typical salary (employee + employer)
+      { fromAge: 35, toAge: 60, annual: 12000 }   // strong ongoing pension contributions (employee + employer)
     ],
-    growth: 0.06,                  // NOMINAL investment return (Base)
+    growth: 0.07,                  // NOMINAL investment return (Base)
     inflation: 0.025,              // netted off the nominal return; also drives the display toggle
     pensionAccessAge: 57,          // when the pension can be accessed
     retirementAge: 65,             // objective age - when you want the target pot
     goalMode: 'income',            // 'pot' | 'income' (income is friendlier for new users)
-    targetPot: 775000,             // fallback for pot mode (= 31k / 4%)
-    targetIncome: 31000,           // PLSA 'moderate' single (today's money)
-    withdrawalRate: 0.04,          // income / rate = required pot (income mode)
-    impactLevels: [3000, 6000, 9000],
+    targetPot: 775000,             // fallback for pot mode
+    targetIncome: 43000,           // PLSA 'comfortable' single (today's money)
+    withdrawalRate: 0.04,          // (income - State Pension) / rate = required pot (income mode)
+    statePensionAmount: 11900,     // full new State Pension ~2025/26 (today's money); 0 to exclude
+    statePensionAge: 67,           // State Pension age
+    impactLevels: [5000, 10000, 15000],
     scenarios: {
-      conservative: { growth: 0.04, withdrawalRate: 0.035, retirementAge: 67, enabled: false },
-      optimistic:   { growth: 0.08, withdrawalRate: 0.045, retirementAge: 60, enabled: false }
+      conservative: { growth: 0.05, withdrawalRate: 0.035, retirementAge: 62, enabled: false },
+      optimistic:   { growth: 0.09, withdrawalRate: 0.045, retirementAge: 58, enabled: false }
     }
   };
 
@@ -1094,7 +1095,9 @@
   }
   function coastTargetPot(cp, sc) {
     var wr = (sc && sc.withdrawalRate != null) ? sc.withdrawalRate : cp.withdrawalRate;
-    return cp.goalMode === 'income' ? (wr > 0 ? cp.targetIncome / wr : Infinity) : cp.targetPot;
+    var sp = cp.statePensionAmount || 0;                       // State Pension covers part of the income
+    var privateIncome = Math.max(0, (cp.targetIncome || 0) - sp);
+    return cp.goalMode === 'income' ? (wr > 0 ? privateIncome / wr : Infinity) : cp.targetPot;
   }
   // Pension at the objective age if contributions cease at `stopAge`.
   function coastFinalIfStop(cp, sc, stopAge) {
@@ -1213,6 +1216,8 @@
     var endAge = 90;
     var accessAge = bp.pensionAccessAge;
     var income = bp.targetIncome || 0;            // real annual retirement spend
+    var spAmt = cp.statePensionAmount || 0;       // State Pension income (real)
+    var spAge = cp.statePensionAge || 67;         // age it starts
     var bx = bridgePlan(bp).base.crossAge;        // work-optional age (accessible funds optionality)
     var retireAge = (bx != null) ? bx : accessAge;
     var pen = cp.currentPension || 0, acc = bp.currentBalance || 0;   // real balances
@@ -1223,12 +1228,14 @@
       if (a < retireAge) {                          // accumulation
         penIn = coastContribAt(cp, a) / Math.pow(1 + inflC, a - cp.currentAge);
         accIn = bridgeContribAt(bp, a) / Math.pow(1 + inflB, a - bp.currentAge);
-      } else if (income > 0) {                      // decumulation — draw the target income
+      } else {                                      // decumulation — draw income, less State Pension once it starts
+        var need = income - (a >= spAge ? spAmt : 0);
+        if (need < 0) need = 0;
         if (a < accessAge) {                        // pension locked -> from accessible only
-          accOut = Math.min(accStart, income);
+          accOut = Math.min(accStart, need);
         } else {                                    // pension first, then top up from accessible
-          penOut = Math.min(penStart, income);
-          accOut = Math.min(accStart, income - penOut);
+          penOut = Math.min(penStart, need);
+          accOut = Math.min(accStart, need - penOut);
         }
       }
       var penMid = penStart + penIn - penOut, accMid = accStart + accIn - accOut;
