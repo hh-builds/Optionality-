@@ -632,26 +632,6 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
       </div>
 
-      {/* CONTRIBUTION IMPACT */}
-      </details>
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Does another £20k move the needle?</summary>
-      <div className="tablewrap">
-        <table>
-          <thead><tr><th>Flat annual contribution</th><th>Coast age</th><th>Pension @ {base.objAge}</th><th>Retirement income</th></tr></thead>
-          <tbody>
-            {plan.contributionImpact.map((x,i)=>(
-              <tr key={i}>
-                <td style={{textAlign:'left'}}>{gbp(x.level)}/yr</td>
-                <td>{x.coastAge!=null?x.coastAge:'—'}</td>
-                <td>{m(x.finalPension, base.objAge)}</td>
-                <td>{m(x.income, base.objAge)}/yr</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="bp-note">Flat contribution from now to age {base.objAge}, replacing your phases, so you can see the marginal effect of saving more. Income = pot × withdrawal rate.</div>
-
       {/* YEAR-BY-YEAR */}
       </details>
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.rows.length?base.rows[base.rows.length-1].age:base.objAge}</summary>

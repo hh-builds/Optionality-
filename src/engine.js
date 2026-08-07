@@ -1247,7 +1247,6 @@
       conservative: coastProject(cp, cons),
       optimistic: coastProject(cp, opt),
       stopSchedule: coastStopSchedule(cp, baseSc),
-      contributionImpact: coastContributionImpact(cp, baseSc),
       targetPot: base.targetPot,
       objAge: base.objAge
     };
