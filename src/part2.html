@@ -47,6 +47,21 @@ function useColors() {
   return c;
 }
 
+/* ---------- viewport width hook (adaptive charts / labels) ---------- */
+function useIsNarrow(px) {
+  const q = '(max-width:' + (px || 560) + 'px)';
+  const get = () => (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia(q).matches : false;
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia(q);
+    const h = () => setNarrow(mq.matches); h();
+    mq.addEventListener ? mq.addEventListener('change', h) : mq.addListener(h);
+    return () => { mq.removeEventListener ? mq.removeEventListener('change', h) : mq.removeListener(h); };
+  }, [q]);
+  return narrow;
+}
+
 /* ---------- robust number input ----------
    Keeps a local text buffer and selects-all on focus, so typing a new
    number always REPLACES the old one (no stray leading zero) while the
@@ -159,6 +174,7 @@ function BpNum({ value, onChange, step, min, money, pct, suffix }) {
 
 function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
+  const narrow = useIsNarrow();
   // display factor: engine is REAL; nominal view re-inflates by (1+infl)^t
   const bf = (age) => realTerms ? 1 : Math.pow(1 + (bp.inflation||0), (age||bp.currentAge) - bp.currentAge);
   const m = (v, age) => gbpC(v * bf(age));
@@ -266,13 +282,13 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
             <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
             <Tooltip content={<ChartTip/>} />
             {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
-              label={{ value:'Optionality '+base.crossAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
-            <ReferenceLine x={bp.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:'Pension access '+bp.pensionAccessAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
-            {base.depletionAge && <ReferenceLine x={base.depletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:'Runs out '+base.depletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
+              label={{ value:(narrow?'Opt ':'Optionality ')+base.crossAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
+            <ReferenceLine x={bp.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:(narrow?'Access ':'Pension access ')+bp.pensionAccessAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
+            {base.depletionAge && <ReferenceLine x={base.depletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:(narrow?'Out ':'Runs out ')+base.depletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="target" name="Target portfolio" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -441,6 +457,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
    ============================================================= */
 function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
+  const narrow = useIsNarrow();
   const bf = (age) => realTerms ? 1 : Math.pow(1 + (cp.inflation||0), (age||cp.currentAge) - cp.currentAge);
   const m = (v, age) => gbpC(v * bf(age));
 
@@ -532,13 +549,13 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
             <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
             <Tooltip content={<ChartTip/>} />
             {base.reached && !base.coasting && <ReferenceLine x={base.coastAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
               label={{ value:'Coast '+base.coastAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
-            <ReferenceLine x={base.objAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:'Retire / draw '+base.objAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
-            {base.coastDepletionAge && <ReferenceLine x={base.coastDepletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:'Runs out '+base.coastDepletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
+            <ReferenceLine x={base.objAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:(narrow?'Draw ':'Retire / draw ')+base.objAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
+            {base.coastDepletionAge && <ReferenceLine x={base.coastDepletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:(narrow?'Out ':'Runs out ')+base.coastDepletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="required" name="Required coast balance" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -693,6 +710,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 /* ============================================================= */
 function App() {
   const C = useColors();
+  const narrow = useIsNarrow();
   const [inputs, setInputs] = useState(() => {
     let base = JSON.parse(JSON.stringify(Engine.DEFAULTS));
     try { const s = localStorage.getItem('optionality.inputs');
@@ -1031,11 +1049,11 @@ function App() {
         <ResponsiveContainer width="100%" height={260}>
           <AreaChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
             <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
             <Tooltip content={<ChartTip/>} />
-            <ReferenceLine x={combined.retireAge} stroke={C.good} strokeDasharray="3 3" label={{value:'Work-optional '+combined.retireAge, position:'insideTopLeft', fill:C.good, fontSize:11}} />
-            <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:'Pension access '+combined.pensionAccessAge, position:'insideTopRight', fill:C.axis, fontSize:11}} />
+            <ReferenceLine x={combined.retireAge} stroke={C.good} strokeDasharray="3 3" label={{value:(narrow?'Optional ':'Work-optional ')+combined.retireAge, position:'insideTopLeft', fill:C.good, fontSize:11}} />
+            <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:(narrow?'Access ':'Pension access ')+combined.pensionAccessAge, position:'insideTopRight', fill:C.axis, fontSize:11}} />
             <Area type="monotone" dataKey="accessible" name="ISA / GIA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
             <Area type="monotone" dataKey="pension" name="Pension" stackId="1" stroke={C.pension} fill={C.pension} fillOpacity={0.5} />
           </AreaChart>
@@ -1054,7 +1072,7 @@ function App() {
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
             <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
             <Tooltip content={<ChartTip/>} />
             <ReferenceLine y={0} stroke={C.baseline} />

@@ -553,6 +553,47 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .bridge-planner{padding:18px 15px}
 }
 
+/* =====================================================================
+   MOBILE / ADAPTIVE — thumb-friendly targets, readable tables, tighter chrome
+   ===================================================================== */
+/* Wide year-by-year tables: sticky first (Age) column + a scroll shadow that
+   fades at each end, so it's clear there's more to swipe. Applies on any
+   narrow/touch width; the desktop layout is untouched. */
+@media (max-width:820px){
+  .tablewrap{
+    -webkit-overflow-scrolling:touch;
+    background:
+      linear-gradient(to right, var(--surface-1) 30%, rgba(0,0,0,0)) left center / 22px 100% no-repeat local,
+      linear-gradient(to left, var(--surface-1) 30%, rgba(0,0,0,0)) right center / 22px 100% no-repeat local,
+      radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,.14), rgba(0,0,0,0)) right center / 11px 100% no-repeat scroll;
+  }
+  .tablewrap table{font-size:12px}
+  .tablewrap th,.tablewrap td{padding-left:8px;padding-right:8px;white-space:nowrap}
+  .tablewrap thead th:first-child,
+  .tablewrap tbody td:first-child{position:sticky;left:0;z-index:2;
+    background:var(--surface-1);box-shadow:1px 0 0 var(--border)}
+  .tablewrap tr.bp-green td:first-child{background:var(--phase-ret)}
+  .tablewrap tr.bp-amber td:first-child{background:var(--phase-bridge)}
+}
+@media (max-width:560px){
+  /* iOS zooms any focused input under 16px — bump font, and give comfy targets */
+  .bp-inwrap input,.bp-phase input{font-size:16px;min-height:42px}
+  /* bigger tap targets on the segmented toggles and toolbar buttons */
+  .bp-seg button{padding:11px 14px;min-height:44px;font-size:13px}
+  .btn{padding:10px 13px;min-height:42px}
+  .bp-seg{flex-wrap:wrap}
+  /* reclaim horizontal space so content isn't pinched */
+  .wrap{padding:14px 12px 60px}
+  .bridge-planner{padding:16px 13px}
+  .bp-headline .bp-big{font-size:38px}
+  .bp-title{font-size:17px}
+  /* segmented toggle groups stack rather than overflow */
+  .bp-toggles{gap:14px}
+  .bp-tgroup{width:100%}
+  .bp-seg{width:100%}
+  .bp-seg button{flex:1 1 0}
+}
+
 @media print{
   .toolbar,.add-link,.icon-btn,input[type=range]{display:none!important}
   body{background:#fff} .acc{break-inside:avoid} .panel,.card,.hero{box-shadow:none;border:1px solid #ddd}
