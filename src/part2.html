@@ -224,6 +224,16 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               ? 'Work-optional at age '+base.crossAge+' — your '+gbpC(base.crossBalance*bf(base.crossAge))+' accessible pot can fund '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr from then until pension access '+bp.pensionAccessAge+' (drawing down as you go), when your pension takes over.'
               : 'Full optionality — your projected ISA/GIA first covers the '+gbpC(targetPot*bf(base.crossAge))+' portfolio needed to support '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr indefinitely at a '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal rate.')
           : 'On these assumptions your accessible wealth doesn’t yet reach the pot needed to fund '+gbpC(bp.targetIncome)+'/yr by pension access age '+bp.pensionAccessAge+'. Adjust contributions, growth or the target below.'}</div>
+        {base.reached && bp.drawdownFromOptionality && (function(){
+          var lasts = base.depletionAge == null || base.depletionAge >= bp.pensionAccessAge;
+          var covers = (base.depletionAge!=null?base.depletionAge:(bp.lifeExpectancy||90)) - base.crossAge;
+          return <div className={'bp-verdict '+(lasts?'ok':'bad')}>
+            {lasts
+              ? <span>✅ <b>Your bridge lasts to pension access {bp.pensionAccessAge}.</b>{base.depletionAge?' On accessible wealth alone it would then run dry at age '+base.depletionAge+'.':''}</span>
+              : <span>❌ <b>Bridge runs dry at age {base.depletionAge}</b> — {bp.pensionAccessAge-base.depletionAge} year{(bp.pensionAccessAge-base.depletionAge)===1?'':'s'} short of pension access {bp.pensionAccessAge}.</span>}
+            <span className="bp-verdict-sub"> Covers {covers} year{covers===1?'':'s'} of withdrawals from age {base.crossAge}.</span>
+          </div>;
+        })()}
       </div>
       <div className="bp-scen-chips">
         <ScenChip name="base" label="Base" color={C.pension} res={base} toggleable={false} />
@@ -930,6 +940,33 @@ function App() {
       <div className="layout">
       <main className="main">
 
+      {/* ===== EXECUTIVE SUMMARY ===== */}
+      <div className="panel exec-sum">
+        <div className="es-head">📋 Your plan today — what to do</div>
+        {(function(){
+          var cb = coast.base, bb = bridge.base, cAge = bridgeInputs.currentAge;
+          var pen = cb.coasting
+            ? {ic:'✅', t:<span><b>Pension:</b> Complete — it already self-funds your target (coasting), so further pension contributions are optional.</span>}
+            : cb.reached
+              ? {ic:'🎯', t:<span><b>Pension:</b> On track — you can stop contributing at <b>age {cb.coastAge}</b> ({cb.yearsUntilCoast} more year{cb.yearsUntilCoast===1?'':'s'} of saving).</span>}
+              : {ic:'⚠️', t:<span><b>Pension:</b> Behind — projected <b>{gbpC(cb.potAtObj)}</b> vs your {gbpC(coast.targetPot)} target by {cb.objAge}. Raise contributions or push the objective age.</span>};
+          var lasts = bb.depletionAge == null || bb.depletionAge >= bridgeInputs.pensionAccessAge;
+          var br;
+          if (bb.crossAge == null) {
+            var gap = Math.max(0, bridge.targetPot - bridgeInputs.currentBalance);
+            br = {ic:'⚠️', t:<span><b>Bridge fund:</b> Not there yet — roughly <b>{gbpC(gap)}</b> short of the pot needed to walk away. Keep saving or add a lump sum.</span>};
+          } else if (!lasts) {
+            br = {ic:'❌', t:<span><b>Bridge fund:</b> Work-optional at {bb.crossAge}, but it runs dry at <b>age {bb.depletionAge}</b> — {bridgeInputs.pensionAccessAge-bb.depletionAge} year{(bridgeInputs.pensionAccessAge-bb.depletionAge)===1?'':'s'} short of pension access {bridgeInputs.pensionAccessAge}.</span>};
+          } else {
+            br = {ic:'✅', t:<span><b>Bridge fund:</b> {bb.crossAge<=cAge?'Complete — you can walk away now':'On track — work-optional at age '+bb.crossAge}; it lasts to pension access {bridgeInputs.pensionAccessAge}.</span>};
+          }
+          var opt = bb.crossAge != null
+            ? {ic:'🎯', t:<span><b>Full optionality:</b> Age <b>{bb.crossAge}</b>{cb.reached?'':' — though the pension is still building'}.</span>}
+            : {ic:'🎯', t:<span><b>Full optionality:</b> not reachable on the current plan — adjust savings, growth or targets below.</span>};
+          return [pen, br, opt].map(function(l,i){ return <div className="es-line" key={i}><span className="es-ic">{l.ic}</span><span>{l.t}</span></div>; });
+        })()}
+        <div className="es-foot">Synthesised from the two planners below · figures in today’s money.</div>
+      </div>
 
       {/* ===== THE TWO HEADLINE OPTIONALITY TOOLS ===== */}
       <div className="section-title">When can I walk away from work?</div>
