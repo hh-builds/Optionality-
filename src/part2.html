@@ -750,6 +750,15 @@ function App() {
     delete b.lumpSum; delete b.lumpSumAge;
     // one-time migration: turn on the drawdown showcase for saved states that pre-date it
     if (!b._bv || b._bv < 2) { b.drawdownFromOptionality = true; if (b.lifeExpectancy == null) b.lifeExpectancy = 90; b._bv = 2; }
+    // one-time migration: bump the default nominal return 7% -> 9% (and the scenario bands), where untouched
+    if (b._bv < 3) {
+      if (b.growth === 0.07) b.growth = 0.09;
+      if (b.scenarios) {
+        if (b.scenarios.conservative && b.scenarios.conservative.growth === 0.05) b.scenarios.conservative.growth = 0.07;
+        if (b.scenarios.optimistic && b.scenarios.optimistic.growth === 0.09) b.scenarios.optimistic.growth = 0.11;
+      }
+      b._bv = 3;
+    }
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
@@ -765,6 +774,15 @@ function App() {
     if (!c.scenarios) c.scenarios = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.scenarios));
     // one-time migration: seed the State Pension for saved states that pre-date it
     if (!c._cv || c._cv < 2) { if (c.statePensionAmount == null) c.statePensionAmount = 11900; if (c.statePensionAge == null) c.statePensionAge = 67; c._cv = 2; }
+    // one-time migration: bump the default nominal return 7% -> 9% (and the scenario bands), where untouched
+    if (c._cv < 3) {
+      if (c.growth === 0.07) c.growth = 0.09;
+      if (c.scenarios) {
+        if (c.scenarios.conservative && c.scenarios.conservative.growth === 0.05) c.scenarios.conservative.growth = 0.07;
+        if (c.scenarios.optimistic && c.scenarios.optimistic.growth === 0.09) c.scenarios.optimistic.growth = 0.11;
+      }
+      c._cv = 3;
+    }
     return c;
   });
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
