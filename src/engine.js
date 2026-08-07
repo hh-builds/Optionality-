@@ -918,7 +918,8 @@
     mode: 'bridge',                // fund the gap to pension access (the relevant early-retirement framing)
     bridgeDepletion: 'full',
     partialRemainPct: 0.5,
-    drawdownFromOptionality: false,
+    drawdownFromOptionality: true, // from optionality, draw the income and show the pot deplete
+    lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
       conservative: { growth: 0.05, withdrawalRate: 0.035, contribScale: 1, enabled: false },
       optimistic:   { growth: 0.09, withdrawalRate: 0.045, contribScale: 1, enabled: false }
@@ -963,6 +964,7 @@
   function bridgeProject(bp, sc) {
     var curAge = bp.currentAge;
     var endAge = Math.max(bp.pensionAccessAge, curAge + 1);
+    if (bp.drawdownFromOptionality) endAge = Math.max(endAge, bp.lifeExpectancy || 90); // run drawdown out to life expectancy
     var infl = bp.inflation || 0;
     var g = (1 + sc.growth) / (1 + infl) - 1;   // real return = nominal return deflated by inflation
     var wr = sc.withdrawalRate;
@@ -1011,8 +1013,12 @@
     for (var j = 0; j < rows.length; j++) if (rows[j].age === bp.pensionAccessAge) { accessRow = rows[j]; break; }
     if (!accessRow && rows.length) accessRow = rows[rows.length - 1];
 
+    var depletionAge = null;   // first age the pot is exhausted while drawing income
+    for (var k = 0; k < rows.length; k++) { if (rows[k].drawing && rows[k].balance <= 1) { depletionAge = rows[k].age; break; } }
+
     return {
       rows: rows,
+      depletionAge: depletionAge,
       perpetualPot: perpetualPot,
       reached: crossAge !== null,
       crossAge: crossAge,

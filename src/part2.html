@@ -252,6 +252,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
             <Tooltip content={<ChartTip/>} />
             {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
               label={{ value:'Optionality '+base.crossAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
+            <ReferenceLine x={bp.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:'Pension access '+bp.pensionAccessAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
+            {base.depletionAge && <ReferenceLine x={base.depletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:'Runs out '+base.depletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="target" name="Target portfolio" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -333,7 +335,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           </div>
         </div>
       </div>
-      {bp.drawdownFromOptionality && <div className="bp-note" style={{marginTop:0,marginBottom:10}}>Drawdown view: from age {base.crossAge!=null?base.crossAge:'optionality'} the projected line stops contributions and draws <b>{gbpC(bp.targetIncome)}/yr</b>, so you can see how the pot holds up afterwards — it ends at <b>{base.balanceAtAccess!=null?gbpC(base.balanceAtAccess*bf(bp.pensionAccessAge)):'—'}</b> by pension access {bp.pensionAccessAge} (vs building up if you kept saving). A pot that keeps rising means your withdrawal is comfortably covered by growth.</div>}
+      {bp.drawdownFromOptionality && <div className="bp-note" style={{marginTop:0,marginBottom:10}}>Drawdown view: from optionality (age {base.crossAge!=null?base.crossAge:'—'}) contributions stop and the pot pays out <b>{gbpC(bp.targetIncome)}/yr</b>. {base.depletionAge ? <span>On accessible wealth alone it <b style={{color:'var(--critical)'}}>runs out at age {base.depletionAge}</b> — from pension access ({bp.pensionAccessAge}) your pension is meant to take over (see the combined charts below).</span> : <span>The pot <b>sustains</b> the withdrawals out to {bp.lifeExpectancy||90} — your drawdown is covered by growth.</span>} Turn this off in Advanced for pure accumulation.</div>}
       <div className="bp-note" style={{marginBottom:14}}>{bp.mode==='perpetual'
         ? 'Perpetual: a fixed target you could live off indefinitely at your withdrawal rate — a 4–5% rule.'
         : 'Bridge: the ISA/GIA only needs to last until pension access age '+bp.pensionAccessAge+', so the required pot is smaller and shrinks each year — often bringing optionality forward. '+(bp.bridgeDepletion==='preserve'?'Preserving capital keeps the full perpetual target.':bp.bridgeDepletion==='full'?'Fully using the bridge draws it to zero by access.':'Partially depleting leaves '+Math.round((bp.partialRemainPct!=null?bp.partialRemainPct:0.5)*100)+'% of the perpetual pot at access.')}</div>
@@ -367,7 +369,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="tablewrap">
         <table>
           <thead><tr>
-            <th>Age</th><th>Projected ISA/GIA</th><th>Contribution</th><th>Market growth</th><th>Target balance</th><th>Surplus / shortfall</th><th>Supported income</th><th>Status</th>
+            <th>Age</th><th>Projected ISA/GIA</th><th>Contribution</th><th>Withdrawal</th><th>Market growth</th><th>Target balance</th><th>Surplus / shortfall</th><th>Supported income</th><th>Status</th>
           </tr></thead>
           <tbody>
             {base.rows.map((r,i)=>{
@@ -377,6 +379,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
                 <td>{r.age}</td>
                 <td>{m(r.balance, r.age)}</td>
                 <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
+                <td>{r.withdraw?<span style={{color:'var(--critical)'}}>{m(-r.withdraw, r.age)}</span>:'—'}</td>
                 <td className="bp-growth">{(function(){var w=r.withdraw||0;var g=(r.balance+r.contribution-w+r.growth)*bf(r.age+1)-r.balance*bf(r.age)-r.contribution*bf(r.age)+w*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
                 <td>{m(r.target, r.age)}</td>
                 <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
