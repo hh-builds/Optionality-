@@ -993,7 +993,7 @@ function App() {
       <div className="section-title">Combined net worth</div>
       <div className="panel">
         <div className="chart-h"><h2>Combined net worth</h2></div>
-        <div className="desc">Pension + accessible ISA/GIA wealth to age 90 \u2014 building until you go work-optional (age {combined.retireAge}), then drawn down for retirement income. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
+        <div className="desc">Pension + accessible ISA/GIA wealth to age 90 — building until you go work-optional (age {combined.retireAge}), then drawn down for retirement income. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={narrow?200:260}>
           <AreaChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
@@ -1016,7 +1016,7 @@ function App() {
 
       <div className="panel" style={{marginBottom:16}}>
         <div className="chart-h"><h2>Annual cash flow</h2></div>
-        <div className="desc">Money <b>in</b> (contributions, above the line) and <b>out</b> (retirement income drawn, below the line), by pot \u2014 to age 90.</div>
+        <div className="desc">Money <b>in</b> (contributions, above the line) and <b>out</b> (retirement income drawn, below the line), by pot — to age 90.</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={narrow?188:240}>
           <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
