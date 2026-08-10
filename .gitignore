@@ -3,5 +3,10 @@
 node_modules/
 vendor/
 *.png
+# …but the PWA icons ARE part of the deployed app — keep them tracked:
+!icon-192.png
+!icon-512.png
+!icon-maskable-512.png
+!apple-touch-icon.png
 test-local.html
 .DS_Store
