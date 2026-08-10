@@ -1,0 +1,22 @@
+{
+  "name": "optionality-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Vite + React build of the Financial Optionality web app.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:engine": "node engine.test.cjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}
