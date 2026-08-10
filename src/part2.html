@@ -85,57 +85,6 @@ function NumInput({ value, onChange, step, min, className, style, title, ariaLab
   );
 }
 
-/* ---------- small input components ---------- */
-function Num({ label, value, onChange, step, prefix, suffix, min }) {
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <div className="row">
-        {prefix && <span className="muted" style={{fontSize:13}}>{prefix}</span>}
-        <NumInput value={value} onChange={onChange} step={step} min={min != null ? min : 0} ariaLabel={label} />
-        {suffix && <span className="muted" style={{fontSize:13}}>{suffix}</span>}
-      </div>
-    </div>
-  );
-}
-function Pct({ label, value, onChange }) {
-  return (
-    <div className="field">
-      <label>{label}</label>
-      <div className="row">
-        <NumInput value={+(value*100).toFixed(2)} step="0.1" onChange={v => onChange((v||0)/100)} ariaLabel={label} />
-        <span className="muted" style={{fontSize:13}}>%</span>
-      </div>
-    </div>
-  );
-}
-function Section({ title, children, open, span, id }) {
-  return (
-    <details className={'acc' + (span ? ' span-all' : '')} open={open} id={id}>
-      <summary>{title}<span className="chev">▶</span></summary>
-      <div className="body">{children}</div>
-    </details>
-  );
-}
-
-/* ---------- KPI card ---------- */
-function StatusTag({ s }) {
-  const map = { ahead:'Ahead', ontrack:'On track', behind:'Behind' };
-  return <span className={'tag '+s}>{map[s]}</span>;
-}
-function KpiCard({ title, main, rows, status, reason }) {
-  return (
-    <div className="card">
-      <h3>{title}{status && <StatusTag s={status} />}</h3>
-      <div className="v tnum">{main}</div>
-      {reason && <div className={'kpi-reason '+(reason.good?'good':'bad')}>{reason.text}</div>}
-      {rows.map((r,i) => (
-        <div className="kv" key={i}><span className="k">{r[0]}</span><span className="val tnum">{r[1]}</span></div>
-      ))}
-    </div>
-  );
-}
-
 /* ---------- custom tooltip ---------- */
 function ChartTip({ active, payload, label, fmt }) {
   if (!active || !payload || !payload.length) return null;
