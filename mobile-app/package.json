@@ -1,0 +1,25 @@
+{
+  "name": "optionality-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor native wrapper for the Financial Optionality web app.",
+  "scripts": {
+    "build:www": "node build-www.mjs",
+    "sync": "node build-www.mjs && cap sync",
+    "add:ios": "cap add ios",
+    "add:android": "cap add android",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android",
+    "icons": "capacitor-assets generate --iconBackgroundColor #2a78d6 --iconBackgroundColorDark #0d0d0d"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.1.2",
+    "esbuild": "^0.23.0"
+  }
+}

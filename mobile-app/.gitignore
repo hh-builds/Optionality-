@@ -1,0 +1,7 @@
+# Capacitor: generated native projects and deps are NOT committed.
+node_modules/
+ios/
+android/
+.DS_Store
+# www/ IS committed (index.html, app.js, vendor/*) so `cap sync` works without
+# a rebuild. Regenerate index.html + app.js with `npm run build:www`.

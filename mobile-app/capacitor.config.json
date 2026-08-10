@@ -1,0 +1,8 @@
+{
+  "appId": "uk.futurefunded.app",
+  "appName": "Optionality",
+  "webDir": "www",
+  "backgroundColor": "#f4f4f1",
+  "ios": { "contentInset": "always" },
+  "android": { "backgroundColor": "#f4f4f1" }
+}
