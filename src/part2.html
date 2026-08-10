@@ -279,7 +279,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       {/* 2) GRAPH */}
       <div className="bp-chart">
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={320}>
+        <ResponsiveContainer width="100%" height={narrow?236:320}>
           <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
@@ -417,7 +417,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
       {/* 5) YEAR-BY-YEAR TABLE */}
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {bp.currentAge}–{bp.pensionAccessAge}</summary>
-      <div className="tablewrap">
+      <div className="tablewrap cards">
         <table>
           <thead><tr>
             <th>Age</th><th>Projected ISA/GIA</th><th>Contribution</th><th>Withdrawal</th><th>Market growth</th><th>Target balance</th><th>Surplus / shortfall</th><th>Supported income</th><th>Status</th>
@@ -427,15 +427,15 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               const st = rowStatus(r);
               return (
               <tr key={i} className={rowClass(r)+(r.age===base.crossAge?' bp-cross-row':'')}>
-                <td>{r.age}</td>
-                <td>{m(r.balance, r.age)}</td>
-                <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
-                <td>{r.withdraw?<span style={{color:'var(--critical)'}}>{m(-r.withdraw, r.age)}</span>:'—'}</td>
-                <td className="bp-growth">{(function(){var w=r.withdraw||0;var g=(r.balance+r.contribution-w+r.growth)*bf(r.age+1)-r.balance*bf(r.age)-r.contribution*bf(r.age)+w*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
-                <td>{m(r.target, r.age)}</td>
-                <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
-                <td>{m(r.income, r.age)}/yr</td>
-                <td><span className={'bp-status '+st[0]}>{st[1]}</span></td>
+                <td data-label="Age">{r.age}</td>
+                <td data-label="Projected ISA/GIA">{m(r.balance, r.age)}</td>
+                <td data-label="Contribution">{r.contribution?m(r.contribution, r.age):'—'}</td>
+                <td data-label="Withdrawal">{r.withdraw?<span style={{color:'var(--critical)'}}>{m(-r.withdraw, r.age)}</span>:'—'}</td>
+                <td data-label="Market growth" className="bp-growth">{(function(){var w=r.withdraw||0;var g=(r.balance+r.contribution-w+r.growth)*bf(r.age+1)-r.balance*bf(r.age)-r.contribution*bf(r.age)+w*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
+                <td data-label="Target balance">{m(r.target, r.age)}</td>
+                <td data-label="Surplus / shortfall" style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
+                <td data-label="Supported income">{m(r.income, r.age)}/yr</td>
+                <td data-label="Status"><span className={'bp-status '+st[0]}>{st[1]}</span></td>
               </tr>
               );
             })}
@@ -546,7 +546,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       {/* 2) GRAPH */}
       <div className="bp-chart">
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={320}>
+        <ResponsiveContainer width="100%" height={narrow?236:320}>
           <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
@@ -636,7 +636,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-chart">
         <div className="bp-note" style={{marginTop:0,marginBottom:8}}>Each point: your pension at age {base.objAge} <b>if you stopped contributing at that age</b>. Where it meets the target is the last year you need to keep paying in — <b>{base.reached ? (base.yearsUntilCoast===0?'you can stop now':'about '+base.yearsUntilCoast+' more year'+(base.yearsUntilCoast===1?'':'s')) : 'not reached on these assumptions'}</b>.</div>
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width="100%" height={narrow?160:200}>
           <LineChart data={stopData} margin={{top:10,right:18,left:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="stopAge" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
@@ -652,20 +652,20 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       {/* YEAR-BY-YEAR */}
       </details>
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.rows.length?base.rows[base.rows.length-1].age:base.objAge}</summary>
-      <div className="tablewrap">
+      <div className="tablewrap cards">
         <table>
           <thead><tr><th>Age</th><th>Projected pension</th><th>Coast balance required</th><th>Surplus / shortfall</th><th>Annual contribution</th><th>Withdrawal</th><th>Market growth</th><th>Status</th></tr></thead>
           <tbody>
             {base.rows.map((r,i)=>{ const st = rowStat(r); return (
               <tr key={i} className={rowClass(r)+(r.age===base.coastAge?' bp-cross-row':'')}>
-                <td>{r.age}</td>
-                <td>{m(r.projected, r.age)}</td>
-                <td>{m(r.required, r.age)}</td>
-                <td style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
-                <td>{r.contribution?m(r.contribution, r.age):'—'}</td>
-                <td>{r.withdraw?<span style={{color:'var(--critical)'}}>{m(-r.withdraw, r.age)}</span>:'—'}</td>
-                <td className="bp-growth">{(function(){var w=r.withdraw||0;var g=(r.projected+r.contribution-w+r.growth)*bf(r.age+1)-r.projected*bf(r.age)-r.contribution*bf(r.age)+w*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
-                <td><span className={'bp-status '+st[0]}>{st[1]}</span></td>
+                <td data-label="Age">{r.age}</td>
+                <td data-label="Projected pension">{m(r.projected, r.age)}</td>
+                <td data-label="Coast balance required">{m(r.required, r.age)}</td>
+                <td data-label="Surplus / shortfall" style={{color:r.surplus>=0?'var(--good-text)':'var(--critical)'}}>{(r.surplus>=0?'+':'−')+m(Math.abs(r.surplus), r.age)}</td>
+                <td data-label="Annual contribution">{r.contribution?m(r.contribution, r.age):'—'}</td>
+                <td data-label="Withdrawal">{r.withdraw?<span style={{color:'var(--critical)'}}>{m(-r.withdraw, r.age)}</span>:'—'}</td>
+                <td data-label="Market growth" className="bp-growth">{(function(){var w=r.withdraw||0;var g=(r.projected+r.contribution-w+r.growth)*bf(r.age+1)-r.projected*bf(r.age)-r.contribution*bf(r.age)+w*bf(r.age);return (g>=0?'+':'−')+gbpC(Math.abs(g));})()}</td>
+                <td data-label="Status"><span className={'bp-status '+st[0]}>{st[1]}</span></td>
               </tr>
             ); })}
           </tbody>
@@ -1046,7 +1046,7 @@ function App() {
         <div className="chart-h"><h2>Combined net worth</h2></div>
         <div className="desc">Pension + accessible ISA/GIA wealth to age 90 \u2014 building until you go work-optional (age {combined.retireAge}), then drawn down for retirement income. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={narrow?200:260}>
           <AreaChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
@@ -1069,7 +1069,7 @@ function App() {
         <div className="chart-h"><h2>Annual cash flow</h2></div>
         <div className="desc">Money <b>in</b> (contributions, above the line) and <b>out</b> (retirement income drawn, below the line), by pot \u2014 to age 90.</div>
         {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={240}>
+        <ResponsiveContainer width="100%" height={narrow?188:240}>
           <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
@@ -1101,7 +1101,7 @@ function App() {
           </div>
         </div>
         <div className="desc" style={{marginTop:0,marginBottom:10}}>Pension and accessible wealth side by side each year, from the two planners. Contributions shown as entered; balances and growth follow the toggle.</div>
-        <div className="tablewrap" style={{maxHeight:520}}>
+        <div className="tablewrap cards" style={{maxHeight:520}}>
           <table>
             <thead>
               <tr className="grouprow"><th></th><th colSpan={5} className="grp grp-p">Pension</th><th colSpan={5} className="grp grp-a">ISA / GIA</th><th></th></tr>
@@ -1115,10 +1115,10 @@ function App() {
                 var gv = function(end,start,inn,out){ return gbpC(end*nf1 - start*nf - inn*nf + out*nf); };
                 return (
                 <tr key={i}>
-                  <td>{r.age}</td>
-                  <td>{mv(r.pension)}</td><td>{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td>{r.pensionOut?<span style={{color:'var(--critical)'}}>{mv(-r.pensionOut)}</span>:'\u2014'}</td><td>{gv(r.pensionEnd,r.pension,r.pensionIn,r.pensionOut)}</td><td>{gbpC(r.pensionEnd*nf1)}</td>
-                  <td>{mv(r.accessible)}</td><td>{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td>{r.accessibleOut?<span style={{color:'var(--critical)'}}>{mv(-r.accessibleOut)}</span>:'\u2014'}</td><td>{gv(r.accessibleEnd,r.accessible,r.accessibleIn,r.accessibleOut)}</td><td>{gbpC(r.accessibleEnd*nf1)}</td>
-                  <td><b>{mv(r.netWorth)}</b></td>
+                  <td data-label="Age">{r.age}</td>
+                  <td data-label="Pension start">{mv(r.pension)}</td><td data-label="Pension in">{r.pensionIn?mv(r.pensionIn):'\u2014'}</td><td data-label="Pension out">{r.pensionOut?<span style={{color:'var(--critical)'}}>{mv(-r.pensionOut)}</span>:'\u2014'}</td><td data-label="Pension growth">{gv(r.pensionEnd,r.pension,r.pensionIn,r.pensionOut)}</td><td data-label="Pension end">{gbpC(r.pensionEnd*nf1)}</td>
+                  <td data-label="ISA/GIA start">{mv(r.accessible)}</td><td data-label="ISA/GIA in">{r.accessibleIn?mv(r.accessibleIn):'\u2014'}</td><td data-label="ISA/GIA out">{r.accessibleOut?<span style={{color:'var(--critical)'}}>{mv(-r.accessibleOut)}</span>:'\u2014'}</td><td data-label="ISA/GIA growth">{gv(r.accessibleEnd,r.accessible,r.accessibleIn,r.accessibleOut)}</td><td data-label="ISA/GIA end">{gbpC(r.accessibleEnd*nf1)}</td>
+                  <td data-label="Net worth"><b>{mv(r.netWorth)}</b></td>
                 </tr>);
               })}
             </tbody>
