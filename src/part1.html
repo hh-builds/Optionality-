@@ -574,6 +574,33 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-why ol{margin:2px 0 4px;padding-left:20px;color:var(--muted);line-height:1.6}
 .bp-why li{margin-bottom:4px}
 .bp-why li b{color:var(--text-primary);font-weight:650}
+
+/* --- sequence-risk / drawdown stress test --- */
+.bp-stress{margin:6px 0 4px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);padding:16px 18px;box-shadow:var(--shadow)}
+.bp-stress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.bp-stress-q{font-size:21px;font-weight:700;letter-spacing:-0.015em;line-height:1.14}
+.bp-stress-resid{display:flex;flex-direction:column;gap:4px;min-width:150px}
+.bp-stress-resid label{font-size:11px;color:var(--muted);font-weight:600}
+.bp-stress-lines{display:flex;flex-direction:column}
+.ssl{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 2px;border-top:1px solid var(--border)}
+.ssl:first-child{border-top:none}
+.ssl .k{font-size:13.5px;color:var(--text-secondary)}
+.ssl .k .muted{font-weight:500}
+.ssl .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.ssl .v.ok{color:var(--good-text)}
+.ssl .v.no{color:var(--critical)}
+.ssl .v.muted{color:var(--muted);font-weight:600;font-size:12px}
+.ssl.next .k{color:var(--muted)}
+.bp-stress-sub{font-size:13px;color:var(--text-secondary);margin-top:11px;line-height:1.55}
+.bp-stress-sub.bad{color:var(--critical)}
+.ss-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 6px}
+.ss-card{border:1px solid var(--border);border-radius:11px;padding:11px 13px;background:var(--surface-1)}
+.ss-card .n{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.ss-card .n .cd{width:9px;height:9px;border-radius:50%}
+.ss-card .st{font-size:13px;font-weight:700}
+.ss-card .st.ok{color:var(--good-text)} .ss-card .st.no{color:var(--critical)}
+.ss-card .dt{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+@media (max-width:560px){ .ss-cards{grid-template-columns:1fr} .bp-stress-q{font-size:18px} .bp-stress-resid{min-width:0;width:100%} }
 </style>
 </head>
 <body>

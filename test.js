@@ -189,3 +189,43 @@ const bpd = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))
 const bBase = Engine.bridgePlan(JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))).base;
 const bDraw = Engine.bridgePlan(bpd).base;
 console.log('Bridge drawdown: crossover', bDraw.crossAge, '(unchanged '+ (bDraw.crossAge===bBase.crossAge) +') · balance@access', money(bDraw.balanceAtAccess), 'vs', money(bBase.balanceAtAccess), 'without');
+
+// ===== Sequence-risk / drawdown stress testing (Phase 1) =====
+line();
+console.log('SEQUENCE-RISK STRESS TEST (bridge period)');
+let xfails = 0; function xassert(c,m){ if(!c){ console.log('FAIL:', m); xfails++; } }
+const sbp = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
+const sBase = Engine.bridgePlan(sbp).base;
+const st = Engine.bridgeStressTest(sbp, 0);
+console.log('Work-optional age :', st.startAge, '(exact '+st.startAgeExact+')  bridge', st.bridgeYears, 'yrs to access', st.accessAge);
+console.log('Pot at crossover  :', money(st.startBalance), '· base real return', (st.baseReal*100).toFixed(2)+'%');
+['normal','poorStart','crash'].forEach(function(k){ const s = st.scenarios[k];
+  console.log('  '+k.padEnd(10)+' survived '+s.survived+'  residual '+money(s.residual)+(s.failAge!=null?'  runs dry @'+s.failAge:'')); });
+console.log('Base projection: '+(st.survivesNormal?'Yes':'No')+' · Bad early markets: '+(st.survivesBadStart?'Yes':'No'));
+
+// anchors on the deterministic crossover
+xassert(st.reached === true, 'default plan reaches a work-optional age to stress');
+xassert(st.startAge === sBase.crossAge, 'stress test starts at the deterministic crossover age');
+xassert(st.bridgeYears === st.accessAge - st.startAge, 'bridge years = access age − start age');
+xassert(st.scenarios.normal.rows.length === st.bridgeYears, 'one row per bridge year');
+// Normal (shock=[]) must reproduce the deterministic projection's balance at access
+xassert(Math.abs(st.scenarios.normal.residual - sBase.balanceAtAccess) < 1,
+  'Normal residual reproduces the base projection balance @access ('+money(st.scenarios.normal.residual)+' vs '+money(sBase.balanceAtAccess)+')');
+xassert(st.survivesNormal === true, 'Normal scenario survives to access at the default plan');
+// Stress genuinely bites: bad early markets fail where Normal survives
+xassert(st.scenarios.crash.residual <= st.scenarios.normal.residual, 'a crash never leaves more than the normal path');
+xassert(st.scenarios.poorStart.residual <= st.scenarios.normal.residual, 'a poor start never leaves more than the normal path');
+xassert(st.survivesBadStart === false, 'default plan does NOT survive both bad-start scenarios (there is real sequence risk)');
+xassert(st.worstFail === 'crash', 'the crash is flagged as the harshest failing scenario');
+// income drawn is the constant real target every year
+xassert(st.scenarios.crash.rows.every(function(r){ return Math.abs(r.withdraw - sbp.targetIncome) < 1; }), 'each bridge year draws the constant real target income');
+// a higher minimum residual can only make things HARDER (monotonic in the floor)
+const stFloor = Engine.bridgeStressTest(sbp, 50000);
+xassert(!(stFloor.survivesNormal && !st.survivesNormal), 'raising the residual floor never turns a fail into a pass');
+xassert(stFloor.survivesNormal === false, 'a £50k residual floor is not met by the full-depletion default (Normal now fails)');
+// a very well-funded plan survives every stress scenario
+const rich = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)); rich.currentBalance = 5000000;
+const stRich = Engine.bridgeStressTest(rich, 0);
+xassert(stRich.startAge === rich.currentAge, 'a huge starting pot is work-optional immediately');
+xassert(stRich.survivesNormal && stRich.survivesBadStart, 'a richly funded bridge survives all three stress scenarios');
+console.log(xfails === 0 ? 'ALL STRESS-TEST ASSERTIONS PASSED' : (xfails + ' STRESS-TEST ASSERTION(S) FAILED'));

@@ -922,6 +922,7 @@
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
     keepContributingAfterOptionality: false, // option: keep paying in the contribution phases even past optionality
     lifeExpectancy: 90,            // horizon for the drawdown view
+    minResidual: 0,                // sequence-risk: buffer (today's money) to keep at pension access
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
       // (conservative = lower return, higher inflation, lower safe withdrawal rate)
@@ -1063,6 +1064,119 @@
       optimistic: bridgeProject(bp, opt),
       targetPot: bp.withdrawalRate > 0 ? bp.targetIncome / bp.withdrawalRate : Infinity
     };
+  }
+
+  // =====================================================================
+  //  SEQUENCE-RISK / DRAWDOWN STRESS TESTING  (ISA/GIA bridge period)
+  //
+  //  The deterministic Base / Conservative / Optimistic projections all assume
+  //  a CONSTANT annual return. Sequence risk is about ORDER, not average: the
+  //  same set of returns can fund the bridge comfortably or run it dry purely
+  //  depending on whether the bad years land early — while you're drawing an
+  //  income and no longer have a wage to ride them out. This layer holds the
+  //  plan fixed (stop at the deterministic work-optional / crossover age, draw
+  //  the target income, constant real) and replays it against VARIABLE
+  //  real-return sequences over the bridge years — the gap between stopping
+  //  work and pension access.
+  //
+  //  Phase 1 (here): three deterministic stress scenarios — Normal, Poor Start
+  //  and Crash — each reported with its year-by-year trajectory and whether the
+  //  pot survives to pension access.
+  //  Phase 2 (later): Monte Carlo / historical block-bootstrap across thousands
+  //  of sequences, a success probability, a chosen confidence level and a
+  //  stress-tested optionality age.
+  //
+  //  Convention (matches bridgeProject): each year the income is withdrawn
+  //  first, then the remaining balance grows at that year's real return. Income
+  //  is constant REAL — it keeps pace with inflation, exactly as elsewhere in
+  //  the tool. A path SURVIVES if it funds every year's income to pension
+  //  access without the balance dropping below the user's chosen minimum
+  //  residual, and still holds at least that residual when the pension unlocks.
+  // =====================================================================
+
+  // Real (after-inflation) return from a nominal return + inflation.
+  function realReturn(nominal, inflation) { return (1 + nominal) / (1 + (inflation || 0)) - 1; }
+
+  // Phase-1 stress overlays. Each `shock` is a sequence of REAL returns applied
+  // from the work-optional age; once it is exhausted, returns revert to the
+  // plan's own real return (`baseReal`). Poor Start = a weak opening run (a
+  // "lost" first few years); Crash = a severe first-year fall with a normal
+  // V-shaped recovery — the classic "worst time to stop working" shock. These
+  // are stress OVERLAYS, not mean-preserving reorderings: the point is to see
+  // whether the bridge holds when markets turn against you right at the start.
+  var BRIDGE_STRESS = [
+    { key: 'normal',    label: 'Normal',     shock: [] },
+    { key: 'poorStart', label: 'Poor start', shock: [-0.06, -0.10, -0.03] },
+    { key: 'crash',     label: 'Crash',      shock: [-0.35, 0.18, 0.12] }
+  ];
+
+  // Simulate one drawdown path over the bridge years [startAge, accessAge).
+  //   o = { startAge, accessAge, startBalance, income, minResidual, baseReal, shock }
+  function bridgeDrawdownPath(o) {
+    var bal = o.startBalance, income = o.income, minR = o.minResidual || 0;
+    var rows = [], survived = true, failAge = null, low = Infinity;
+    for (var a = o.startAge, i = 0; a < o.accessAge; a++, i++) {
+      var r = (o.shock && i < o.shock.length) ? o.shock[i] : o.baseReal;
+      var startBal = bal;
+      var afterDraw = startBal - income;            // income taken at the start of the year
+      var breached = afterDraw < minR - 1e-6;       // can't fund the year and hold the floor
+      if (breached) { survived = false; if (failAge === null) failAge = a; }
+      var endBal = Math.max(0, afterDraw) * (1 + r);
+      low = Math.min(low, afterDraw);
+      rows.push({ age: a, startBalance: round2(startBal), withdraw: round2(income), ret: r,
+                  endBalance: round2(endBal), funded: !breached });
+      bal = endBal;
+    }
+    var residual = bal;                              // balance when the pension unlocks
+    if (residual < minR - 1e-6) survived = false;
+    if (low === Infinity) low = bal;                 // no bridge years (crossover ≥ access)
+    return { rows: rows, survived: survived, failAge: failAge,
+             residual: round2(residual), lowPoint: round2(low),
+             startAge: o.startAge, accessAge: o.accessAge };
+  }
+
+  // Full Phase-1 stress test for a bridge plan. Anchors on the deterministic
+  // work-optional (crossover) age and the pot you'd actually hold there, then
+  // runs each stress scenario. `minResidual` is the buffer (today's money) the
+  // user wants left when the pension unlocks (defaults to bp.minResidual or 0).
+  function bridgeStressTest(bp, minResidual) {
+    var basePlan = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
+    var startAge = basePlan.crossAge;
+    var accessAge = bp.pensionAccessAge;
+    var minR = minResidual != null ? minResidual : (bp.minResidual || 0);
+    var out = {
+      reached: startAge != null,
+      startAge: startAge,
+      startAgeExact: basePlan.crossAgeExact,
+      accessAge: accessAge,
+      bridgeYears: startAge != null ? Math.max(0, accessAge - startAge) : null,
+      minResidual: minR,
+      income: bp.targetIncome,
+      baseReal: realReturn(bp.growth, bp.inflation),
+      scenarios: {}
+    };
+    if (startAge == null) return out;                // never work-optional: nothing to stress
+
+    // pot held entering the crossover age (the money you'd have when you stop)
+    var startBalance = basePlan.crossBalance;
+    for (var i = 0; i < basePlan.rows.length; i++) {
+      if (basePlan.rows[i].age === startAge) { startBalance = basePlan.rows[i].balance; break; }
+    }
+    out.startBalance = round2(startBalance);
+
+    for (var s = 0; s < BRIDGE_STRESS.length; s++) {
+      var sc = BRIDGE_STRESS[s];
+      out.scenarios[sc.key] = bridgeDrawdownPath({
+        startAge: startAge, accessAge: accessAge, startBalance: startBalance,
+        income: bp.targetIncome, minResidual: minR, baseReal: out.baseReal, shock: sc.shock
+      });
+    }
+    out.survivesNormal = out.scenarios.normal.survived;
+    out.survivesBadStart = out.scenarios.poorStart.survived && out.scenarios.crash.survived;
+    // the harshest scenario that fails (worst first), for the headline copy
+    out.worstFail = !out.scenarios.crash.survived ? 'crash'
+      : (!out.scenarios.poorStart.survived ? 'poorStart' : null);
+    return out;
   }
 
   // =====================================================================
@@ -1332,6 +1446,10 @@
     BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
     bridgePlan: bridgePlan,
     bridgeProject: bridgeProject,
+    bridgeStressTest: bridgeStressTest,
+    bridgeDrawdownPath: bridgeDrawdownPath,
+    realReturn: realReturn,
+    BRIDGE_STRESS: BRIDGE_STRESS,
     COAST_DEFAULTS: COAST_DEFAULTS,
     coastPlan: coastPlan,
     coastProject: coastProject,

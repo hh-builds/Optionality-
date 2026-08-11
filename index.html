@@ -574,6 +574,33 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-why ol{margin:2px 0 4px;padding-left:20px;color:var(--muted);line-height:1.6}
 .bp-why li{margin-bottom:4px}
 .bp-why li b{color:var(--text-primary);font-weight:650}
+
+/* --- sequence-risk / drawdown stress test --- */
+.bp-stress{margin:6px 0 4px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);padding:16px 18px;box-shadow:var(--shadow)}
+.bp-stress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.bp-stress-q{font-size:21px;font-weight:700;letter-spacing:-0.015em;line-height:1.14}
+.bp-stress-resid{display:flex;flex-direction:column;gap:4px;min-width:150px}
+.bp-stress-resid label{font-size:11px;color:var(--muted);font-weight:600}
+.bp-stress-lines{display:flex;flex-direction:column}
+.ssl{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 2px;border-top:1px solid var(--border)}
+.ssl:first-child{border-top:none}
+.ssl .k{font-size:13.5px;color:var(--text-secondary)}
+.ssl .k .muted{font-weight:500}
+.ssl .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.ssl .v.ok{color:var(--good-text)}
+.ssl .v.no{color:var(--critical)}
+.ssl .v.muted{color:var(--muted);font-weight:600;font-size:12px}
+.ssl.next .k{color:var(--muted)}
+.bp-stress-sub{font-size:13px;color:var(--text-secondary);margin-top:11px;line-height:1.55}
+.bp-stress-sub.bad{color:var(--critical)}
+.ss-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 6px}
+.ss-card{border:1px solid var(--border);border-radius:11px;padding:11px 13px;background:var(--surface-1)}
+.ss-card .n{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.ss-card .n .cd{width:9px;height:9px;border-radius:50%}
+.ss-card .st{font-size:13px;font-weight:700}
+.ss-card .st.ok{color:var(--good-text)} .ss-card .st.no{color:var(--critical)}
+.ss-card .dt{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+@media (max-width:560px){ .ss-cards{grid-template-columns:1fr} .bp-stress-q{font-size:18px} .bp-stress-resid{min-width:0;width:100%} }
 </style>
 </head>
 <body>
@@ -1504,6 +1531,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
     keepContributingAfterOptionality: false, // option: keep paying in the contribution phases even past optionality
     lifeExpectancy: 90,            // horizon for the drawdown view
+    minResidual: 0,                // sequence-risk: buffer (today's money) to keep at pension access
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
       // (conservative = lower return, higher inflation, lower safe withdrawal rate)
@@ -1645,6 +1673,119 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
       optimistic: bridgeProject(bp, opt),
       targetPot: bp.withdrawalRate > 0 ? bp.targetIncome / bp.withdrawalRate : Infinity
     };
+  }
+
+  // =====================================================================
+  //  SEQUENCE-RISK / DRAWDOWN STRESS TESTING  (ISA/GIA bridge period)
+  //
+  //  The deterministic Base / Conservative / Optimistic projections all assume
+  //  a CONSTANT annual return. Sequence risk is about ORDER, not average: the
+  //  same set of returns can fund the bridge comfortably or run it dry purely
+  //  depending on whether the bad years land early — while you're drawing an
+  //  income and no longer have a wage to ride them out. This layer holds the
+  //  plan fixed (stop at the deterministic work-optional / crossover age, draw
+  //  the target income, constant real) and replays it against VARIABLE
+  //  real-return sequences over the bridge years — the gap between stopping
+  //  work and pension access.
+  //
+  //  Phase 1 (here): three deterministic stress scenarios — Normal, Poor Start
+  //  and Crash — each reported with its year-by-year trajectory and whether the
+  //  pot survives to pension access.
+  //  Phase 2 (later): Monte Carlo / historical block-bootstrap across thousands
+  //  of sequences, a success probability, a chosen confidence level and a
+  //  stress-tested optionality age.
+  //
+  //  Convention (matches bridgeProject): each year the income is withdrawn
+  //  first, then the remaining balance grows at that year's real return. Income
+  //  is constant REAL — it keeps pace with inflation, exactly as elsewhere in
+  //  the tool. A path SURVIVES if it funds every year's income to pension
+  //  access without the balance dropping below the user's chosen minimum
+  //  residual, and still holds at least that residual when the pension unlocks.
+  // =====================================================================
+
+  // Real (after-inflation) return from a nominal return + inflation.
+  function realReturn(nominal, inflation) { return (1 + nominal) / (1 + (inflation || 0)) - 1; }
+
+  // Phase-1 stress overlays. Each `shock` is a sequence of REAL returns applied
+  // from the work-optional age; once it is exhausted, returns revert to the
+  // plan's own real return (`baseReal`). Poor Start = a weak opening run (a
+  // "lost" first few years); Crash = a severe first-year fall with a normal
+  // V-shaped recovery — the classic "worst time to stop working" shock. These
+  // are stress OVERLAYS, not mean-preserving reorderings: the point is to see
+  // whether the bridge holds when markets turn against you right at the start.
+  var BRIDGE_STRESS = [
+    { key: 'normal',    label: 'Normal',     shock: [] },
+    { key: 'poorStart', label: 'Poor start', shock: [-0.06, -0.10, -0.03] },
+    { key: 'crash',     label: 'Crash',      shock: [-0.35, 0.18, 0.12] }
+  ];
+
+  // Simulate one drawdown path over the bridge years [startAge, accessAge).
+  //   o = { startAge, accessAge, startBalance, income, minResidual, baseReal, shock }
+  function bridgeDrawdownPath(o) {
+    var bal = o.startBalance, income = o.income, minR = o.minResidual || 0;
+    var rows = [], survived = true, failAge = null, low = Infinity;
+    for (var a = o.startAge, i = 0; a < o.accessAge; a++, i++) {
+      var r = (o.shock && i < o.shock.length) ? o.shock[i] : o.baseReal;
+      var startBal = bal;
+      var afterDraw = startBal - income;            // income taken at the start of the year
+      var breached = afterDraw < minR - 1e-6;       // can't fund the year and hold the floor
+      if (breached) { survived = false; if (failAge === null) failAge = a; }
+      var endBal = Math.max(0, afterDraw) * (1 + r);
+      low = Math.min(low, afterDraw);
+      rows.push({ age: a, startBalance: round2(startBal), withdraw: round2(income), ret: r,
+                  endBalance: round2(endBal), funded: !breached });
+      bal = endBal;
+    }
+    var residual = bal;                              // balance when the pension unlocks
+    if (residual < minR - 1e-6) survived = false;
+    if (low === Infinity) low = bal;                 // no bridge years (crossover ≥ access)
+    return { rows: rows, survived: survived, failAge: failAge,
+             residual: round2(residual), lowPoint: round2(low),
+             startAge: o.startAge, accessAge: o.accessAge };
+  }
+
+  // Full Phase-1 stress test for a bridge plan. Anchors on the deterministic
+  // work-optional (crossover) age and the pot you'd actually hold there, then
+  // runs each stress scenario. `minResidual` is the buffer (today's money) the
+  // user wants left when the pension unlocks (defaults to bp.minResidual or 0).
+  function bridgeStressTest(bp, minResidual) {
+    var basePlan = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
+    var startAge = basePlan.crossAge;
+    var accessAge = bp.pensionAccessAge;
+    var minR = minResidual != null ? minResidual : (bp.minResidual || 0);
+    var out = {
+      reached: startAge != null,
+      startAge: startAge,
+      startAgeExact: basePlan.crossAgeExact,
+      accessAge: accessAge,
+      bridgeYears: startAge != null ? Math.max(0, accessAge - startAge) : null,
+      minResidual: minR,
+      income: bp.targetIncome,
+      baseReal: realReturn(bp.growth, bp.inflation),
+      scenarios: {}
+    };
+    if (startAge == null) return out;                // never work-optional: nothing to stress
+
+    // pot held entering the crossover age (the money you'd have when you stop)
+    var startBalance = basePlan.crossBalance;
+    for (var i = 0; i < basePlan.rows.length; i++) {
+      if (basePlan.rows[i].age === startAge) { startBalance = basePlan.rows[i].balance; break; }
+    }
+    out.startBalance = round2(startBalance);
+
+    for (var s = 0; s < BRIDGE_STRESS.length; s++) {
+      var sc = BRIDGE_STRESS[s];
+      out.scenarios[sc.key] = bridgeDrawdownPath({
+        startAge: startAge, accessAge: accessAge, startBalance: startBalance,
+        income: bp.targetIncome, minResidual: minR, baseReal: out.baseReal, shock: sc.shock
+      });
+    }
+    out.survivesNormal = out.scenarios.normal.survived;
+    out.survivesBadStart = out.scenarios.poorStart.survived && out.scenarios.crash.survived;
+    // the harshest scenario that fails (worst first), for the headline copy
+    out.worstFail = !out.scenarios.crash.survived ? 'crash'
+      : (!out.scenarios.poorStart.survived ? 'poorStart' : null);
+    return out;
   }
 
   // =====================================================================
@@ -1914,6 +2055,10 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
     bridgePlan: bridgePlan,
     bridgeProject: bridgeProject,
+    bridgeStressTest: bridgeStressTest,
+    bridgeDrawdownPath: bridgeDrawdownPath,
+    realReturn: realReturn,
+    BRIDGE_STRESS: BRIDGE_STRESS,
     COAST_DEFAULTS: COAST_DEFAULTS,
     coastPlan: coastPlan,
     coastProject: coastProject,
@@ -2308,6 +2453,124 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
       <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years (ages 35 and 36). Phases <b>stack</b>: if two ranges cover the same age, their amounts add there — so a one-off like a <b>£400k lump at 36</b> is just a single-year phase (36 to 36) on top of recurring saving. The year-by-year table shows the combined amount at each age. Contributions are in today’s money and shown as entered (not inflated). A £0 phase stops contributions.</div>
+
+      {/* ===== SEQUENCE RISK / DRAWDOWN STRESS TEST (Phase 1) ===== */}
+      {(function(){
+        const stress = Engine.bridgeStressTest(bp, bp.minResidual||0);
+        const sc = stress.scenarios;
+        const accessNf = realTerms ? 1 : Math.pow(1+(bp.inflation||0), stress.accessAge - bp.currentAge);
+        const ageLabel = stress.startAgeExact!=null ? stress.startAgeExact.toFixed(1) : (stress.startAge!=null?stress.startAge:'—');
+        const hasBridge = stress.reached && stress.bridgeYears>0;
+        let sData = [];
+        if (hasBridge){
+          const n = sc.normal.rows.length;
+          for (let i=0;i<n;i++){ const a = sc.normal.rows[i].age;
+            sData.push({ age:a, normal: sc.normal.rows[i].startBalance*bf(a),
+              poor: sc.poorStart.rows[i].startBalance*bf(a), crash: sc.crash.rows[i].startBalance*bf(a) }); }
+          const acc = stress.accessAge;
+          sData.push({ age:acc, normal: Math.max(0,sc.normal.residual)*bf(acc),
+            poor: Math.max(0,sc.poorStart.residual)*bf(acc), crash: Math.max(0,sc.crash.residual)*bf(acc) });
+        }
+        const yn = (b)=> b ? <span className="v ok">Yes</span> : <span className="v no">No</span>;
+        let sub, subBad=false;
+        if (!stress.reached){
+          sub = 'You’re not work-optional before pension access on the current plan, so there’s no bridge period to stress-test yet — adjust contributions, growth or the target above.';
+        } else if (!hasBridge){
+          sub = 'You reach optionality only at pension access, so there’s no ISA/GIA bridge gap that markets could break.';
+        } else if (stress.survivesNormal && stress.survivesBadStart){
+          sub = 'Your bridge survives even a weak opening run or a year-one crash and still reaches pension access '+stress.accessAge+' above your buffer — a comfortable margin against sequence risk.';
+        } else if (!stress.survivesNormal){
+          sub = 'Even steady returns leave less than your '+gbpC(bp.minResidual||0)+' buffer by pension access — a fully-depleting bridge is sized to run down to near zero. Raise contributions, lower the buffer, or plan to keep some pension/other capital in reserve.';
+          subBad=true;
+        } else {
+          const w = sc[stress.worstFail]; const wl = stress.worstFail==='crash'?'a year-one crash':'a poor opening run';
+          sub = 'The base plan holds in steady markets, but '+wl+' empties the pot around age '+w.failAge+' — '+(stress.accessAge-w.failAge)+' year'+((stress.accessAge-w.failAge)===1?'':'s')+' short of pension access '+stress.accessAge+'. To absorb bad early markets you’d stop a little later, keep a bigger buffer, or flex spending after a fall.';
+          subBad=true;
+        }
+        return (
+        <React.Fragment>
+          <div className="bp-sub">Sequence risk · can bad early markets break the bridge?</div>
+          <div className="bp-stress">
+            <div className="bp-stress-head">
+              <div className="bp-stress-q">{stress.reached ? 'Can I stop working at '+ageLabel+'?' : 'Can I stop working before pension access?'}</div>
+              <div className="bp-stress-resid">
+                <label>Buffer to keep at access {bp.pensionAccessAge}</label>
+                <BpNum money value={bp.minResidual||0} step={5000} onChange={v=>setBp({minResidual:Math.max(0,v)})} />
+              </div>
+            </div>
+            <div className="bp-stress-lines">
+              <div className="ssl"><span className="k">Base projection <span className="muted">(steady returns)</span></span>{stress.reached?yn(stress.survivesNormal):<span className="v muted">—</span>}</div>
+              <div className="ssl"><span className="k">Bad early markets <span className="muted">(poor start / crash)</span></span>{stress.reached&&hasBridge?yn(stress.survivesBadStart):<span className="v muted">—</span>}</div>
+              <div className="ssl next"><span className="k">Simulation confidence</span><span className="v muted">Phase 2 · next</span></div>
+              <div className="ssl next"><span className="k">Stress-tested optionality age</span><span className="v muted">Phase 2 · next</span></div>
+            </div>
+            <div className={'bp-stress-sub'+(subBad?' bad':'')}>{sub}</div>
+
+            <details className="bp-why"><summary>What does “bad early markets” mean?</summary>
+              <ol>
+                <li><b>Sequence risk is about order, not average.</b> Once you stop working you’re <b>drawing income from the pot</b> with no wage to top it up. If markets fall in the <b>first few years</b>, you’re selling units to live on while prices are low, so there’s less left to recover when markets bounce — the same set of returns in a different order can pass or fail. Bad years <b>early</b> do far more damage than the same bad years later.</li>
+                <li><b>“Yes” means the bridge survives both stress runs.</b> We replay your plan — stop at {ageLabel}, draw {gbpC(bp.targetIncome)}/yr — against two deliberately harsh openings: <b>Poor start</b> (a weak first three years, roughly −6%, −10%, −3% real) and <b>Crash</b> (−35% in year one, then a normal +18% / +12% rebound). After the shock, returns revert to your {(stress.baseReal*100).toFixed(1)}% trend.</li>
+                <li><b>Survive = the pot never runs below your buffer</b> ({gbpC(bp.minResidual||0)}) before the pension unlocks at {stress.accessAge}. If <b>either</b> run empties the bridge before then, this reads <b>No</b>{stress.worstFail?<span> — here a {stress.worstFail==='crash'?'crash':'poor start'} runs it dry at age {sc[stress.worstFail].failAge}</span>:''}. It’s a deliberately tough test: your Base projection can say Yes while this says No, which is exactly the sequence risk a single average-return line hides.</li>
+              </ol>
+            </details>
+
+            {hasBridge && <details className="bp-collapse">
+              <summary className="bp-sub bp-summary">Stress test detail &amp; methodology</summary>
+              <div className="ss-cards">
+                {[{k:'normal',l:'Normal',c:C.pension},{k:'poorStart',l:'Poor start',c:C.cash},{k:'crash',l:'Crash',c:C.red}].map(function(x){
+                  const s = sc[x.k];
+                  return <div className="ss-card" key={x.k}>
+                    <div className="n"><span className="cd" style={{background:x.c}}></span>{x.l}</div>
+                    <div className={'st '+(s.survived?'ok':'no')}>{s.survived?'Reaches access':'Runs dry @ '+s.failAge}</div>
+                    <div className="dt">{s.survived? 'Leaves '+m(s.residual, stress.accessAge)+' at access '+stress.accessAge : (stress.accessAge-s.failAge)+' yr'+((stress.accessAge-s.failAge)===1?'':'s')+' short of access '+stress.accessAge}</div>
+                  </div>;
+                })}
+              </div>
+              <div className="bp-chart" style={{marginTop:6}}>
+                {ResponsiveContainer ? (
+                <ResponsiveContainer width="100%" height={narrow?220:290}>
+                  <LineChart data={sData} margin={{top:22,right:18,left:8,bottom:2}}>
+                    <CartesianGrid stroke={C.grid} vertical={false} />
+                    <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
+                    <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
+                    <Tooltip content={<ChartTip/>} />
+                    {(bp.minResidual||0)>0 && <ReferenceLine y={(bp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
+                    <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
+                    <Line type="monotone" dataKey="normal" name="Normal" stroke={C.pension} strokeWidth={2.4} dot={false} />
+                    <Line type="monotone" dataKey="poor" name="Poor start" stroke={C.cash} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="crash" name="Crash" stroke={C.red} strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+                <div className="legend-row" style={{marginBottom:2}}>
+                  <span><span className="sw" style={{background:C.pension}}></span>Normal</span>
+                  <span><span className="sw" style={{background:C.cash}}></span>Poor start</span>
+                  <span><span className="sw" style={{background:C.red}}></span>Crash</span>
+                  <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
+                </div>
+              </div>
+              <div className="tablewrap" style={{marginTop:12}}>
+                <table>
+                  <thead><tr><th>Age</th><th>Normal</th><th>Poor start</th><th>Crash</th></tr></thead>
+                  <tbody>
+                    {sData.map(function(r,i){
+                      const cell = (v)=> v<=0 ? <span style={{color:'var(--critical)'}}>Empty</span> : gbpC(v);
+                      return <tr key={i}>
+                        <td>{r.age}{r.age===stress.accessAge?' (access)':''}</td>
+                        <td>{cell(r.normal)}</td><td>{cell(r.poor)}</td><td>{cell(r.crash)}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="bp-note" style={{marginTop:10}}>
+                <b>Method.</b> Starting from the pot you’d hold at your work-optional age ({ageLabel}) — <b>{m(stress.startBalance, stress.startAge)}</b> — each scenario draws your <b>{gbpC(bp.targetIncome)}/yr</b> target income (constant in today’s money) and grows the remainder at a <b>variable</b> real return, year by year, to pension access {stress.accessAge}. The base real return is {(stress.baseReal*100).toFixed(1)}%. <b>Poor start</b> applies roughly −6%, −10%, −3% real over the first three years, then reverts to trend; <b>Crash</b> applies −35% in year one then a +18% / +12% rebound, then trend. A scenario <b>survives</b> if it funds every year’s income and still holds at least your {gbpC(bp.minResidual||0)} buffer when the pension unlocks. These are deterministic stress overlays — <b>Phase 2</b> adds a historical block-bootstrap simulation across thousands of return sequences, a chosen confidence level and a stress-tested optionality age. Planning model, not financial advice.
+              </div>
+            </details>}
+          </div>
+        </React.Fragment>
+        );
+      })()}
+
 
       {/* 6) ADVANCED — contribution frequency & scenarios */}
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · contribution frequency &amp; scenarios</summary>
@@ -2993,6 +3256,8 @@ function App() {
       ds5.optimistic.enabled = !!(was5.optimistic && was5.optimistic.enabled);
       b.scenarios = ds5; b._bv = 5;
     }
+    // one-time migration (v6): sequence-risk minimum residual buffer at access
+    if (b._bv < 6) { if (b.minResidual == null) b.minResidual = 0; b._bv = 6; }
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
