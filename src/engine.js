@@ -920,6 +920,7 @@
     partialRemainPct: 0.5,
     drawdownFromOptionality: true, // from optionality, draw the income and show the pot deplete
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
+    keepContributingAfterOptionality: false, // option: keep paying in the contribution phases even past optionality
     lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
@@ -989,7 +990,9 @@
       var walkedAway = drawdown && crossedInline;             // reached optionality and stopped saving
       var drawing = walkedAway && !((bp.stopDrawAtAccess === true) && a >= bp.pensionAccessAge); // optionally stop drawing at pension access
       var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn (constant real -> keeps pace with inflation)
-      var cNom = walkedAway ? 0 : bridgeContribAt(bp, a) * scale; // contribution (constant nominal £; stops at optionality)
+      // contributions (constant nominal £). Stop at optionality by default; keep paying the
+      // phases past it when keepContributingAfterOptionality is on.
+      var cNom = (walkedAway && !bp.keepContributingAfterOptionality) ? 0 : bridgeContribAt(bp, a) * scale;
       var c = cNom / Math.pow(1 + infl, a - curAge);           // its real value this year (declines with inflation)
       var prevBal = running, nextBal;
       if (monthly) {

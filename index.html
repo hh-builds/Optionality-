@@ -1489,6 +1489,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     partialRemainPct: 0.5,
     drawdownFromOptionality: true, // from optionality, draw the income and show the pot deplete
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
+    keepContributingAfterOptionality: false, // option: keep paying in the contribution phases even past optionality
     lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
@@ -1558,7 +1559,9 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
       var walkedAway = drawdown && crossedInline;             // reached optionality and stopped saving
       var drawing = walkedAway && !((bp.stopDrawAtAccess === true) && a >= bp.pensionAccessAge); // optionally stop drawing at pension access
       var wdraw = drawing ? bp.targetIncome : 0;               // real income drawn (constant real -> keeps pace with inflation)
-      var cNom = walkedAway ? 0 : bridgeContribAt(bp, a) * scale; // contribution (constant nominal £; stops at optionality)
+      // contributions (constant nominal £). Stop at optionality by default; keep paying the
+      // phases past it when keepContributingAfterOptionality is on.
+      var cNom = (walkedAway && !bp.keepContributingAfterOptionality) ? 0 : bridgeContribAt(bp, a) * scale;
       var c = cNom / Math.pow(1 + infl, a - curAge);           // its real value this year (declines with inflation)
       var prevBal = running, nextBal;
       if (monthly) {
@@ -2118,14 +2121,27 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               : <span><b>{m(base.crossBalance, base.crossAge)}</b> covers the <b>{gbpC(targetPot*bf(base.crossAge))}</b> portfolio for {gbpC(bp.targetIncome*bf(base.crossAge))}/yr</span>)
           : <span>Short of the <b>{gbpC(targetPot)}</b> pot needed to fund {gbpC(bp.targetIncome)}/yr by pension access {bp.pensionAccessAge}</span>}</div>
         {(function(){
-          var runsDry = reached && bp.drawdownFromOptionality && base.depletionAge!=null && base.depletionAge < bp.pensionAccessAge;
-          var txt = !reached
-            ? 'Adjust contributions, growth or the target below.'
-            : (!bp.drawdownFromOptionality
-                ? 'From then your ISA/GIA can carry you until your pension takes over at '+bp.pensionAccessAge+'.'
-                : (runsDry
-                    ? 'On these assumptions it runs dry at age '+base.depletionAge+' — '+(bp.pensionAccessAge-base.depletionAge)+' year'+((bp.pensionAccessAge-base.depletionAge)===1?'':'s')+' short of pension access '+bp.pensionAccessAge+'.'
-                    : 'Your bridge lasts to pension access '+bp.pensionAccessAge+', when your pension takes over'+(base.depletionAge?' (on ISA/GIA alone it would run dry at '+base.depletionAge+').':'.')));
+          var perp = bp.mode !== 'bridge';   // perpetual portfolio — a pot you live off indefinitely
+          var lifeAge = bp.lifeExpectancy || 90;
+          var runsDry = reached && bp.drawdownFromOptionality && base.depletionAge != null && (perp ? base.depletionAge <= lifeAge : base.depletionAge < bp.pensionAccessAge);
+          var txt;
+          if (!reached) {
+            txt = 'Adjust contributions, growth or the target below.';
+          } else if (perp) {
+            // perpetual: no bridge / pension-handover framing — the pot is meant to last forever
+            txt = 'A pot this size supports '+gbpC(bp.targetIncome)+'/yr at your '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal rate.'
+              + (bp.drawdownFromOptionality
+                  ? (base.depletionAge
+                      ? ' Drawing that income it still empties by age '+base.depletionAge+' on these figures — trim the draw or raise growth for a truly perpetual pot.'
+                      : ' Drawing that income, growth keeps the pot intact out to '+lifeAge+'.')
+                  : '');
+          } else if (runsDry) {
+            txt = 'On these assumptions it runs dry at age '+base.depletionAge+' — '+(bp.pensionAccessAge-base.depletionAge)+' year'+((bp.pensionAccessAge-base.depletionAge)===1?'':'s')+' short of pension access '+bp.pensionAccessAge+'.';
+          } else if (!bp.drawdownFromOptionality) {
+            txt = 'From then your ISA/GIA can carry you until your pension takes over at '+bp.pensionAccessAge+'.';
+          } else {
+            txt = 'Your bridge lasts to pension access '+bp.pensionAccessAge+', when your pension takes over'+(base.depletionAge?' (on ISA/GIA alone it would run dry at '+base.depletionAge+').':'.');
+          }
           return <div className="bp-help-line" style={runsDry?{color:'var(--critical)'}:null}>{txt}</div>;
         })()}
       </div>
@@ -2179,6 +2195,32 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
         </div>
       </div>
+
+      {/* Optionality drawdown view — surfaced controls for the chart's post-optionality behaviour */}
+      <div className="bp-sub">Optionality drawdown view</div>
+      <div className="bp-toggles">
+        <div className="bp-tgroup"><span className="tl">From optionality, the chart</span>
+          <div className="bp-seg">
+            <button className={!bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:false})} title="Pure accumulation — keep saving, no withdrawals">Keeps saving</button>
+            <button className={bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:true})} title="From optionality, draw the target income and watch how the pot evolves">Draws income</button>
+          </div>
+        </div>
+        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">Contributions after optionality</span>
+          <div className="bp-seg">
+            <button className={!bp.keepContributingAfterOptionality?'on':''} onClick={()=>setBp({keepContributingAfterOptionality:false})} title="Stop paying in once you're work-optional (the usual assumption)">Stop</button>
+            <button className={bp.keepContributingAfterOptionality?'on':''} onClick={()=>setBp({keepContributingAfterOptionality:true})} title="Keep paying your contribution phases even after optionality">Continue</button>
+          </div>
+        </div>}
+        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">Withdrawals at pension access {bp.pensionAccessAge}</span>
+          <div className="bp-seg">
+            <button className={bp.stopDrawAtAccess!==true?'on':''} onClick={()=>setBp({stopDrawAtAccess:false})} title="Keep drawing from ISA/GIA to life expectancy — tests whether accessible wealth alone lasts">Keep drawing</button>
+            <button className={bp.stopDrawAtAccess===true?'on':''} onClick={()=>setBp({stopDrawAtAccess:true})} title="Stop drawing at pension access — your pension takes over, so the pot can recover">Stop at {bp.pensionAccessAge}</button>
+          </div>
+        </div>}
+      </div>
+      <div className="bp-note" style={{marginTop:8,marginBottom:14}}>{bp.drawdownFromOptionality
+        ? <span>From optionality (age {base.crossAge!=null?base.crossAge:'—'}) the chart {bp.keepContributingAfterOptionality?<span>keeps your contributions running <b>and</b> </span>:null}draws <b>{gbpC(bp.targetIncome)}/yr</b>{bp.stopDrawAtAccess?<span> until pension access {bp.pensionAccessAge}, then stops — your pension takes over, so the pot can recover afterwards.</span>:<span> right through to age {bp.lifeExpectancy||90}, to stress-test the accessible pot on its own.</span>} {(!bp.stopDrawAtAccess && base.depletionAge) ? <span>On these figures it <b style={{color:'var(--critical)'}}>empties at age {base.depletionAge}</b>.</span> : null}</span>
+        : <span>Pure accumulation: contributions keep running and nothing is withdrawn, so you can watch the pot reach the target and keep going.</span>}</div>
 
       {/* Understanding these figures — combines the old basis note into one quiet panel */}
       {(function(){
@@ -2254,8 +2296,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       </div>
       <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years (ages 35 and 36). Phases <b>stack</b>: if two ranges cover the same age, their amounts add there — so a one-off like a <b>£400k lump at 36</b> is just a single-year phase (36 to 36) on top of recurring saving. The year-by-year table shows the combined amount at each age. Contributions are in today’s money and shown as entered (not inflated). A £0 phase stops contributions.</div>
 
-      {/* 6) ADVANCED — bridge framing, frequency, scenarios */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · bridge framing &amp; scenarios</summary>
+      {/* 6) ADVANCED — contribution frequency & scenarios */}
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · contribution frequency &amp; scenarios</summary>
       <div className="bp-toggles">
         <div className="bp-tgroup"><span className="tl">Contributions</span>
           <div className="bp-seg">
@@ -2263,20 +2305,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
             <button className={bp.frequency==='monthly'?'on':''} onClick={()=>setBp({frequency:'monthly'})}>Monthly</button>
           </div>
         </div>
-        <div className="bp-tgroup"><span className="tl">Drawdowns (secondary)</span>
-          <div className="bp-seg">
-            <button className={!bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:false})} title="Keep accumulating — the pure 'when do I reach the target' view">Off</button>
-            <button className={bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:true})} title="From optionality age, stop saving and draw the target income to see how the pot evolves">From optionality</button>
-          </div>
-        </div>
-        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">At pension access</span>
-          <div className="bp-seg">
-            <button className={bp.stopDrawAtAccess!==true?'on':''} onClick={()=>setBp({stopDrawAtAccess:false})} title="Keep drawing from ISA/GIA to life expectancy — shows whether accessible wealth alone lasts">Keep drawing</button>
-            <button className={bp.stopDrawAtAccess===true?'on':''} onClick={()=>setBp({stopDrawAtAccess:true})} title="Stop drawing from ISA/GIA at pension access — your pension takes over from then">Stop at {bp.pensionAccessAge}</button>
-          </div>
-        </div>}
       </div>
-      {bp.drawdownFromOptionality && <div className="bp-note" style={{marginTop:0,marginBottom:10}}>Drawdown view: from optionality (age {base.crossAge!=null?base.crossAge:'—'}) contributions stop and the pot pays out <b>{gbpC(bp.targetIncome)}/yr</b>. {base.depletionAge ? <span>On accessible wealth alone it <b style={{color:'var(--critical)'}}>runs out at age {base.depletionAge}</b> — from pension access ({bp.pensionAccessAge}) your pension is meant to take over (see the combined charts below).</span> : <span>The pot <b>sustains</b> the withdrawals out to {bp.lifeExpectancy||90} — your drawdown is covered by growth.</span>} Turn this off in Advanced for pure accumulation.</div>}
       <div className="bp-scenarios">
         {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(sc=>{
           const isBase = sc.key==='base';
