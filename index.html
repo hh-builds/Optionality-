@@ -445,12 +445,19 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .burger{display:inline-flex;position:relative;z-index:61}
   .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
   .toolbar{display:none}
-  .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:6px;
-    position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:200px;
+  .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
+    position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:220px;
     background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
-    padding:8px;box-shadow:var(--shadow)}
-  .toolbar.open .btn{width:100%;justify-content:flex-start;text-align:left;min-height:44px}
-  .toolbar.open .btn.subtle{background:var(--surface-1);border:1px solid var(--border);color:var(--text-primary)}
+    padding:5px;box-shadow:var(--shadow)}
+  /* flat, high-contrast menu items — text-primary on the panel, divided, so each reads clearly.
+     Scoped with '>' so it styles ONLY the top-level toolbar buttons, never the buttons inside
+     the account modal (which is rendered within the still-open toolbar). */
+  .toolbar.open > .btn{width:100%;justify-content:flex-start;text-align:left;min-height:46px;
+    background:transparent;border:none;border-radius:8px;color:var(--text-primary);
+    font-size:15px;font-weight:500;padding:12px 14px}
+  .toolbar.open > .btn:hover{background:var(--surface-1);color:var(--text-primary)}
+  .toolbar.open > .btn:active{background:var(--accent-soft)}
+  .toolbar.open > .btn + .btn{border-top:1px solid var(--border);border-radius:0}
   .bp-seg{flex-wrap:wrap}
   /* reclaim horizontal space so content isn't pinched */
   .wrap{padding:14px 12px 60px}
@@ -2671,7 +2678,14 @@ function AuthButton(){
           else setMsg({type:'ok', text:'Account created — check your email to confirm, then sign in.'});
         } else {
           const { error } = await Cloud.signInWithPassword(email, pw);
-          if (error) setMsg({type:'err', text:error.message});
+          if (error){
+            var t = error.message || 'Sign-in failed.';
+            if (/invalid login credentials/i.test(t))
+              t = 'Email or password not recognised. New here? Switch to “Create account” below. If you first signed in with an email link, you don’t have a password yet — use “Email me a link” instead.';
+            else if (/email not confirmed/i.test(t))
+              t = 'Check your inbox and confirm your email first, then sign in.';
+            setMsg({type:'err', text:t});
+          }
           else { setMsg({type:'ok', text:'Signed in!'}); setTimeout(close, 700); }
         }
       }
