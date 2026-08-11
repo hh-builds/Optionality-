@@ -113,7 +113,20 @@
       if (res.error){ console.warn('[OptCloud] pull failed', res.error); syncedFor = null; return; }
       var row = res.data;
       if (row && row.data && Object.keys(row.data).length){
-        if (canon(row.data) !== canon(snapshot())){ applySnapshot(row.data); location.reload(); return; }
+        if (canon(row.data) !== canon(snapshot())){
+          // Cloud differs from the browser. Pull it in with a reload — but guard against an
+          // infinite loop: on load the app runs one-time input migrations that rewrite
+          // localStorage, so a pre-migration cloud copy would never match and we'd reload
+          // forever. Reload at most once per session; if it STILL differs straight after
+          // (the only delta is the migration), push the already-migrated local state UP so
+          // the cloud converges, instead of looping.
+          var GUARD = 'optionality._syncPulled';
+          var pulled = null; try { pulled = sessionStorage.getItem(GUARD); } catch(e){}
+          if (pulled){ try { sessionStorage.removeItem(GUARD); } catch(e){} saveNow(); return; }
+          try { sessionStorage.setItem(GUARD, '1'); } catch(e){}
+          applySnapshot(row.data); location.reload(); return;
+        }
+        try { sessionStorage.removeItem('optionality._syncPulled'); } catch(e){}
         setStatus('saved');
       } else {
         saveNow();   // brand-new account: seed it with whatever's in the browser now
