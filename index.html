@@ -105,7 +105,7 @@
   // ---- pull on login: cloud wins if it has data, else seed cloud from local ----
   var syncedFor = null;
   function syncFromCloud(){
-    if (!Cloud.user) return;
+    if (!Cloud.user || Cloud.recovery) return;
     var uid = Cloud.user.id;
     if (syncedFor === uid) return;
     syncedFor = uid;
@@ -122,20 +122,25 @@
   }
 
   // ---- auth methods (resolve to { data, error }) ----
+  Cloud.recovery = false;
   Cloud.signInWithPassword = function(email,pw){ return supa.auth.signInWithPassword({ email:email, password:pw }); };
   Cloud.signUpWithPassword = function(email,pw){ return supa.auth.signUp({ email:email, password:pw, options:{ emailRedirectTo:redirectUrl() } }); };
   Cloud.signInWithMagicLink = function(email){ return supa.auth.signInWithOtp({ email:email, options:{ emailRedirectTo:redirectUrl(), shouldCreateUser:true } }); };
+  Cloud.resetPassword = function(email){ return supa.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl() }); };
+  Cloud.updateUser = function(attrs){ return supa.auth.updateUser(attrs); };
   Cloud.signOut = function(){ return supa.auth.signOut().then(function(r){ setUser(null); syncedFor = null; setStatus('idle'); return r; }); };
 
   supa.auth.onAuthStateChange(function(event, session){
     var u = session && session.user ? session.user : null;
     setUser(u);
-    if (u) syncFromCloud();
+    // Arriving from a "reset password" email: don't sync/reload — show the set-password prompt.
+    if (event === 'PASSWORD_RECOVERY'){ Cloud.recovery = true; emit('optcloud:recovery', true); return; }
+    if (u && !Cloud.recovery) syncFromCloud();
   });
 
   supa.auth.getSession().then(function(res){
     var u = res.data && res.data.session ? res.data.session.user : null;
-    if (u){ setUser(u); syncFromCloud(); }
+    if (u){ setUser(u); if (!Cloud.recovery) syncFromCloud(); }
     Cloud.ready = true; emit('optcloud:ready', true);
   });
 })();
@@ -222,6 +227,13 @@ button{font-family:inherit}
 .auth-msg.ok{background:var(--accent-soft);color:var(--accent)}
 .auth-msg.err{background:rgba(208,59,59,.12);color:var(--critical)}
 .auth-link{display:block;width:100%;text-align:center;background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;margin-top:12px;font-weight:600}
+.acc-sec{margin-bottom:12px}
+.acc-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.acc-row{display:flex;gap:8px;align-items:stretch}
+.acc-row .auth-input{margin-bottom:0;flex:1;min-width:0}
+.acc-row .btn{white-space:nowrap}
+.acc-signout{display:flex;width:100%;justify-content:center;margin-top:6px}
+.acc-divider{height:1px;background:var(--border);margin:4px 0 14px}
 
 
 .panel{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
@@ -2598,27 +2610,49 @@ function AuthButton(){
   const [user, setUser] = useState(() => (Cloud && Cloud.user) || null);
   const [status, setStatus] = useState(() => (Cloud && Cloud.status) || 'idle');
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState('link');   // 'link' | 'password'
+  const [recovery, setRecovery] = useState(false);   // arrived from a reset-password email
+  const [mode, setMode] = useState('link');          // 'link' | 'password'
   const [signup, setSignup] = useState(false);
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);        // {type:'ok'|'err', text}
+  const [msg, setMsg] = useState(null);              // {type:'ok'|'err', text}
+  // account-panel fields
+  const [accName, setAccName] = useState('');
+  const [accEmail, setAccEmail] = useState('');
+  const [accPw, setAccPw] = useState('');
 
   useEffect(() => {
     if (!Cloud) return;
     const onAuth = (e) => setUser(e.detail || null);
     const onStat = (e) => setStatus(e.detail || 'idle');
+    const onRecovery = () => { setRecovery(true); setOpen(true); };
     window.addEventListener('optcloud:auth', onAuth);
     window.addEventListener('optcloud:status', onStat);
+    window.addEventListener('optcloud:recovery', onRecovery);
     setUser(Cloud.user || null);
     setStatus(Cloud.status || 'idle');
-    return () => { window.removeEventListener('optcloud:auth', onAuth); window.removeEventListener('optcloud:status', onStat); };
+    if (Cloud.recovery){ setRecovery(true); setOpen(true); }
+    return () => {
+      window.removeEventListener('optcloud:auth', onAuth);
+      window.removeEventListener('optcloud:status', onStat);
+      window.removeEventListener('optcloud:recovery', onRecovery);
+    };
   }, []);
+
+  // prefill the account panel whenever it opens for a signed-in user
+  useEffect(() => {
+    if (open && user){
+      setAccName((user.user_metadata && user.user_metadata.full_name) || '');
+      setAccEmail(user.email || '');
+      setAccPw('');
+    }
+  }, [open, user]);
 
   if (!Cloud || !Cloud.available) return null;
 
-  const close = () => { setOpen(false); setMsg(null); setPw(''); setBusy(false); };
+  const close = () => { setOpen(false); setMsg(null); setPw(''); setAccPw(''); setBusy(false); };
+
   const submit = async () => {
     setMsg(null);
     if (!email || email.indexOf('@') < 0){ setMsg({type:'err', text:'Enter a valid email address.'}); return; }
@@ -2644,25 +2678,112 @@ function AuthButton(){
     } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
     setBusy(false);
   };
+
+  const sendReset = async () => {
+    setMsg(null);
+    if (!email || email.indexOf('@') < 0){ setMsg({type:'err', text:'Enter your email above first.'}); return; }
+    setBusy(true);
+    try { const { error } = await Cloud.resetPassword(email);
+      setMsg(error ? {type:'err', text:error.message} : {type:'ok', text:'Check your email for a link to reset your password.'});
+    } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
+    setBusy(false);
+  };
+
+  const saveName = async () => {
+    setMsg(null); setBusy(true);
+    try { const { error } = await Cloud.updateUser({ data:{ full_name: accName.trim() } });
+      setMsg(error ? {type:'err', text:error.message} : {type:'ok', text:'Name saved.'});
+    } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
+    setBusy(false);
+  };
+  const saveEmail = async () => {
+    setMsg(null);
+    if (!accEmail || accEmail.indexOf('@') < 0){ setMsg({type:'err', text:'Enter a valid email address.'}); return; }
+    if (accEmail.trim() === (user && user.email)){ setMsg({type:'ok', text:'That’s already your email.'}); return; }
+    setBusy(true);
+    try { const { error } = await Cloud.updateUser({ email: accEmail.trim() });
+      setMsg(error ? {type:'err', text:error.message} : {type:'ok', text:'Almost there — check your inbox to confirm the new address.'});
+    } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
+    setBusy(false);
+  };
+  const savePassword = async () => {
+    setMsg(null);
+    if (!accPw || accPw.length < 6){ setMsg({type:'err', text:'Password must be at least 6 characters.'}); return; }
+    setBusy(true);
+    try { const { error } = await Cloud.updateUser({ password: accPw });
+      if (error) setMsg({type:'err', text:error.message});
+      else { setMsg({type:'ok', text:'Password updated.'}); setAccPw(''); }
+    } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
+    setBusy(false);
+  };
+  const setRecoveryPassword = async () => {
+    setMsg(null);
+    if (!accPw || accPw.length < 6){ setMsg({type:'err', text:'Password must be at least 6 characters.'}); return; }
+    setBusy(true);
+    try { const { error } = await Cloud.updateUser({ password: accPw });
+      if (error){ setMsg({type:'err', text:error.message}); setBusy(false); }
+      else { setMsg({type:'ok', text:'Password set — signing you in…'}); setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 1100); }
+    } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); setBusy(false); }
+  };
+
   const doSignOut = async () => { setBusy(true); await Cloud.signOut(); setBusy(false); close(); };
 
   const statusLabel = status==='saving' ? 'Saving…' : status==='saved' ? 'Saved ✓' : status==='error' ? 'Save failed — will retry' : '';
+  const btnLabel = user ? ('☁ ' + shortEmail((user.user_metadata && user.user_metadata.full_name) || user.email)) : '☁ Sign in';
+  const msgBox = msg ? <div className={'auth-msg ' + (msg.type==='err'?'err':'ok')}>{msg.text}</div> : null;
 
   return (
     <React.Fragment>
       <button className="btn" onClick={()=>setOpen(true)} title={user ? 'Your account' : 'Sign in to save your projections across devices'}>
-        {user ? ('☁ ' + shortEmail(user.email)) : '☁ Sign in'}
+        {btnLabel}
       </button>
       {open && (
         <div className="auth-overlay" onClick={close}>
           <div className="auth-modal" onClick={(e)=>e.stopPropagation()}>
             <button className="auth-x" onClick={close} aria-label="Close">×</button>
-            {user ? (
+
+            {recovery ? (
+              <div>
+                <h3 className="auth-title">Set a new password</h3>
+                <p className="auth-sub">Choose a new password{user && user.email ? (' for ' + user.email) : ''}.</p>
+                <input className="auth-input" type="password" placeholder="New password (6+ characters)" value={accPw}
+                  onChange={(e)=>setAccPw(e.target.value)} autoComplete="new-password"
+                  onKeyDown={(e)=>{ if(e.key==='Enter') setRecoveryPassword(); }} />
+                {msgBox}
+                <button className="btn primary auth-go" disabled={busy} onClick={setRecoveryPassword}>{busy ? 'Working…' : 'Set password'}</button>
+              </div>
+            ) : user ? (
               <div>
                 <h3 className="auth-title">Your account</h3>
-                <p className="auth-sub">{user.email}</p>
-                <p className="auth-sub">{statusLabel ? ('Sync status: ' + statusLabel) : 'Your projections sync to your account automatically as you edit.'}</p>
-                <button className="btn" disabled={busy} onClick={doSignOut}>Sign out</button>
+                <p className="auth-sub">{statusLabel ? ('Projections sync: ' + statusLabel) : 'Your projections sync to your account automatically as you edit.'}</p>
+                <div className="acc-divider"></div>
+
+                <div className="acc-sec">
+                  <label className="acc-label">Display name</label>
+                  <div className="acc-row">
+                    <input className="auth-input" type="text" placeholder="Your name (optional)" value={accName} onChange={(e)=>setAccName(e.target.value)} />
+                    <button className="btn" disabled={busy} onClick={saveName}>Save</button>
+                  </div>
+                </div>
+
+                <div className="acc-sec">
+                  <label className="acc-label">Email</label>
+                  <div className="acc-row">
+                    <input className="auth-input" type="email" value={accEmail} onChange={(e)=>setAccEmail(e.target.value)} autoComplete="email" />
+                    <button className="btn" disabled={busy} onClick={saveEmail}>Update</button>
+                  </div>
+                </div>
+
+                <div className="acc-sec">
+                  <label className="acc-label">Change password</label>
+                  <div className="acc-row">
+                    <input className="auth-input" type="password" placeholder="New password (6+ characters)" value={accPw} onChange={(e)=>setAccPw(e.target.value)} autoComplete="new-password" />
+                    <button className="btn" disabled={busy} onClick={savePassword}>Update</button>
+                  </div>
+                </div>
+
+                {msgBox}
+                <button className="btn acc-signout" disabled={busy} onClick={doSignOut}>Sign out</button>
               </div>
             ) : (
               <div>
@@ -2678,7 +2799,7 @@ function AuthButton(){
                   <input className="auth-input" type="password" placeholder="Password (6+ characters)" value={pw} onChange={(e)=>setPw(e.target.value)}
                     autoComplete={signup?'new-password':'current-password'} onKeyDown={(e)=>{ if(e.key==='Enter') submit(); }} />
                 )}
-                {msg && <div className={'auth-msg ' + (msg.type==='err'?'err':'ok')}>{msg.text}</div>}
+                {msgBox}
                 <button className="btn primary auth-go" disabled={busy} onClick={submit}>
                   {busy ? 'Working…' : mode==='link' ? 'Send magic link' : signup ? 'Create account' : 'Sign in'}
                 </button>
@@ -2686,6 +2807,9 @@ function AuthButton(){
                   <button className="auth-link" onClick={()=>{setSignup(!signup); setMsg(null);}}>
                     {signup ? 'Have an account? Sign in' : 'New here? Create an account'}
                   </button>
+                )}
+                {mode==='password' && !signup && (
+                  <button className="auth-link" style={{marginTop:8, color:'var(--muted)'}} onClick={sendReset}>Forgot password?</button>
                 )}
               </div>
             )}

@@ -105,7 +105,7 @@
   // ---- pull on login: cloud wins if it has data, else seed cloud from local ----
   var syncedFor = null;
   function syncFromCloud(){
-    if (!Cloud.user) return;
+    if (!Cloud.user || Cloud.recovery) return;
     var uid = Cloud.user.id;
     if (syncedFor === uid) return;
     syncedFor = uid;
@@ -122,20 +122,25 @@
   }
 
   // ---- auth methods (resolve to { data, error }) ----
+  Cloud.recovery = false;
   Cloud.signInWithPassword = function(email,pw){ return supa.auth.signInWithPassword({ email:email, password:pw }); };
   Cloud.signUpWithPassword = function(email,pw){ return supa.auth.signUp({ email:email, password:pw, options:{ emailRedirectTo:redirectUrl() } }); };
   Cloud.signInWithMagicLink = function(email){ return supa.auth.signInWithOtp({ email:email, options:{ emailRedirectTo:redirectUrl(), shouldCreateUser:true } }); };
+  Cloud.resetPassword = function(email){ return supa.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl() }); };
+  Cloud.updateUser = function(attrs){ return supa.auth.updateUser(attrs); };
   Cloud.signOut = function(){ return supa.auth.signOut().then(function(r){ setUser(null); syncedFor = null; setStatus('idle'); return r; }); };
 
   supa.auth.onAuthStateChange(function(event, session){
     var u = session && session.user ? session.user : null;
     setUser(u);
-    if (u) syncFromCloud();
+    // Arriving from a "reset password" email: don't sync/reload — show the set-password prompt.
+    if (event === 'PASSWORD_RECOVERY'){ Cloud.recovery = true; emit('optcloud:recovery', true); return; }
+    if (u && !Cloud.recovery) syncFromCloud();
   });
 
   supa.auth.getSession().then(function(res){
     var u = res.data && res.data.session ? res.data.session.user : null;
-    if (u){ setUser(u); syncFromCloud(); }
+    if (u){ setUser(u); if (!Cloud.recovery) syncFromCloud(); }
     Cloud.ready = true; emit('optcloud:ready', true);
   });
 })();
@@ -222,6 +227,13 @@ button{font-family:inherit}
 .auth-msg.ok{background:var(--accent-soft);color:var(--accent)}
 .auth-msg.err{background:rgba(208,59,59,.12);color:var(--critical)}
 .auth-link{display:block;width:100%;text-align:center;background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;margin-top:12px;font-weight:600}
+.acc-sec{margin-bottom:12px}
+.acc-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.acc-row{display:flex;gap:8px;align-items:stretch}
+.acc-row .auth-input{margin-bottom:0;flex:1;min-width:0}
+.acc-row .btn{white-space:nowrap}
+.acc-signout{display:flex;width:100%;justify-content:center;margin-top:6px}
+.acc-divider{height:1px;background:var(--border);margin:4px 0 14px}
 
 
 .panel{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
