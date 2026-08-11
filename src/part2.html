@@ -273,32 +273,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* Optionality drawdown view — surfaced controls for the chart's post-optionality behaviour */}
-      <div className="bp-sub">Optionality drawdown view</div>
-      <div className="bp-toggles">
-        <div className="bp-tgroup"><span className="tl">From optionality, the chart</span>
-          <div className="bp-seg">
-            <button className={!bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:false})} title="Pure accumulation — keep saving, no withdrawals">Keeps saving</button>
-            <button className={bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:true})} title="From optionality, draw the target income and watch how the pot evolves">Draws income</button>
-          </div>
-        </div>
-        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">Contributions after optionality</span>
-          <div className="bp-seg">
-            <button className={!bp.keepContributingAfterOptionality?'on':''} onClick={()=>setBp({keepContributingAfterOptionality:false})} title="Stop paying in once you're work-optional (the usual assumption)">Stop</button>
-            <button className={bp.keepContributingAfterOptionality?'on':''} onClick={()=>setBp({keepContributingAfterOptionality:true})} title="Keep paying your contribution phases even after optionality">Continue</button>
-          </div>
-        </div>}
-        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">Withdrawals at pension access {bp.pensionAccessAge}</span>
-          <div className="bp-seg">
-            <button className={bp.stopDrawAtAccess!==true?'on':''} onClick={()=>setBp({stopDrawAtAccess:false})} title="Keep drawing from ISA/GIA to life expectancy — tests whether accessible wealth alone lasts">Keep drawing</button>
-            <button className={bp.stopDrawAtAccess===true?'on':''} onClick={()=>setBp({stopDrawAtAccess:true})} title="Stop drawing at pension access — your pension takes over, so the pot can recover">Stop at {bp.pensionAccessAge}</button>
-          </div>
-        </div>}
-      </div>
-      <div className="bp-note" style={{marginTop:8,marginBottom:14}}>{bp.drawdownFromOptionality
-        ? <span>From optionality (age {base.crossAge!=null?base.crossAge:'—'}) the chart {bp.keepContributingAfterOptionality?<span>keeps your contributions running <b>and</b> </span>:null}draws <b>{gbpC(bp.targetIncome)}/yr</b>{bp.stopDrawAtAccess?<span> until pension access {bp.pensionAccessAge}, then stops — your pension takes over, so the pot can recover afterwards.</span>:<span> right through to age {bp.lifeExpectancy||90}, to stress-test the accessible pot on its own.</span>} {(!bp.stopDrawAtAccess && base.depletionAge) ? <span>On these figures it <b style={{color:'var(--critical)'}}>empties at age {base.depletionAge}</b>.</span> : null}</span>
-        : <span>Pure accumulation: contributions keep running and nothing is withdrawn, so you can watch the pot reach the target and keep going.</span>}</div>
-
       {/* Understanding these figures — combines the old basis note into one quiet panel */}
       {(function(){
         var egAge = base.crossAge!=null ? base.crossAge : bp.pensionAccessAge;
@@ -315,36 +289,11 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>;
       })()}
 
-      {/* MODEL / FRAMING — pulled up so it drives which fields show below */}
-      <div className="bp-sub">How your target works</div>
-      <div className="bp-toggles">
-        <div className="bp-tgroup"><span className="tl">Model</span>
-          <div className="bp-seg">
-            <button className={bp.mode==='perpetual'?'on':''} onClick={()=>setBp({mode:'perpetual'})} title="Target = a perpetual pot (income ÷ withdrawal rate) you never run down">Perpetual portfolio</button>
-            <button className={bp.mode==='bridge'?'on':''} onClick={()=>setBp({mode:'bridge'})} title="Target = only the pot needed to bridge to pension access — falls as access nears">Bridge to pension access</button>
-          </div>
-        </div>
-        {bp.mode==='bridge' && <div className="bp-tgroup"><span className="tl">By pension access, I’m comfortable…</span>
-          <div className="bp-seg">
-            <button className={bp.bridgeDepletion==='preserve'?'on':''} onClick={()=>setBp({bridgeDepletion:'preserve'})}>Preserving capital</button>
-            <button className={bp.bridgeDepletion==='partial'?'on':''} onClick={()=>setBp({bridgeDepletion:'partial'})}>Partially depleting</button>
-            <button className={bp.bridgeDepletion==='full'?'on':''} onClick={()=>setBp({bridgeDepletion:'full'})}>Fully using the bridge</button>
-          </div>
-        </div>}
-        {bp.mode==='bridge' && bp.bridgeDepletion==='partial' && <div className="bp-tgroup"><span className="tl">Capital left at access</span>
-          <BpNum pct value={+(((bp.partialRemainPct!=null?bp.partialRemainPct:0.5))*100).toFixed(0)} step="5" onChange={v=>setBp({partialRemainPct:(v||0)/100})} /></div>}
-      </div>
-      <div className="bp-note" style={{marginBottom:14}}>{bp.mode==='perpetual'
-        ? 'Perpetual: target = income ÷ withdrawal rate = '+gbpC(bp.targetIncome)+' ÷ '+(bp.withdrawalRate*100).toFixed(1)+'% = '+gbpC(targetPot)+' — a pot you could live off indefinitely (a 4–5% rule).'
-        : 'Bridge: the accessible pot only needs to last until pension access '+bp.pensionAccessAge+', so the target is smaller and shrinks each year. '+(bp.bridgeDepletion==='preserve'?'Preserving capital keeps the full '+gbpC(targetPot)+' perpetual pot intact at access.':bp.bridgeDepletion==='full'?'Fully using it draws the pot to zero by access — the withdrawal rate isn’t used here.':'Partially depleting leaves '+Math.round((bp.partialRemainPct!=null?bp.partialRemainPct:0.5)*100)+'% of the perpetual pot at access.')}</div>
-
       {/* 3) KEY ASSUMPTIONS */}
       <div className="bp-sub">Key assumptions</div>
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} step="0.1" onChange={v=>setBp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>Current ISA / GIA</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
-        <div className="bp-fld"><label>Target income / yr (today’s money)</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
-        {!(bp.mode==='bridge' && bp.bridgeDepletion==='full') && <div className="bp-fld"><label>Withdrawal rate</label><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>}
         <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
@@ -372,6 +321,57 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
       <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years (ages 35 and 36). Phases <b>stack</b>: if two ranges cover the same age, their amounts add there — so a one-off like a <b>£400k lump at 36</b> is just a single-year phase (36 to 36) on top of recurring saving. The year-by-year table shows the combined amount at each age. Contributions are in today’s money and shown as entered (not inflated). A £0 phase stops contributions.</div>
+
+      {/* MODEL / FRAMING — pulled up so it drives which fields show below */}
+      <div className="bp-sub">How your target works</div>
+      <div className="bp-toggles">
+        <div className="bp-tgroup"><span className="tl">Model</span>
+          <div className="bp-seg">
+            <button className={bp.mode==='perpetual'?'on':''} onClick={()=>setBp({mode:'perpetual'})} title="Target = a perpetual pot (income ÷ withdrawal rate) you never run down">Perpetual portfolio</button>
+            <button className={bp.mode==='bridge'?'on':''} onClick={()=>setBp({mode:'bridge'})} title="Target = only the pot needed to bridge to pension access — falls as access nears">Bridge to pension access</button>
+          </div>
+        </div>
+        <div className="bp-tgroup"><span className="tl">Target income / yr (today’s money)</span><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
+        {!(bp.mode==='bridge' && bp.bridgeDepletion==='full') && <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>}
+        {bp.mode==='bridge' && <div className="bp-tgroup"><span className="tl">By pension access, I’m comfortable…</span>
+          <div className="bp-seg">
+            <button className={bp.bridgeDepletion==='preserve'?'on':''} onClick={()=>setBp({bridgeDepletion:'preserve'})}>Preserving capital</button>
+            <button className={bp.bridgeDepletion==='partial'?'on':''} onClick={()=>setBp({bridgeDepletion:'partial'})}>Partially depleting</button>
+            <button className={bp.bridgeDepletion==='full'?'on':''} onClick={()=>setBp({bridgeDepletion:'full'})}>Fully using the bridge</button>
+          </div>
+        </div>}
+        {bp.mode==='bridge' && bp.bridgeDepletion==='partial' && <div className="bp-tgroup"><span className="tl">Capital left at access</span>
+          <BpNum pct value={+(((bp.partialRemainPct!=null?bp.partialRemainPct:0.5))*100).toFixed(0)} step="5" onChange={v=>setBp({partialRemainPct:(v||0)/100})} /></div>}
+      </div>
+      <div className="bp-note" style={{marginBottom:14}}>{bp.mode==='perpetual'
+        ? 'Perpetual: target = income ÷ withdrawal rate = '+gbpC(bp.targetIncome)+' ÷ '+(bp.withdrawalRate*100).toFixed(1)+'% = '+gbpC(targetPot)+' — a pot you could live off indefinitely (a 4–5% rule).'
+        : 'Bridge: the accessible pot only needs to last until pension access '+bp.pensionAccessAge+', so the target is smaller and shrinks each year. '+(bp.bridgeDepletion==='preserve'?'Preserving capital keeps the full '+gbpC(targetPot)+' perpetual pot intact at access.':bp.bridgeDepletion==='full'?'Fully using it draws the pot to zero by access — the withdrawal rate isn’t used here.':'Partially depleting leaves '+Math.round((bp.partialRemainPct!=null?bp.partialRemainPct:0.5)*100)+'% of the perpetual pot at access.')}</div>
+
+      {/* Optionality drawdown view — surfaced controls for the chart's post-optionality behaviour */}
+      <div className="bp-sub">Optionality drawdown view</div>
+      <div className="bp-toggles">
+        <div className="bp-tgroup"><span className="tl">From optionality, the chart</span>
+          <div className="bp-seg">
+            <button className={!bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:false})} title="Pure accumulation — keep saving, no withdrawals">Keeps saving</button>
+            <button className={bp.drawdownFromOptionality?'on':''} onClick={()=>setBp({drawdownFromOptionality:true})} title="From optionality, draw the target income and watch how the pot evolves">Draws income</button>
+          </div>
+        </div>
+        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">Contributions after optionality</span>
+          <div className="bp-seg">
+            <button className={!bp.keepContributingAfterOptionality?'on':''} onClick={()=>setBp({keepContributingAfterOptionality:false})} title="Stop paying in once you're work-optional (the usual assumption)">Stop</button>
+            <button className={bp.keepContributingAfterOptionality?'on':''} onClick={()=>setBp({keepContributingAfterOptionality:true})} title="Keep paying your contribution phases even after optionality">Continue</button>
+          </div>
+        </div>}
+        {bp.drawdownFromOptionality && <div className="bp-tgroup"><span className="tl">Withdrawals at pension access {bp.pensionAccessAge}</span>
+          <div className="bp-seg">
+            <button className={bp.stopDrawAtAccess!==true?'on':''} onClick={()=>setBp({stopDrawAtAccess:false})} title="Keep drawing from ISA/GIA to life expectancy — tests whether accessible wealth alone lasts">Keep drawing</button>
+            <button className={bp.stopDrawAtAccess===true?'on':''} onClick={()=>setBp({stopDrawAtAccess:true})} title="Stop drawing at pension access — your pension takes over, so the pot can recover">Stop at {bp.pensionAccessAge}</button>
+          </div>
+        </div>}
+      </div>
+      <div className="bp-note" style={{marginTop:8,marginBottom:14}}>{bp.drawdownFromOptionality
+        ? <span>From optionality (age {base.crossAge!=null?base.crossAge:'—'}) the chart {bp.keepContributingAfterOptionality?<span>keeps your contributions running <b>and</b> </span>:null}draws <b>{gbpC(bp.targetIncome)}/yr</b>{bp.stopDrawAtAccess?<span> until pension access {bp.pensionAccessAge}, then stops — your pension takes over, so the pot can recover afterwards.</span>:<span> right through to age {bp.lifeExpectancy||90}, to stress-test the accessible pot on its own.</span>} {(!bp.stopDrawAtAccess && base.depletionAge) ? <span>On these figures it <b style={{color:'var(--critical)'}}>empties at age {base.depletionAge}</b>.</span> : null}</span>
+        : <span>Pure accumulation: contributions keep running and nothing is withdrawn, so you can watch the pot reach the target and keep going.</span>}</div>
 
       {/* ===== SEQUENCE RISK / DRAWDOWN STRESS TEST (Phase 1) ===== */}
       {(function(){
@@ -764,29 +764,6 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       {base.coasting && <div className="cmp-rec" style={{marginTop:12}}>
         <b>You’ve reached Pension Coast.</b> Your pension is projected to meet your retirement objective without further contributions. Additional pension contributions may raise retirement income, but likely add less <i>flexibility</i> than investing into accessible assets (your ISA/GIA Bridge Fund), which can fund the years before pension access. Not advice — just noting the optimisation problem has changed.</div>}
 
-      {/* 3) OBJECTIVE + KEY ASSUMPTIONS */}
-      <div className="bp-sub">Objective</div>
-      <div className="bp-toggles">
-        <div className="bp-tgroup"><span className="tl">Plan against</span>
-          <div className="bp-seg">
-            <button className={cp.goalMode==='pot'?'on':''} onClick={()=>setCp({goalMode:'pot'})}>Target pension pot</button>
-            <button className={cp.goalMode==='income'?'on':''} onClick={()=>setCp({goalMode:'income'})}>Target retirement income</button>
-          </div>
-        </div>
-        {cp.goalMode==='pot'
-          ? <div className="bp-tgroup"><span className="tl">Target pension pot (today’s money)</span><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
-          : <React.Fragment>
-              <div className="bp-tgroup"><span className="tl">Desired income / yr</span><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /></div>
-              <div className="bp-tgroup"><span className="tl">less State Pension / yr</span><BpNum money value={cp.statePensionAmount||0} step={500} onChange={v=>setCp({statePensionAmount:v})} /></div>
-              <div className="bp-tgroup"><span className="tl">State Pension from age</span><BpNum value={cp.statePensionAge||67} onChange={v=>setCp({statePensionAge:Math.round(v)})} /></div>
-              <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(cp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setCp({withdrawalRate:(v||0)/100})} /></div>
-              <div className="bp-tgroup"><span className="tl">= Required pension @ {base.objAge}</span><div className="bp-tile" style={{padding:'8px 12px'}}><div className="bt-v" style={{fontSize:16}}>{m(plan.targetPot, base.objAge)}</div></div></div>
-            </React.Fragment>}
-      </div>
-      <div className="bp-note" style={{marginTop:8}}>{(cp.statePensionAmount||0)>0
-        ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}.{base.objAge < (cp.statePensionAge||67) ? <span> Because you retire at {base.objAge}, before the State Pension starts at {cp.statePensionAge||67}, the pot also carries the capital to self-fund the <b>full</b> {gbpC(cp.targetIncome)}/yr for those {(cp.statePensionAge||67)-base.objAge} year{((cp.statePensionAge||67)-base.objAge)===1?'':'s'} — the year-by-year table below draws the full income until {cp.statePensionAge||67}, then nets off the State Pension.</span> : null} The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
-        : <span>No State Pension included — the pension funds the full {gbpC(cp.targetIncome)}/yr. Add it above to model the ~£11.9k/yr it typically provides from age {cp.statePensionAge||67}.</span>}</div>
-
       <div className="bp-sub">Key assumptions</div>
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setCp({currentAge:Math.round(v*10)/10})} /></div>
@@ -818,6 +795,29 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
       <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years. Phases <b>stack</b>: overlapping ranges add at the shared age (the year-by-year table shows the combined amount). Contributions are shown as entered — not inflation-adjusted.</div>
+
+      {/* 3) OBJECTIVE + KEY ASSUMPTIONS */}
+      <div className="bp-sub">Objective</div>
+      <div className="bp-toggles">
+        <div className="bp-tgroup"><span className="tl">Plan against</span>
+          <div className="bp-seg">
+            <button className={cp.goalMode==='pot'?'on':''} onClick={()=>setCp({goalMode:'pot'})}>Target pension pot</button>
+            <button className={cp.goalMode==='income'?'on':''} onClick={()=>setCp({goalMode:'income'})}>Target retirement income</button>
+          </div>
+        </div>
+        {cp.goalMode==='pot'
+          ? <div className="bp-tgroup"><span className="tl">Target pension pot (today’s money)</span><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
+          : <React.Fragment>
+              <div className="bp-tgroup"><span className="tl">Desired income / yr</span><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /></div>
+              <div className="bp-tgroup"><span className="tl">less State Pension / yr</span><BpNum money value={cp.statePensionAmount||0} step={500} onChange={v=>setCp({statePensionAmount:v})} /></div>
+              <div className="bp-tgroup"><span className="tl">State Pension from age</span><BpNum value={cp.statePensionAge||67} onChange={v=>setCp({statePensionAge:Math.round(v)})} /></div>
+              <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(cp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setCp({withdrawalRate:(v||0)/100})} /></div>
+              <div className="bp-tgroup"><span className="tl">= Required pension @ {base.objAge}</span><div className="bp-tile" style={{padding:'8px 12px'}}><div className="bt-v" style={{fontSize:16}}>{m(plan.targetPot, base.objAge)}</div></div></div>
+            </React.Fragment>}
+      </div>
+      <div className="bp-note" style={{marginTop:8}}>{(cp.statePensionAmount||0)>0
+        ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}.{base.objAge < (cp.statePensionAge||67) ? <span> Because you retire at {base.objAge}, before the State Pension starts at {cp.statePensionAge||67}, the pot also carries the capital to self-fund the <b>full</b> {gbpC(cp.targetIncome)}/yr for those {(cp.statePensionAge||67)-base.objAge} year{((cp.statePensionAge||67)-base.objAge)===1?'':'s'} — the year-by-year table below draws the full income until {cp.statePensionAge||67}, then nets off the State Pension.</span> : null} The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
+        : <span>No State Pension included — the pension funds the full {gbpC(cp.targetIncome)}/yr. Add it above to model the ~£11.9k/yr it typically provides from age {cp.statePensionAge||67}.</span>}</div>
 
       {/* OPTIONALITY — stop-each-year */}
       <details className="bp-collapse"><summary className="bp-sub bp-summary">How many more years must I contribute?</summary>
