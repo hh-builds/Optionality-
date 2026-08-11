@@ -416,8 +416,15 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         }
         return (
         <React.Fragment>
-          <details className="bp-collapse bp-stress-collapse" open>
-          <summary className="bp-sub bp-summary">Sequence risk · can bad early markets break the bridge?</summary>
+          <details className="bp-collapse bp-stress-collapse">
+          <summary className="bp-sub bp-summary"><span>{(function(){
+            if(!(sim.reached && hasBridge && confPct!=null)) return 'Sequence risk · can bad early markets break the bridge?';
+            let t = 'Sequence risk · '+confPct+'% confidence at '+ageLabel;
+            if(meetsTarget) t += ' — clears '+targetPct+'%';
+            else if(stressAgeLabel!=null) t += ' — '+targetPct+'% at '+stressAgeLabel;
+            else t += ' — below '+targetPct+'%';
+            return t;
+          })()}</span></summary>
           <div className="bp-stress">
             <div className="bp-stress-head">
               <div className="bp-stress-q">{stress.reached ? 'Can I stop working at '+ageLabel+'?' : 'Can I stop working before pension access?'}</div>
