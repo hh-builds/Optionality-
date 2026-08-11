@@ -210,12 +210,20 @@ button{font-family:inherit}
 .brand{display:flex;align-items:center;gap:10px}
 .brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent)}
 .brand h1{font-size:18px}
-.toolbar{display:flex;gap:8px;flex-wrap:wrap}
-/* burger menu (mobile only) — hidden on desktop */
-.burger{display:none;background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
-  width:40px;height:40px;border-radius:9px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;align-items:center;justify-content:center}
+/* burger menu — collapses the top-bar controls into a dropdown at ALL widths */
+.toolbar{display:none}
+.burger{display:inline-flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
+  width:40px;height:40px;border-radius:9px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;position:relative;z-index:61}
 .burger:hover{border-color:var(--accent);color:var(--accent)}
-.menu-backdrop{display:none}
+.menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
+.toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
+  position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:232px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:5px;box-shadow:var(--shadow)}
+.toolbar.open > .btn{width:100%;justify-content:flex-start;text-align:left;min-height:42px;
+  background:transparent;border:none;border-radius:8px;color:var(--text-primary);font-size:14px;font-weight:500;padding:11px 13px}
+.toolbar.open > .btn:hover{background:var(--surface-1);color:var(--text-primary)}
+.toolbar.open > .btn:active{background:var(--accent-soft)}
+.toolbar.open > .btn + .btn{border-top:1px solid var(--border);border-radius:0}
 .btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
   padding:7px 13px;border-radius:9px;font-size:13px;cursor:pointer;font-weight:500;transition:.12s}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -565,6 +573,17 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .es-line{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;line-height:1.5;padding:5px 0;color:var(--text)}
 .es-ic{flex:0 0 auto;font-size:15px;line-height:1.4}
 .es-line b{font-weight:600}
+/* three-up status tiles */
+.es-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:2px 0 4px}
+.es-tile{background:var(--surface-2);border:1px solid var(--border);border-left-width:3px;border-radius:11px;padding:12px 14px}
+.es-tile.good{border-left-color:var(--good)}
+.es-tile.warn{border-left-color:var(--warning)}
+.es-tile.bad{border-left-color:var(--critical)}
+.es-tile-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.es-tile-label{font-size:13px;font-weight:700;color:var(--text-primary)}
+.es-tile-body{font-size:12.5px;color:var(--text-secondary);line-height:1.5}
+.es-tile-body b{color:var(--text-primary);font-weight:650}
+@media (max-width:720px){ .es-tiles{grid-template-columns:1fr} }
 .es-foot{font-size:11.5px;color:var(--muted);margin-top:9px}
 .bp-why{margin:10px 0 2px;font-size:12.5px}
 .bp-why>summary{cursor:pointer;color:var(--accent);font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:5px;padding:2px 0}
