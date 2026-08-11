@@ -234,6 +234,14 @@ button{font-family:inherit}
 .acc-row .btn{white-space:nowrap}
 .acc-signout{display:flex;width:100%;justify-content:center;margin-top:6px}
 .acc-divider{height:1px;background:var(--border);margin:4px 0 14px}
+/* password field with a Show/Hide reveal toggle */
+.pw-wrap{position:relative;display:block}
+.pw-wrap .auth-input{padding-right:64px}
+.acc-row .pw-wrap{flex:1;min-width:0}
+.pw-eye{position:absolute;right:6px;top:11px;background:none;border:none;color:var(--accent);
+  font-size:13px;font-weight:600;cursor:pointer;padding:6px 8px;font-family:inherit;border-radius:6px;line-height:1}
+.pw-eye:hover{background:var(--accent-soft)}
+.acc-row .pw-eye{top:50%;transform:translateY(-50%)}
 
 
 .panel{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;

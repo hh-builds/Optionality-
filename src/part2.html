@@ -366,7 +366,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:sc.color}}></span>{sc.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(sc.key,{enabled:!scEnabled[sc.key]})}>{scEnabled[sc.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
-            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
+            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation · {(((s.withdrawalRate!=null?s.withdrawalRate:bp.withdrawalRate))*100).toFixed(1)}% draw → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
             {isBase
               ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your Key assumptions above. Edit the return / inflation there to move this line.</div>
               : <React.Fragment>
@@ -593,10 +593,9 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Current pension</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
         <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Retirement age (objective)</label><BpNum value={cp.retirementAge} onChange={v=>setCp({retirementAge:Math.round(v)})} /></div>
-        <div className="bp-fld"><label>Pension access age</label><BpNum value={cp.pensionAccessAge} onChange={v=>setCp({pensionAccessAge:Math.round(v)})} /></div>
+        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
       </div>
-      <div className="bp-note">Required coast balance at each age = target ÷ (1+growth)^(years to {base.objAge}) — the pot that would grow to your target with <b>no more contributions</b>. The engine converts the nominal return into a real return after inflation. Coast age is unchanged by the display toggle because targets and balances are converted consistently.</div>
+      <div className="bp-note">This is the age you start taking your pension — the objective the coast target is sized to. You can’t normally access a private pension before <b>57</b> (from 2028), so it’s floored there; to stop work earlier, the years before then are what the ISA/GIA Bridge planner below is for. Required coast balance at each age = target ÷ (1+growth)^(years to {base.objAge}) — the pot that would grow to your target with <b>no more contributions</b>, converting the nominal return to a real return after inflation.</div>
 
       {/* CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -676,7 +675,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
               <span className="sn"><span className="cd" style={{background:scn.color}}></span>{scn.label}{isBase && ' (primary)'}</span>
               {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(scn.key,{enabled:!scEnabled[scn.key]})}>{scEnabled[scn.key]?'On chart ✓':'Show on chart'}</button>}
             </div>
-            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
+            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation · {(((s.withdrawalRate!=null?s.withdrawalRate:cp.withdrawalRate))*100).toFixed(1)}% draw → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
             {isBase
               ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your assumptions above. Edit the return / inflation there to move this line.</div>
               : <React.Fragment>
@@ -690,7 +689,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           );
         })}
       </div>
-      <div className="bp-note">Scenarios differ only by market assumptions: <b>Optimistic</b> 11% return / 2% inflation · <b>Base</b> {(cp.growth*100).toFixed(0)}% / {(cp.inflation*100).toFixed(1)}% · <b>Conservative</b> 7% / 3%. Red below the coast line · amber within 10% · green once self-sustaining. Figures in {realTerms?'today’s money':'future £ (nominal)'}. Not financial advice.</div>
+      <div className="bp-note">Scenarios differ by market assumptions <b>and</b> the safe withdrawal rate (return / inflation / draw): <b>Optimistic</b> 9% / 2% / 4.0% · <b>Base</b> {(cp.growth*100).toFixed(0)}% / {(cp.inflation*100).toFixed(1)}% / {(cp.withdrawalRate*100).toFixed(1)}% · <b>Conservative</b> 5% / 3% / 3.0%. Red below the coast line · amber within 10% · green once self-sustaining. Figures in {realTerms?'today’s money':'future £ (nominal)'}. Not financial advice.</div>
       </details>
     </div>
   );
@@ -699,6 +698,20 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 /* ============================================================= */
 /* Optional accounts: sign in to sync projections across devices. */
 function shortEmail(e){ if(!e) return 'Account'; return e.length>18 ? e.slice(0,16)+'…' : e; }
+/* password input with a Show/Hide reveal toggle — so people can check what they typed,
+   which matters most on the "set a new password" step */
+function PwInput({ value, onChange, placeholder, autoComplete, onKeyDown }){
+  const [show, setShow] = useState(false);
+  return (
+    <div className="pw-wrap">
+      <input className="auth-input" type={show?'text':'password'} placeholder={placeholder}
+        value={value} onChange={onChange} autoComplete={autoComplete} onKeyDown={onKeyDown} />
+      <button type="button" className="pw-eye" onClick={()=>setShow(s=>!s)}
+        aria-label={show?'Hide password':'Show password'} title={show?'Hide password':'Show password'}>{show?'Hide':'Show'}</button>
+    </div>
+  );
+}
+
 function AuthButton(){
   const Cloud = typeof window !== 'undefined' ? window.OptCloud : null;
   const [user, setUser] = useState(() => (Cloud && Cloud.user) || null);
@@ -847,7 +860,7 @@ function AuthButton(){
               <div>
                 <h3 className="auth-title">Set a new password</h3>
                 <p className="auth-sub">Choose a new password{user && user.email ? (' for ' + user.email) : ''}.</p>
-                <input className="auth-input" type="password" placeholder="New password (6+ characters)" value={accPw}
+                <PwInput placeholder="New password (6+ characters)" value={accPw}
                   onChange={(e)=>setAccPw(e.target.value)} autoComplete="new-password"
                   onKeyDown={(e)=>{ if(e.key==='Enter') setRecoveryPassword(); }} />
                 {msgBox}
@@ -878,7 +891,7 @@ function AuthButton(){
                 <div className="acc-sec">
                   <label className="acc-label">Change password</label>
                   <div className="acc-row">
-                    <input className="auth-input" type="password" placeholder="New password (6+ characters)" value={accPw} onChange={(e)=>setAccPw(e.target.value)} autoComplete="new-password" />
+                    <PwInput placeholder="New password (6+ characters)" value={accPw} onChange={(e)=>setAccPw(e.target.value)} autoComplete="new-password" />
                     <button className="btn" disabled={busy} onClick={savePassword}>Update</button>
                   </div>
                 </div>
@@ -897,7 +910,7 @@ function AuthButton(){
                 <input className="auth-input" type="email" placeholder="you@example.com" value={email} onChange={(e)=>setEmail(e.target.value)} autoComplete="email"
                   onKeyDown={(e)=>{ if(e.key==='Enter' && mode==='link') submit(); }} />
                 {mode==='password' && (
-                  <input className="auth-input" type="password" placeholder="Password (6+ characters)" value={pw} onChange={(e)=>setPw(e.target.value)}
+                  <PwInput placeholder="Password (6+ characters)" value={pw} onChange={(e)=>setPw(e.target.value)}
                     autoComplete={signup?'new-password':'current-password'} onKeyDown={(e)=>{ if(e.key==='Enter') submit(); }} />
                 )}
                 {msgBox}
@@ -1003,6 +1016,18 @@ function App() {
       ds.optimistic.enabled = !!(wasOn.optimistic && wasOn.optimistic.enabled);
       b.scenarios = ds; b._bv = 4;
     }
+    // one-time migration (v5): new house assumptions — base 7% / 2.5% / 3.5% wr;
+    // scenarios 5%·3%·3% (cons) and 9%·2%·4% (opt). Bump untouched base values and
+    // reset the scenario presets (preserving on-chart toggles).
+    if (b._bv < 5) {
+      if (b.growth === 0.09) b.growth = 0.07;
+      if (b.withdrawalRate === 0.04) b.withdrawalRate = 0.035;
+      const ds5 = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.scenarios));
+      const was5 = b.scenarios || {};
+      ds5.conservative.enabled = !!(was5.conservative && was5.conservative.enabled);
+      ds5.optimistic.enabled = !!(was5.optimistic && was5.optimistic.enabled);
+      b.scenarios = ds5; b._bv = 5;
+    }
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
@@ -1034,6 +1059,18 @@ function App() {
       ds.conservative.enabled = !!(wasOn.conservative && wasOn.conservative.enabled);
       ds.optimistic.enabled = !!(wasOn.optimistic && wasOn.optimistic.enabled);
       c.scenarios = ds; c._cv = 4;
+    }
+    // one-time migration (v5): new house assumptions — base 7% / 2.5% / 3.5% wr;
+    // scenarios 5%·3%·3% (cons) and 9%·2%·4% (opt). Bump untouched base values and
+    // reset the scenario presets (preserving on-chart toggles).
+    if (c._cv < 5) {
+      if (c.growth === 0.09) c.growth = 0.07;
+      if (c.withdrawalRate === 0.04) c.withdrawalRate = 0.035;
+      const ds5 = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.scenarios));
+      const was5 = c.scenarios || {};
+      ds5.conservative.enabled = !!(was5.conservative && was5.conservative.enabled);
+      ds5.optimistic.enabled = !!(was5.optimistic && was5.optimistic.enabled);
+      c.scenarios = ds5; c._cv = 5;
     }
     return c;
   });

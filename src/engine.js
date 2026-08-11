@@ -907,8 +907,8 @@
     currentAge: 35,
     currentBalance: 50000,         // engaged saver, top-quartile ISA/GIA in their 30s
     targetIncome: 43000,           // PLSA 'comfortable' single, today's money
-    withdrawalRate: 0.04,          // safe withdrawal rate -> sizes the target pot
-    growth: 0.09,                  // NOMINAL investment return (Base scenario)
+    withdrawalRate: 0.035,         // safe withdrawal rate -> sizes the target pot
+    growth: 0.07,                  // NOMINAL investment return (Base scenario)
     pensionAccessAge: 57,          // bridge end / pension access age (rises to 57 in 2028)
     inflation: 0.025,              // netted off the nominal return; also drives the display toggle
     phases: [
@@ -922,9 +922,10 @@
     stopDrawAtAccess: false,       // option: stop drawing from ISA/GIA at pension access (pension takes over)
     lifeExpectancy: 90,            // horizon for the drawdown view
     scenarios: {
-      // scenarios are explicit return + inflation pairs (conservative = lower return AND higher inflation)
-      conservative: { growth: 0.07, inflation: 0.03, contribScale: 1, enabled: false },
-      optimistic:   { growth: 0.11, inflation: 0.02, contribScale: 1, enabled: false }
+      // scenarios are explicit return + inflation + withdrawal-rate triples
+      // (conservative = lower return, higher inflation, lower safe withdrawal rate)
+      conservative: { growth: 0.05, inflation: 0.03, withdrawalRate: 0.03, contribScale: 1, enabled: false },
+      optimistic:   { growth: 0.09, inflation: 0.02, withdrawalRate: 0.04, contribScale: 1, enabled: false }
     }
   };
 
@@ -1080,21 +1081,22 @@
     phases: [
       { fromAge: 35, toAge: 60, annual: 12000 }   // strong ongoing pension contributions (employee + employer)
     ],
-    growth: 0.09,                  // NOMINAL investment return (Base)
+    growth: 0.07,                  // NOMINAL investment return (Base)
     inflation: 0.025,              // netted off the nominal return; also drives the display toggle
     pensionAccessAge: 57,          // when the pension can be accessed
     retirementAge: 65,             // objective age - when you want the target pot
     goalMode: 'income',            // 'pot' | 'income' (income is friendlier for new users)
     targetPot: 775000,             // fallback for pot mode
     targetIncome: 43000,           // PLSA 'comfortable' single (today's money)
-    withdrawalRate: 0.04,          // (income - State Pension) / rate = required pot (income mode)
+    withdrawalRate: 0.035,         // (income - State Pension) / rate = required pot (income mode)
     statePensionAmount: 11900,     // full new State Pension ~2025/26 (today's money); 0 to exclude
     statePensionAge: 67,           // State Pension age
     impactLevels: [5000, 10000, 15000],
     scenarios: {
-      // scenarios are explicit return + inflation pairs (conservative = lower return AND higher inflation)
-      conservative: { growth: 0.07, inflation: 0.03, enabled: false },
-      optimistic:   { growth: 0.11, inflation: 0.02, enabled: false }
+      // scenarios are explicit return + inflation + withdrawal-rate triples
+      // (conservative = lower return, higher inflation, lower safe withdrawal rate)
+      conservative: { growth: 0.05, inflation: 0.03, withdrawalRate: 0.03, enabled: false },
+      optimistic:   { growth: 0.09, inflation: 0.02, withdrawalRate: 0.04, enabled: false }
     }
   };
 
