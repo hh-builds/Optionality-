@@ -298,7 +298,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Growth is your <b>nominal</b> return; the engine nets off inflation to get the real return that drives the projection, so raising inflation pushes the crossover age <b>later</b>. Withdrawals rise with inflation; contributions stay as entered. Lump sums (e.g. an earn-out) go in as a one-off phase below.</div>
+      <div className="bp-note">Growth is a <b>nominal</b> return; inflation is netted off to the real return that drives the projection. Withdrawals rise with inflation; contributions stay as entered.</div>
 
       {/* 4) CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -320,7 +320,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         })}
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
-      <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years (ages 35 and 36). Phases <b>stack</b>: if two ranges cover the same age, their amounts add there — so a one-off like a <b>£400k lump at 36</b> is just a single-year phase (36 to 36) on top of recurring saving. The year-by-year table shows the combined amount at each age. Contributions are in today’s money and shown as entered (not inflated). A £0 phase stops contributions.</div>
+      <div className="bp-note"><b>From/To are inclusive</b> and phases <b>stack</b> where they overlap — a one-off lump is just a single-year phase. A £0 phase stops contributions.</div>
 
       {/* MODEL / FRAMING — pulled up so it drives which fields show below */}
       <div className="bp-sub">How your target works</div>
@@ -772,7 +772,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
       </div>
-      <div className="bp-note">This is the age you start taking your pension — the objective the coast target is sized to. You can’t normally access a private pension before <b>57</b> (from 2028), so it’s floored there; to stop work earlier, the years before then are what the ISA/GIA Bridge planner below is for. Required coast balance at each age = target ÷ (1+growth)^(years to {base.objAge}) — the pot that would grow to your target with <b>no more contributions</b>, converting the nominal return to a real return after inflation.</div>
+      <div className="bp-note">The age you start taking your pension — floored at <b>57</b> (earliest private-pension access from 2028); earlier years are what the Bridge planner covers. Required coast balance = target ÷ (1+real growth)^(years to {base.objAge}) — the pot that would reach your target with <b>no more contributions</b>.</div>
 
       {/* CONTRIBUTION PHASES */}
       <div className="bp-sub">Contribution phases</div>
@@ -794,7 +794,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         })}
         <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
       </div>
-      <div className="bp-note"><b>From and To are inclusive</b> — “35 to 36” is 2 years. Phases <b>stack</b>: overlapping ranges add at the shared age (the year-by-year table shows the combined amount). Contributions are shown as entered — not inflation-adjusted.</div>
+      <div className="bp-note"><b>From/To are inclusive</b> and overlapping phases <b>stack</b> (amounts add). Shown as entered, not inflation-adjusted.</div>
 
       {/* 3) OBJECTIVE + KEY ASSUMPTIONS */}
       <div className="bp-sub">Objective</div>
