@@ -229,3 +229,47 @@ const stRich = Engine.bridgeStressTest(rich, 0);
 xassert(stRich.startAge === rich.currentAge, 'a huge starting pot is work-optional immediately');
 xassert(stRich.survivesNormal && stRich.survivesBadStart, 'a richly funded bridge survives all three stress scenarios');
 console.log(xfails === 0 ? 'ALL STRESS-TEST ASSERTIONS PASSED' : (xfails + ' STRESS-TEST ASSERTION(S) FAILED'));
+
+// ===== Sequence-risk Phase 2 — historical bootstrap simulation =====
+line();
+console.log('SEQUENCE-RISK PHASE 2 (historical block-bootstrap)');
+let pfails = 0; function passert(c,m){ if(!c){ console.log('FAIL:', m); pfails++; } }
+const pbp = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
+// historical dataset sanity
+passert(Engine.HIST_EQUITY_REAL.length === 97, 'historical series has 97 annual observations (1928–2024)');
+passert(Engine.HIST_META.n === 97 && Engine.HIST_META.vol > 0.15 && Engine.HIST_META.vol < 0.25, 'historical vol ~19.6% real');
+// block bootstrap draws only from the series and returns the requested length
+const rng = (function(){ let a=1; return function(){ a=(a*16807)%2147483647; return a/2147483647; }; })();
+const seq = Engine.blockBootstrap(Engine.HIST_EQUITY_REAL, 30, 5, rng);
+passert(seq.length === 30, 'block bootstrap returns the requested length');
+passert(seq.every(x => Engine.HIST_EQUITY_REAL.indexOf(x) >= 0), 'every bootstrapped return is an actual historical value');
+
+const sim = Engine.bridgeSimulate(pbp);
+console.log('Work-optional', sim.crossAgeExact, '| sim confidence @cross', (sim.confidenceAtCrossover*100).toFixed(1)+'%',
+  '| stress-tested age (90%)', sim.stressAgeExact);
+passert(sim.reached, 'default plan reaches a work-optional age to simulate');
+passert(sim.confidenceAtCrossover > 0 && sim.confidenceAtCrossover < 1, 'crossover confidence is a genuine probability in (0,1)');
+// deterministic (seeded): identical inputs -> identical result
+passert(Engine.bridgeSimulate(pbp).confidenceAtCrossover === sim.confidenceAtCrossover, 'seeded simulation is deterministic');
+// success rate is monotonic non-decreasing in the stop age
+let mono = true, prev = -1;
+for (let a = 48; a <= 57; a++){ const r = Engine.bridgeSurvivalRateAt(pbp, a, 0, {trials:2000, blockLen:5, seed:1234567}).rate; if (r < prev - 1e-9) mono = false; prev = r; }
+passert(mono, 'survival rate is monotonic non-decreasing as the stop age rises');
+passert(Engine.bridgeSurvivalRateAt(pbp, pbp.pensionAccessAge, 0, {trials:500,blockLen:5,seed:1234567}).rate === 1, 'stopping at pension access has no bridge to fund -> 100%');
+// confidence ordering: a higher target confidence needs an equal-or-later age
+const a80 = Engine.bridgeSimulate(pbp,{confidence:0.80}).stressAgeExact;
+const a90 = Engine.bridgeSimulate(pbp,{confidence:0.90}).stressAgeExact;
+const a95 = Engine.bridgeSimulate(pbp,{confidence:0.95}).stressAgeExact;
+console.log('Stress-tested ages: 80% '+a80+' · 90% '+a90+' · 95% '+a95);
+passert(a80 <= a90 && a90 <= a95, 'higher confidence => equal-or-later stress-tested age');
+// crossover confidence below target => stress-tested age is later than the deterministic crossover
+passert(sim.confidenceAtCrossover < 0.90 ? (a90 > sim.crossAgeExact) : true, 'if crossover confidence < target, the stress-tested age is later than the deterministic crossover');
+// a bigger minimum-residual buffer can only lower (or hold) the success rate
+const rLo = Engine.bridgeSurvivalRateAt(pbp, 52, 0, {trials:2000,blockLen:5,seed:1234567}).rate;
+const rHi = Engine.bridgeSurvivalRateAt(pbp, 52, 100000, {trials:2000,blockLen:5,seed:1234567}).rate;
+passert(rHi <= rLo, 'a higher residual buffer never increases the success rate');
+// a richly funded plan is essentially certain and work-optional almost immediately
+const prich = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)); prich.currentBalance = 5000000;
+const simR = Engine.bridgeSimulate(prich, {confidence:0.95});
+passert(simR.confidenceAtCrossover > 0.99, 'a richly funded bridge clears ~100% confidence');
+console.log(pfails === 0 ? 'ALL PHASE-2 SIM ASSERTIONS PASSED' : (pfails + ' PHASE-2 SIM ASSERTION(S) FAILED'));

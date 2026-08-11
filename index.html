@@ -581,6 +581,9 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-stress-q{font-size:21px;font-weight:700;letter-spacing:-0.015em;line-height:1.14}
 .bp-stress-resid{display:flex;flex-direction:column;gap:4px;min-width:150px}
 .bp-stress-resid label{font-size:11px;color:var(--muted);font-weight:600}
+.bp-stress-controls{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.bp-seg.sm button{padding:6px 11px;font-size:12px}
+@media (max-width:560px){ .bp-stress-controls{width:100%} .bp-stress-controls .bp-stress-resid{flex:1 1 100%} .bp-seg.sm{width:100%} .bp-seg.sm button{flex:1 1 0} }
 .bp-stress-lines{display:flex;flex-direction:column}
 .ssl{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 2px;border-top:1px solid var(--border)}
 .ssl:first-child{border-top:none}
@@ -1532,6 +1535,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     keepContributingAfterOptionality: false, // option: keep paying in the contribution phases even past optionality
     lifeExpectancy: 90,            // horizon for the drawdown view
     minResidual: 0,                // sequence-risk: buffer (today's money) to keep at pension access
+    confidence: 0.90,              // sequence-risk Phase 2: target confidence for the stress-tested age
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
       // (conservative = lower return, higher inflation, lower safe withdrawal rate)
@@ -1785,6 +1789,170 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     // the harshest scenario that fails (worst first), for the headline copy
     out.worstFail = !out.scenarios.crash.survived ? 'crash'
       : (!out.scenarios.poorStart.survived ? 'poorStart' : null);
+    return out;
+  }
+
+  // =====================================================================
+  //  SEQUENCE-RISK PHASE 2 — historical block-bootstrap simulation
+  //
+  //  Phase 1 replays three hand-picked stress paths. Phase 2 replays THOUSANDS
+  //  of return sequences drawn from actual history, so the answer becomes a
+  //  probability: across every plausible run of markets, in what share does the
+  //  bridge fund the target income to pension access without breaching the
+  //  chosen minimum residual? From that we read the earliest age that clears a
+  //  target confidence — the STRESS-TESTED optionality age.
+  //
+  //  Return data: annual REAL total returns of US large-cap equity (S&P 500
+  //  with dividends, deflated by US CPI), 1928–2024 — 97 observations, sourced
+  //  from NYU Stern (Damodaran) S&P 500 total returns + US BLS CPI. Arithmetic
+  //  mean ≈ 8.6% real, geometric ≈ 6.7%, volatility ≈ 19.6%, worst year −38.9%
+  //  (2008), best +58.0% (1933). Used as the equity proxy for a 100%-growth
+  //  bridge pot (global-developed equity has a similar shape at slightly lower
+  //  vol; US large-cap gives the longest complete annual series, and its wider
+  //  spread makes the test, if anything, a little harsher).
+  //
+  //  These are RAW historical returns — the simulation's average comes from
+  //  history (~6.7% real), NOT from the user's own return assumption, which is
+  //  used only to build the pot during the accumulation phase. Sequencing is
+  //  preserved with a BLOCK bootstrap (stitch random 5-year runs) so crashes and
+  //  recoveries cluster as they did historically, unlike i.i.d. sampling.
+  //  Everything is seeded (deterministic) so the figures are stable and testable.
+  // =====================================================================
+
+  // Annual REAL total returns, US large-cap equity, 1928–2024 (n=97). See above.
+  var HIST_EQUITY_REAL = [
+    0.4630,-0.0830,-0.2336,-0.3829,0.0140,0.5804,-0.0416,0.4358,0.2999,-0.3759,0.3205,0.0030,
+    -0.1129,-0.1692,0.0746,0.1787,0.1704,0.3277,-0.1545,-0.0804,-0.0222,0.1974,0.2913,0.1462,
+    0.1595,-0.0199,0.5150,0.3313,0.0585,-0.1332,0.3981,0.1128,-0.0134,0.2539,-0.0971,0.2104,
+    0.1493,0.1063,-0.1251,0.2008,0.0634,-0.1302,-0.0202,0.0941,0.1508,-0.1931,-0.3324,0.2557,
+    0.1704,-0.1266,-0.0101,0.0649,0.1607,-0.1360,0.1339,0.1855,0.0177,0.2668,0.1628,0.0213,
+    0.1195,0.2546,-0.0803,0.2498,0.0436,0.0677,-0.0124,0.3346,0.1911,0.3011,0.2632,0.1829,
+    -0.1202,-0.1425,-0.2320,0.2547,0.0783,0.0138,0.1203,0.0261,-0.3887,0.2645,0.1301,-0.0107,
+    0.1351,0.3020,0.1173,0.0128,0.1034,0.1911,-0.0647,0.2889,0.1662,0.2270,-0.2411,0.2110,
+    0.2136
+  ];
+  var HIST_META = { label: 'US large-cap equity, real, 1928–2024', from: 1928, to: 2024,
+    n: 97, arithMean: 0.0858, geoMean: 0.0671, vol: 0.1955, worst: -0.3887, best: 0.5804 };
+
+  // Deterministic PRNG (mulberry32) — reproducible sims, stable UI, testable.
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // One block-bootstrap sequence of `n` real returns: stitch random contiguous
+  // blocks of `blockLen` years (wrapping the series) so short-run clustering —
+  // multi-year crashes and recoveries — is preserved, unlike i.i.d. draws.
+  function blockBootstrap(series, n, blockLen, rng) {
+    var out = [], L = series.length;
+    while (out.length < n) {
+      var start = Math.floor(rng() * L);
+      for (var i = 0; i < blockLen && out.length < n; i++) out.push(series[(start + i) % L]);
+    }
+    return out;
+  }
+
+  // Pot you'd hold at `stopAge` if you keep contributing and DON'T draw down,
+  // growing at your central (deterministic) real return — the accumulation phase
+  // uses your own assumption; only the bridge drawdown is bootstrapped. Mirrors
+  // bridgeProject's annual (contribute, then grow) convention.
+  function bridgeBalanceIfStopAt(bp, stopAge) {
+    var infl = bp.inflation || 0, g = realReturn(bp.growth, infl), bal = bp.currentBalance;
+    var monthly = bp.frequency === 'monthly';
+    var end = Math.round(stopAge);
+    for (var a = bp.currentAge; a < end; a++) {
+      var c = bridgeContribAt(bp, a) / Math.pow(1 + infl, a - bp.currentAge);
+      if (monthly) { var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, r = bal; for (var mo = 0; mo < 12; mo++) r = (r + cm) * (1 + mg); bal = r; }
+      else bal = (bal + c) * (1 + g);
+    }
+    return bal;
+  }
+
+  // Monte-Carlo survival of the bridge if you stop at `stopAge`: draw the target
+  // income (constant real) from the pot you'd hold there, against `trials`
+  // bootstrapped historical real-return sequences, to pension access. Returns the
+  // success rate (share funding every year AND holding ≥ minResidual at access)
+  // plus p10/p50/p90 balance bands per bridge year for a fan chart.
+  function bridgeSurvivalRateAt(bp, stopAge, minR, opts) {
+    var accessAge = bp.pensionAccessAge;
+    var years = Math.max(0, Math.round(accessAge) - Math.round(stopAge));
+    var startBalance = bridgeBalanceIfStopAt(bp, stopAge);
+    var income = bp.targetIncome, floor = minR || 0;
+    if (years <= 0) {
+      return { rate: startBalance >= floor - 1e-6 ? 1 : 0, years: 0, trials: 0,
+               startBalance: startBalance, bands: [{ age: Math.round(stopAge), p10: startBalance, p50: startBalance, p90: startBalance }] };
+    }
+    var trials = opts.trials, blockLen = opts.blockLen, rng = mulberry32(opts.seed);
+    var success = 0;
+    var perYear = []; for (var k = 0; k <= years; k++) perYear.push([]);
+    for (var t = 0; t < trials; t++) {
+      var seq = blockBootstrap(HIST_EQUITY_REAL, years, blockLen, rng);
+      var bal = startBalance, ok = true;
+      perYear[0].push(bal);
+      for (var i = 0; i < years; i++) {
+        var afterDraw = bal - income;
+        if (afterDraw < floor - 1e-6) ok = false;      // breached the floor funding this year
+        bal = Math.max(0, afterDraw) * (1 + seq[i]);    // failed paths flatline at 0
+        perYear[i + 1].push(bal);
+      }
+      if (ok && bal >= floor - 1e-6) success++;
+    }
+    var bands = perYear.map(function (arr, i) {
+      arr.sort(function (a, b) { return a - b; });
+      var q = function (p) { return arr[Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))))]; };
+      return { age: Math.round(stopAge) + i, p10: round2(q(0.10)), p50: round2(q(0.50)), p90: round2(q(0.90)) };
+    });
+    return { rate: success / trials, years: years, trials: trials, startBalance: round2(startBalance), bands: bands };
+  }
+
+  // Earliest age whose bridge clears the target confidence. Scans integer ages
+  // (common random numbers across ages keep it smooth) and interpolates a
+  // one-decimal age where the success curve crosses the confidence line.
+  function stressTestedOptionalityAge(bp, confidence, minR, opts) {
+    var accessAge = Math.round(bp.pensionAccessAge);
+    var startScan = Math.ceil(bp.currentAge);
+    var prevRate = null, prevAge = null;
+    for (var a = startScan; a <= accessAge; a++) {
+      var res = bridgeSurvivalRateAt(bp, a, minR, opts);
+      if (res.rate >= confidence) {
+        if (prevAge == null || res.rate === prevRate) return { age: a, exact: a, rateAt: res.rate };
+        var f = (confidence - prevRate) / (res.rate - prevRate); f = Math.max(0, Math.min(1, f));
+        return { age: a, exact: Math.round((prevAge + f) * 10) / 10, rateAt: res.rate };
+      }
+      prevRate = res.rate; prevAge = a;
+    }
+    return { age: null, exact: null, rateAt: prevRate };   // unreachable even at pension access
+  }
+
+  // Full Phase-2 simulation for the bridge planner.
+  function bridgeSimulate(bp, o) {
+    o = o || {};
+    var opts = { trials: o.trials || 2000, blockLen: o.blockLen || 5, seed: (o.seed || 1234567) >>> 0 };
+    var confidence = o.confidence != null ? o.confidence : (bp.confidence != null ? bp.confidence : 0.90);
+    var minR = o.minResidual != null ? o.minResidual : (bp.minResidual || 0);
+    var basePlan = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
+    var crossAge = basePlan.crossAge;
+    var out = {
+      reached: crossAge != null, crossAge: crossAge, crossAgeExact: basePlan.crossAgeExact,
+      accessAge: Math.round(bp.pensionAccessAge), confidence: confidence, minResidual: minR,
+      trials: opts.trials, blockLen: opts.blockLen, hist: HIST_META
+    };
+    if (crossAge == null) return out;
+    var atCross = bridgeSurvivalRateAt(bp, crossAge, minR, opts);
+    out.confidenceAtCrossover = atCross.rate;
+    out.bands = atCross.bands;              // fan chart at the work-optional age
+    out.bridgeYears = atCross.years;
+    out.startBalance = atCross.startBalance;
+    var st = stressTestedOptionalityAge(bp, confidence, minR, opts);
+    out.stressAge = st.age;
+    out.stressAgeExact = st.exact;
+    out.stressAgeRate = st.rateAt;
+    out.meetsAtCrossover = atCross.rate >= confidence;
     return out;
   }
 
@@ -2059,6 +2227,13 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
     bridgeDrawdownPath: bridgeDrawdownPath,
     realReturn: realReturn,
     BRIDGE_STRESS: BRIDGE_STRESS,
+    bridgeSimulate: bridgeSimulate,
+    bridgeSurvivalRateAt: bridgeSurvivalRateAt,
+    stressTestedOptionalityAge: stressTestedOptionalityAge,
+    bridgeBalanceIfStopAt: bridgeBalanceIfStopAt,
+    blockBootstrap: blockBootstrap,
+    HIST_EQUITY_REAL: HIST_EQUITY_REAL,
+    HIST_META: HIST_META,
     COAST_DEFAULTS: COAST_DEFAULTS,
     coastPlan: coastPlan,
     coastProject: coastProject,
@@ -2208,6 +2383,9 @@ function BpNum({ value, onChange, step, min, money, pct, suffix }) {
 function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
+  // sequence-risk layers (memoised — the Monte Carlo is ~50ms, don't rerun on theme/units toggles)
+  const stress = useMemo(() => Engine.bridgeStressTest(bp, bp.minResidual||0), [bp]);
+  const sim = useMemo(() => Engine.bridgeSimulate(bp), [bp]);
   // display factor: engine is REAL; nominal view re-inflates by (1+infl)^t
   const bf = (age) => realTerms ? 1 : Math.pow(1 + (bp.inflation||0), (age||bp.currentAge) - bp.currentAge);
   const m = (v, age) => gbpC(v * bf(age));
@@ -2456,11 +2634,17 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
       {/* ===== SEQUENCE RISK / DRAWDOWN STRESS TEST (Phase 1) ===== */}
       {(function(){
-        const stress = Engine.bridgeStressTest(bp, bp.minResidual||0);
         const sc = stress.scenarios;
         const accessNf = realTerms ? 1 : Math.pow(1+(bp.inflation||0), stress.accessAge - bp.currentAge);
         const ageLabel = stress.startAgeExact!=null ? stress.startAgeExact.toFixed(1) : (stress.startAge!=null?stress.startAge:'—');
         const hasBridge = stress.reached && stress.bridgeYears>0;
+        const targetPct = Math.round((bp.confidence!=null?bp.confidence:0.9)*100);
+        const confPct = sim.confidenceAtCrossover!=null ? Math.round(sim.confidenceAtCrossover*100) : null;
+        const meetsTarget = sim.reached && sim.confidenceAtCrossover!=null && sim.confidenceAtCrossover >= (bp.confidence!=null?bp.confidence:0.9);
+        const stressAgeLabel = sim.stressAgeExact!=null ? sim.stressAgeExact.toFixed(1) : null;
+        const trialsLbl = sim.trials ? sim.trials.toLocaleString() : '';
+        const realPct = (((1+bp.growth)/(1+(bp.inflation||0))-1)*100).toFixed(1);
+        // Phase-1 deterministic trajectories (Normal / Poor / Crash)
         let sData = [];
         if (hasBridge){
           const n = sc.normal.rows.length;
@@ -2471,20 +2655,22 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           sData.push({ age:acc, normal: Math.max(0,sc.normal.residual)*bf(acc),
             poor: Math.max(0,sc.poorStart.residual)*bf(acc), crash: Math.max(0,sc.crash.residual)*bf(acc) });
         }
+        // Phase-2 percentile fan (p10/p50/p90), display-factored
+        let fData = [];
+        if (hasBridge && sim.bands){ fData = sim.bands.map(function(b){ return { age:b.age, p10:b.p10*bf(b.age), p50:b.p50*bf(b.age), p90:b.p90*bf(b.age) }; }); }
         const yn = (b)=> b ? <span className="v ok">Yes</span> : <span className="v no">No</span>;
         let sub, subBad=false;
         if (!stress.reached){
           sub = 'You’re not work-optional before pension access on the current plan, so there’s no bridge period to stress-test yet — adjust contributions, growth or the target above.';
         } else if (!hasBridge){
           sub = 'You reach optionality only at pension access, so there’s no ISA/GIA bridge gap that markets could break.';
-        } else if (stress.survivesNormal && stress.survivesBadStart){
-          sub = 'Your bridge survives even a weak opening run or a year-one crash and still reaches pension access '+stress.accessAge+' above your buffer — a comfortable margin against sequence risk.';
-        } else if (!stress.survivesNormal){
-          sub = 'Even steady returns leave less than your '+gbpC(bp.minResidual||0)+' buffer by pension access — a fully-depleting bridge is sized to run down to near zero. Raise contributions, lower the buffer, or plan to keep some pension/other capital in reserve.';
+        } else if (meetsTarget){
+          sub = 'Across '+trialsLbl+' historical market sequences the bridge stayed funded to pension access '+sim.accessAge+' in '+confPct+'% of them — at or above your '+targetPct+'% target. Stopping at '+ageLabel+' holds up even against bad early runs.';
+        } else if (stressAgeLabel==null){
+          sub = 'Even stopping right at pension access can’t reach '+targetPct+'% confidence with a '+gbpC(bp.minResidual||0)+' buffer on these figures — trim the target income or the buffer.';
           subBad=true;
         } else {
-          const w = sc[stress.worstFail]; const wl = stress.worstFail==='crash'?'a year-one crash':'a poor opening run';
-          sub = 'The base plan holds in steady markets, but '+wl+' empties the pot around age '+w.failAge+' — '+(stress.accessAge-w.failAge)+' year'+((stress.accessAge-w.failAge)===1?'':'s')+' short of pension access '+stress.accessAge+'. To absorb bad early markets you’d stop a little later, keep a bigger buffer, or flex spending after a fall.';
+          sub = 'Across '+trialsLbl+' historical sequences the bridge stayed funded '+confPct+'% of the time from age '+ageLabel+' — below your '+targetPct+'% target. To clear '+targetPct+'% you’d wait to about '+stressAgeLabel+' (or keep a bigger buffer, or flex spending after a fall).';
           subBad=true;
         }
         return (
@@ -2493,16 +2679,24 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           <div className="bp-stress">
             <div className="bp-stress-head">
               <div className="bp-stress-q">{stress.reached ? 'Can I stop working at '+ageLabel+'?' : 'Can I stop working before pension access?'}</div>
-              <div className="bp-stress-resid">
-                <label>Buffer to keep at access {bp.pensionAccessAge}</label>
-                <BpNum money value={bp.minResidual||0} step={5000} onChange={v=>setBp({minResidual:Math.max(0,v)})} />
+              <div className="bp-stress-controls">
+                <div className="bp-stress-resid">
+                  <label>Buffer to keep at access {bp.pensionAccessAge}</label>
+                  <BpNum money value={bp.minResidual||0} step={5000} onChange={v=>setBp({minResidual:Math.max(0,v)})} />
+                </div>
+                <div className="bp-stress-resid">
+                  <label>Confidence target</label>
+                  <div className="bp-seg sm" role="group" aria-label="confidence target">
+                    {[80,90,95].map(function(p){ return <button key={p} className={targetPct===p?'on':''} onClick={()=>setBp({confidence:p/100})}>{p}%</button>; })}
+                  </div>
+                </div>
               </div>
             </div>
             <div className="bp-stress-lines">
               <div className="ssl"><span className="k">Base projection <span className="muted">(steady returns)</span></span>{stress.reached?yn(stress.survivesNormal):<span className="v muted">—</span>}</div>
               <div className="ssl"><span className="k">Bad early markets <span className="muted">(poor start / crash)</span></span>{stress.reached&&hasBridge?yn(stress.survivesBadStart):<span className="v muted">—</span>}</div>
-              <div className="ssl next"><span className="k">Simulation confidence</span><span className="v muted">Phase 2 · next</span></div>
-              <div className="ssl next"><span className="k">Stress-tested optionality age</span><span className="v muted">Phase 2 · next</span></div>
+              <div className="ssl"><span className="k">Simulation confidence <span className="muted">({trialsLbl} historical runs)</span></span>{sim.reached&&hasBridge&&confPct!=null?<span className={'v '+(meetsTarget?'ok':'')}>{confPct}%</span>:<span className="v muted">—</span>}</div>
+              <div className="ssl"><span className="k">Stress-tested optionality age <span className="muted">(at {targetPct}%)</span></span>{sim.reached&&hasBridge?(stressAgeLabel!=null?<span className={'v '+(meetsTarget?'ok':'')}>{stressAgeLabel}</span>:<span className="v no">after {sim.accessAge}</span>):<span className="v muted">—</span>}</div>
             </div>
             <div className={'bp-stress-sub'+(subBad?' bad':'')}>{sub}</div>
 
@@ -2563,7 +2757,35 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
                 </table>
               </div>
               <div className="bp-note" style={{marginTop:10}}>
-                <b>Method.</b> Starting from the pot you’d hold at your work-optional age ({ageLabel}) — <b>{m(stress.startBalance, stress.startAge)}</b> — each scenario draws your <b>{gbpC(bp.targetIncome)}/yr</b> target income (constant in today’s money) and grows the remainder at a <b>variable</b> real return, year by year, to pension access {stress.accessAge}. The base real return is {(stress.baseReal*100).toFixed(1)}%. <b>Poor start</b> applies roughly −6%, −10%, −3% real over the first three years, then reverts to trend; <b>Crash</b> applies −35% in year one then a +18% / +12% rebound, then trend. A scenario <b>survives</b> if it funds every year’s income and still holds at least your {gbpC(bp.minResidual||0)} buffer when the pension unlocks. These are deterministic stress overlays — <b>Phase 2</b> adds a historical block-bootstrap simulation across thousands of return sequences, a chosen confidence level and a stress-tested optionality age. Planning model, not financial advice.
+                <b>Method (stress overlays).</b> Starting from the pot you’d hold at your work-optional age ({ageLabel}) — <b>{m(stress.startBalance, stress.startAge)}</b> — each scenario draws your <b>{gbpC(bp.targetIncome)}/yr</b> target income (constant in today’s money) and grows the remainder at a <b>variable</b> real return, year by year, to pension access {stress.accessAge}. The base real return is {(stress.baseReal*100).toFixed(1)}%. <b>Poor start</b> applies roughly −6%, −10%, −3% real over the first three years, then reverts to trend; <b>Crash</b> applies −35% in year one then a +18% / +12% rebound, then trend. A scenario <b>survives</b> if it funds every year’s income and still holds at least your {gbpC(bp.minResidual||0)} buffer when the pension unlocks. These three are hand-picked overlays; the historical simulation below turns the same idea into a probability across thousands of sequences.
+              </div>
+
+              <div className="bp-sub" style={{marginTop:20}}>Historical simulation · {trialsLbl} sequences</div>
+              <div className="bp-note" style={{marginTop:0,marginBottom:8}}>The lines are the 10th / 50th / 90th percentiles of where the bridge pot lands each year across {trialsLbl} bootstrapped historical return sequences, drawn from age {ageLabel}. <b>{confPct}%</b> stay funded to pension access {sim.accessAge}{(bp.minResidual||0)>0?<span> above your {gbpC(bp.minResidual||0)} buffer</span>:''}; the 10th-percentile line is where sequence risk bites hardest.</div>
+              <div className="bp-chart" style={{marginTop:0}}>
+                {ResponsiveContainer ? (
+                <ResponsiveContainer width="100%" height={narrow?220:290}>
+                  <LineChart data={fData} margin={{top:22,right:18,left:8,bottom:2}}>
+                    <CartesianGrid stroke={C.grid} vertical={false} />
+                    <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
+                    <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
+                    <Tooltip content={<ChartTip/>} />
+                    {(bp.minResidual||0)>0 && <ReferenceLine y={(bp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
+                    <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
+                    <Line type="monotone" dataKey="p90" name="90th pct" stroke={C.isa} strokeWidth={1.8} dot={false} strokeDasharray="5 4" />
+                    <Line type="monotone" dataKey="p50" name="Median" stroke={C.pension} strokeWidth={2.6} dot={false} />
+                    <Line type="monotone" dataKey="p10" name="10th pct" stroke={C.red} strokeWidth={1.8} dot={false} strokeDasharray="5 4" />
+                  </LineChart>
+                </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+                <div className="legend-row" style={{marginBottom:2}}>
+                  <span><span className="sw" style={{background:C.isa}}></span>90th percentile</span>
+                  <span><span className="sw" style={{background:C.pension}}></span>Median</span>
+                  <span><span className="sw" style={{background:C.red}}></span>10th percentile</span>
+                  <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
+                </div>
+              </div>
+              <div className="bp-note" style={{marginTop:10}}>
+                <b>Simulation method.</b> The bridge drawdown is replayed against <b>{trialsLbl}</b> return sequences drawn from <b>actual history</b> — annual real total returns of US large-cap equity (S&P 500 with dividends, deflated by US CPI), <b>{sim.hist?sim.hist.from:1928}–{sim.hist?sim.hist.to:2024}</b> ({sim.hist?sim.hist.n:97} years; ~{sim.hist?(sim.hist.geoMean*100).toFixed(1):'6.7'}% real return, ~{sim.hist?(sim.hist.vol*100).toFixed(0):'20'}% volatility) as the equity proxy. A <b>block bootstrap</b> stitches random 5-year runs so crashes and recoveries cluster as they did historically, not as independent coin-flips. Because these are <b>raw</b> historical returns, the simulation’s average comes from history (~{sim.hist?(sim.hist.geoMean*100).toFixed(1):'6.7'}% real), not your {realPct}% assumption — which is used only to build the pot up to the day you stop. The <b>stress-tested optionality age</b> is the earliest age whose bridge clears your {targetPct}% confidence. Runs are seeded, so the figures are stable. Planning model, not financial advice.
               </div>
             </details>}
           </div>
@@ -3258,6 +3480,8 @@ function App() {
     }
     // one-time migration (v6): sequence-risk minimum residual buffer at access
     if (b._bv < 6) { if (b.minResidual == null) b.minResidual = 0; b._bv = 6; }
+    // one-time migration (v7): sequence-risk Phase 2 target confidence
+    if (b._bv < 7) { if (b.confidence == null) b.confidence = 0.90; b._bv = 7; }
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);

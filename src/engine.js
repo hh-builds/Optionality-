@@ -923,6 +923,7 @@
     keepContributingAfterOptionality: false, // option: keep paying in the contribution phases even past optionality
     lifeExpectancy: 90,            // horizon for the drawdown view
     minResidual: 0,                // sequence-risk: buffer (today's money) to keep at pension access
+    confidence: 0.90,              // sequence-risk Phase 2: target confidence for the stress-tested age
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
       // (conservative = lower return, higher inflation, lower safe withdrawal rate)
@@ -1176,6 +1177,170 @@
     // the harshest scenario that fails (worst first), for the headline copy
     out.worstFail = !out.scenarios.crash.survived ? 'crash'
       : (!out.scenarios.poorStart.survived ? 'poorStart' : null);
+    return out;
+  }
+
+  // =====================================================================
+  //  SEQUENCE-RISK PHASE 2 — historical block-bootstrap simulation
+  //
+  //  Phase 1 replays three hand-picked stress paths. Phase 2 replays THOUSANDS
+  //  of return sequences drawn from actual history, so the answer becomes a
+  //  probability: across every plausible run of markets, in what share does the
+  //  bridge fund the target income to pension access without breaching the
+  //  chosen minimum residual? From that we read the earliest age that clears a
+  //  target confidence — the STRESS-TESTED optionality age.
+  //
+  //  Return data: annual REAL total returns of US large-cap equity (S&P 500
+  //  with dividends, deflated by US CPI), 1928–2024 — 97 observations, sourced
+  //  from NYU Stern (Damodaran) S&P 500 total returns + US BLS CPI. Arithmetic
+  //  mean ≈ 8.6% real, geometric ≈ 6.7%, volatility ≈ 19.6%, worst year −38.9%
+  //  (2008), best +58.0% (1933). Used as the equity proxy for a 100%-growth
+  //  bridge pot (global-developed equity has a similar shape at slightly lower
+  //  vol; US large-cap gives the longest complete annual series, and its wider
+  //  spread makes the test, if anything, a little harsher).
+  //
+  //  These are RAW historical returns — the simulation's average comes from
+  //  history (~6.7% real), NOT from the user's own return assumption, which is
+  //  used only to build the pot during the accumulation phase. Sequencing is
+  //  preserved with a BLOCK bootstrap (stitch random 5-year runs) so crashes and
+  //  recoveries cluster as they did historically, unlike i.i.d. sampling.
+  //  Everything is seeded (deterministic) so the figures are stable and testable.
+  // =====================================================================
+
+  // Annual REAL total returns, US large-cap equity, 1928–2024 (n=97). See above.
+  var HIST_EQUITY_REAL = [
+    0.4630,-0.0830,-0.2336,-0.3829,0.0140,0.5804,-0.0416,0.4358,0.2999,-0.3759,0.3205,0.0030,
+    -0.1129,-0.1692,0.0746,0.1787,0.1704,0.3277,-0.1545,-0.0804,-0.0222,0.1974,0.2913,0.1462,
+    0.1595,-0.0199,0.5150,0.3313,0.0585,-0.1332,0.3981,0.1128,-0.0134,0.2539,-0.0971,0.2104,
+    0.1493,0.1063,-0.1251,0.2008,0.0634,-0.1302,-0.0202,0.0941,0.1508,-0.1931,-0.3324,0.2557,
+    0.1704,-0.1266,-0.0101,0.0649,0.1607,-0.1360,0.1339,0.1855,0.0177,0.2668,0.1628,0.0213,
+    0.1195,0.2546,-0.0803,0.2498,0.0436,0.0677,-0.0124,0.3346,0.1911,0.3011,0.2632,0.1829,
+    -0.1202,-0.1425,-0.2320,0.2547,0.0783,0.0138,0.1203,0.0261,-0.3887,0.2645,0.1301,-0.0107,
+    0.1351,0.3020,0.1173,0.0128,0.1034,0.1911,-0.0647,0.2889,0.1662,0.2270,-0.2411,0.2110,
+    0.2136
+  ];
+  var HIST_META = { label: 'US large-cap equity, real, 1928–2024', from: 1928, to: 2024,
+    n: 97, arithMean: 0.0858, geoMean: 0.0671, vol: 0.1955, worst: -0.3887, best: 0.5804 };
+
+  // Deterministic PRNG (mulberry32) — reproducible sims, stable UI, testable.
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // One block-bootstrap sequence of `n` real returns: stitch random contiguous
+  // blocks of `blockLen` years (wrapping the series) so short-run clustering —
+  // multi-year crashes and recoveries — is preserved, unlike i.i.d. draws.
+  function blockBootstrap(series, n, blockLen, rng) {
+    var out = [], L = series.length;
+    while (out.length < n) {
+      var start = Math.floor(rng() * L);
+      for (var i = 0; i < blockLen && out.length < n; i++) out.push(series[(start + i) % L]);
+    }
+    return out;
+  }
+
+  // Pot you'd hold at `stopAge` if you keep contributing and DON'T draw down,
+  // growing at your central (deterministic) real return — the accumulation phase
+  // uses your own assumption; only the bridge drawdown is bootstrapped. Mirrors
+  // bridgeProject's annual (contribute, then grow) convention.
+  function bridgeBalanceIfStopAt(bp, stopAge) {
+    var infl = bp.inflation || 0, g = realReturn(bp.growth, infl), bal = bp.currentBalance;
+    var monthly = bp.frequency === 'monthly';
+    var end = Math.round(stopAge);
+    for (var a = bp.currentAge; a < end; a++) {
+      var c = bridgeContribAt(bp, a) / Math.pow(1 + infl, a - bp.currentAge);
+      if (monthly) { var mg = Math.pow(1 + g, 1 / 12) - 1, cm = c / 12, r = bal; for (var mo = 0; mo < 12; mo++) r = (r + cm) * (1 + mg); bal = r; }
+      else bal = (bal + c) * (1 + g);
+    }
+    return bal;
+  }
+
+  // Monte-Carlo survival of the bridge if you stop at `stopAge`: draw the target
+  // income (constant real) from the pot you'd hold there, against `trials`
+  // bootstrapped historical real-return sequences, to pension access. Returns the
+  // success rate (share funding every year AND holding ≥ minResidual at access)
+  // plus p10/p50/p90 balance bands per bridge year for a fan chart.
+  function bridgeSurvivalRateAt(bp, stopAge, minR, opts) {
+    var accessAge = bp.pensionAccessAge;
+    var years = Math.max(0, Math.round(accessAge) - Math.round(stopAge));
+    var startBalance = bridgeBalanceIfStopAt(bp, stopAge);
+    var income = bp.targetIncome, floor = minR || 0;
+    if (years <= 0) {
+      return { rate: startBalance >= floor - 1e-6 ? 1 : 0, years: 0, trials: 0,
+               startBalance: startBalance, bands: [{ age: Math.round(stopAge), p10: startBalance, p50: startBalance, p90: startBalance }] };
+    }
+    var trials = opts.trials, blockLen = opts.blockLen, rng = mulberry32(opts.seed);
+    var success = 0;
+    var perYear = []; for (var k = 0; k <= years; k++) perYear.push([]);
+    for (var t = 0; t < trials; t++) {
+      var seq = blockBootstrap(HIST_EQUITY_REAL, years, blockLen, rng);
+      var bal = startBalance, ok = true;
+      perYear[0].push(bal);
+      for (var i = 0; i < years; i++) {
+        var afterDraw = bal - income;
+        if (afterDraw < floor - 1e-6) ok = false;      // breached the floor funding this year
+        bal = Math.max(0, afterDraw) * (1 + seq[i]);    // failed paths flatline at 0
+        perYear[i + 1].push(bal);
+      }
+      if (ok && bal >= floor - 1e-6) success++;
+    }
+    var bands = perYear.map(function (arr, i) {
+      arr.sort(function (a, b) { return a - b; });
+      var q = function (p) { return arr[Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))))]; };
+      return { age: Math.round(stopAge) + i, p10: round2(q(0.10)), p50: round2(q(0.50)), p90: round2(q(0.90)) };
+    });
+    return { rate: success / trials, years: years, trials: trials, startBalance: round2(startBalance), bands: bands };
+  }
+
+  // Earliest age whose bridge clears the target confidence. Scans integer ages
+  // (common random numbers across ages keep it smooth) and interpolates a
+  // one-decimal age where the success curve crosses the confidence line.
+  function stressTestedOptionalityAge(bp, confidence, minR, opts) {
+    var accessAge = Math.round(bp.pensionAccessAge);
+    var startScan = Math.ceil(bp.currentAge);
+    var prevRate = null, prevAge = null;
+    for (var a = startScan; a <= accessAge; a++) {
+      var res = bridgeSurvivalRateAt(bp, a, minR, opts);
+      if (res.rate >= confidence) {
+        if (prevAge == null || res.rate === prevRate) return { age: a, exact: a, rateAt: res.rate };
+        var f = (confidence - prevRate) / (res.rate - prevRate); f = Math.max(0, Math.min(1, f));
+        return { age: a, exact: Math.round((prevAge + f) * 10) / 10, rateAt: res.rate };
+      }
+      prevRate = res.rate; prevAge = a;
+    }
+    return { age: null, exact: null, rateAt: prevRate };   // unreachable even at pension access
+  }
+
+  // Full Phase-2 simulation for the bridge planner.
+  function bridgeSimulate(bp, o) {
+    o = o || {};
+    var opts = { trials: o.trials || 2000, blockLen: o.blockLen || 5, seed: (o.seed || 1234567) >>> 0 };
+    var confidence = o.confidence != null ? o.confidence : (bp.confidence != null ? bp.confidence : 0.90);
+    var minR = o.minResidual != null ? o.minResidual : (bp.minResidual || 0);
+    var basePlan = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
+    var crossAge = basePlan.crossAge;
+    var out = {
+      reached: crossAge != null, crossAge: crossAge, crossAgeExact: basePlan.crossAgeExact,
+      accessAge: Math.round(bp.pensionAccessAge), confidence: confidence, minResidual: minR,
+      trials: opts.trials, blockLen: opts.blockLen, hist: HIST_META
+    };
+    if (crossAge == null) return out;
+    var atCross = bridgeSurvivalRateAt(bp, crossAge, minR, opts);
+    out.confidenceAtCrossover = atCross.rate;
+    out.bands = atCross.bands;              // fan chart at the work-optional age
+    out.bridgeYears = atCross.years;
+    out.startBalance = atCross.startBalance;
+    var st = stressTestedOptionalityAge(bp, confidence, minR, opts);
+    out.stressAge = st.age;
+    out.stressAgeExact = st.exact;
+    out.stressAgeRate = st.rateAt;
+    out.meetsAtCrossover = atCross.rate >= confidence;
     return out;
   }
 
@@ -1450,6 +1615,13 @@
     bridgeDrawdownPath: bridgeDrawdownPath,
     realReturn: realReturn,
     BRIDGE_STRESS: BRIDGE_STRESS,
+    bridgeSimulate: bridgeSimulate,
+    bridgeSurvivalRateAt: bridgeSurvivalRateAt,
+    stressTestedOptionalityAge: stressTestedOptionalityAge,
+    bridgeBalanceIfStopAt: bridgeBalanceIfStopAt,
+    blockBootstrap: blockBootstrap,
+    HIST_EQUITY_REAL: HIST_EQUITY_REAL,
+    HIST_META: HIST_META,
     COAST_DEFAULTS: COAST_DEFAULTS,
     coastPlan: coastPlan,
     coastProject: coastProject,
