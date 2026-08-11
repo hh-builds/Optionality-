@@ -3,17 +3,32 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Financial Optionality — Model your path to financial independence</title>
+<title>Future Funded — Know when work becomes optional</title>
+<meta name="description" content="Future Funded shows when your money gives you choices: what you need, whether you're on track, when your pension becomes self-sustaining, and when work becomes financially optional. Private and on-device — no accounts required." />
 <!-- PWA: installable + offline. Files (manifest, sw.js, icons) live at the repo root. -->
 <link rel="manifest" href="manifest.webmanifest" />
-<meta name="theme-color" content="#2a78d6" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#3e5c99" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0e0f11" media="(prefers-color-scheme: dark)" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Optionality" />
+<meta name="apple-mobile-web-app-title" content="Future Funded" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+<!-- Social / sharing metadata -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Future Funded" />
+<meta property="og:title" content="Future Funded — Know when work becomes optional" />
+<meta property="og:description" content="See how your pension, investments and contributions could build towards financial independence — and when your money may be able to take it from here." />
+<meta property="og:url" content="https://futurefunded.uk/" />
+<meta property="og:image" content="https://futurefunded.uk/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Future Funded — Know when work becomes optional" />
+<meta name="twitter:description" content="See when your money gives you choices — a clean, private financial-independence planner." />
+<meta name="twitter:image" content="https://futurefunded.uk/og-image.png" />
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
@@ -160,40 +175,47 @@
 </script>
 <style>
 :root{
-  --surface-1:#fcfcfb; --surface-2:#ffffff; --page:#f4f4f1;
-  --text-primary:#0b0b0b; --text-secondary:#52514e; --muted:#898781;
-  --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
-  --series-pension:#2a78d6; --series-isa:#1baf7a; --series-gia:#eb6834;
-  --series-cash:#eda100; --series-home:#4a3aa7; --series-red:#e34948;
-  --good:#0ca30c; --warning:#e8930c; --serious:#ec835a; --critical:#d03b3b;
-  --good-text:#006300;
-  --accent:#2a78d6; --accent-soft:rgba(42,120,214,0.10);
-  --shadow:0 1px 2px rgba(11,11,11,0.05),0 4px 16px rgba(11,11,11,0.04);
-  --phase-accum:rgba(42,120,214,0.08);
-  --phase-bridge:rgba(232,147,12,0.10);
-  --phase-ret:rgba(27,175,122,0.10);
+  /* Future Funded — ink + one quiet accent on warm paper.
+     Colour is used sparingly; semantic green/amber/red carry status only. */
+  --surface-1:#ffffff; --surface-2:#f7f6f2; --page:#f4f3ef;
+  --text-primary:#191a1e; --text-secondary:#585a60; --muted:#8d8e93;
+  --grid:#ebeae4; --baseline:#d8d7cf; --border:rgba(25,26,30,0.09);
+  --series-pension:#3e5c99; --series-isa:#2f8a67; --series-gia:#c67c3e;
+  --series-cash:#c1a12e; --series-home:#6a5bb0; --series-red:#cf5750;
+  --good:#2b8a55; --warning:#c1861f; --serious:#d1794f; --critical:#c8463f;
+  --good-text:#1f7a45;
+  --accent:#3e5c99; --accent-soft:rgba(62,92,153,0.09);
+  --shadow:0 1px 2px rgba(25,26,30,0.04);
+  --shadow-lift:0 1px 2px rgba(25,26,30,0.04),0 8px 24px rgba(25,26,30,0.06);
+  --radius:14px; --radius-sm:10px;
+  --phase-accum:rgba(62,92,153,0.05);
+  --phase-bridge:rgba(193,134,31,0.07);
+  --phase-ret:rgba(47,138,103,0.07);
 }
 html[data-theme="dark"]{
-  --surface-1:#1a1a19; --surface-2:#212120; --page:#0d0d0d;
-  --text-primary:#ffffff; --text-secondary:#c3c2b7; --muted:#898781;
-  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
-  --series-pension:#3987e5; --series-isa:#199e70; --series-gia:#d95926;
-  --series-cash:#c98500; --series-home:#9085e9; --series-red:#e66767;
-  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
-  --good-text:#0ca30c;
-  --accent:#3987e5; --accent-soft:rgba(57,135,229,0.14);
-  --shadow:0 1px 2px rgba(0,0,0,0.4),0 4px 16px rgba(0,0,0,0.35);
-  --phase-accum:rgba(57,135,229,0.12);
-  --phase-bridge:rgba(250,178,25,0.12);
-  --phase-ret:rgba(25,158,112,0.14);
+  --surface-1:#17181b; --surface-2:#1e2024; --page:#0e0f11;
+  --text-primary:#f3f3f4; --text-secondary:#c0c1c6; --muted:#87888d;
+  --grid:#26282c; --baseline:#34363b; --border:rgba(255,255,255,0.09);
+  --series-pension:#8098d6; --series-isa:#3fa07a; --series-gia:#d68a52;
+  --series-cash:#cba53a; --series-home:#9085e9; --series-red:#e07068;
+  --good:#3fa168; --warning:#e0a83a; --serious:#e08a5c; --critical:#e0645c;
+  --good-text:#5cbd85;
+  --accent:#8098d6; --accent-soft:rgba(128,152,214,0.16);
+  --shadow:0 1px 2px rgba(0,0,0,0.35);
+  --shadow-lift:0 1px 2px rgba(0,0,0,0.4),0 8px 24px rgba(0,0,0,0.32);
+  --radius:14px; --radius-sm:10px;
+  --phase-accum:rgba(128,152,214,0.10);
+  --phase-bridge:rgba(224,168,58,0.12);
+  --phase-ret:rgba(63,160,122,0.13);
 }
 *{box-sizing:border-box}
 body{
   margin:0; background:var(--page); color:var(--text-primary);
   font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
 }
-.wrap{max-width:1340px;margin:0 auto;padding:18px 20px 70px}
+.wrap{max-width:1240px;margin:0 auto;padding:18px 22px 80px}
 /* two-column app layout: inputs sidebar (left / on top when narrow) + results main */
 .layout{display:flex;gap:22px;align-items:flex-start}
 .main{flex:1 1 0;min-width:0}
@@ -206,10 +228,34 @@ button{font-family:inherit}
 
 /* top bar */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
-  position:sticky;top:0;z-index:50;background:var(--page);padding:11px 0 11px;margin-bottom:16px;border-bottom:1px solid var(--border)}
-.brand{display:flex;align-items:center;gap:10px}
-.brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent)}
-.brand h1{font-size:18px}
+  position:sticky;top:0;z-index:50;background:var(--page);
+  background:color-mix(in srgb, var(--page) 88%, transparent);
+  -webkit-backdrop-filter:saturate(1.4) blur(8px);backdrop-filter:saturate(1.4) blur(8px);
+  padding:11px 0 11px;margin-bottom:8px;border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:11px}
+/* FF monogram — theme-constant brand mark */
+.ff-mark{width:28px;height:28px;border-radius:8px;background:#3e5c99;color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-weight:700;
+  font-size:12.5px;letter-spacing:0.04em;flex:0 0 auto;box-shadow:0 1px 2px rgba(25,26,30,0.18)}
+.brand h1{font-size:17px;font-weight:650;letter-spacing:-0.02em}
+.brand .brand-sub{color:var(--muted)}
+
+/* hero — clean, high-whitespace proposition (Question → Answer starts here) */
+.hero{margin:16px 2px 34px;max-width:760px}
+.hero h2{font-size:33px;line-height:1.12;letter-spacing:-0.03em;font-weight:650;color:var(--text-primary);margin:0}
+.hero p{font-size:16px;line-height:1.62;color:var(--text-secondary);margin:14px 0 0;max-width:630px}
+@media (max-width:560px){ .hero h2{font-size:25px} .hero p{font-size:14.5px} .hero{margin:10px 2px 26px} }
+
+/* footer */
+.site-foot{margin:56px 2px 0;padding-top:22px;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:14px 24px;flex-wrap:wrap;
+  font-size:12.5px;color:var(--muted);line-height:1.6}
+.site-foot .foot-brand{display:flex;align-items:center;gap:9px;color:var(--text-secondary);font-weight:600}
+.site-foot .foot-mark{width:22px;height:22px;border-radius:6px;background:#3e5c99;color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;letter-spacing:0.03em}
+.site-foot a{color:var(--muted);text-decoration:none;border-bottom:1px solid var(--border);padding-bottom:1px}
+.site-foot a:hover{color:var(--text-primary);border-color:var(--baseline)}
+.site-foot .foot-legal{max-width:560px}
 /* burger menu — collapses the top-bar controls into a dropdown at ALL widths */
 .toolbar{display:none}
 .burger{display:inline-flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
@@ -218,7 +264,7 @@ button{font-family:inherit}
 .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
 .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
   position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:232px;
-  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:5px;box-shadow:var(--shadow)}
+  background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:5px;box-shadow:var(--shadow-lift)}
 .toolbar.open > .btn{width:100%;justify-content:flex-start;text-align:left;min-height:42px;
   background:transparent;border:none;border-radius:8px;color:var(--text-primary);font-size:14px;font-weight:500;padding:11px 13px}
 .toolbar.open > .btn:hover{background:var(--surface-1);color:var(--text-primary)}
@@ -233,7 +279,7 @@ button{font-family:inherit}
 .btn.subtle:hover{border-color:var(--border);color:var(--text-primary)}
 /* ---- accounts / auth ---- */
 .auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
-.auth-modal{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);width:100%;max-width:380px;padding:22px 20px;position:relative}
+.auth-modal{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lift);width:100%;max-width:380px;padding:22px 20px;position:relative}
 .auth-x{position:absolute;top:8px;right:11px;background:none;border:none;color:var(--muted);font-size:23px;line-height:1;cursor:pointer;padding:2px 6px}
 .auth-x:hover{color:var(--text-primary)}
 .auth-title{font-size:17px;margin:0 0 6px}
@@ -265,9 +311,9 @@ button{font-family:inherit}
 .acc-row .pw-eye{top:50%;transform:translateY(-50%)}
 
 
-.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:18px}
-.panel > h2{font-size:15px;margin-bottom:4px}
-.panel .desc{font-size:13px;color:var(--muted);margin-bottom:14px}
+.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow)}
+.panel > h2{font-size:16px;margin-bottom:4px;letter-spacing:-0.01em}
+.panel .desc{font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.55}
 
 
 .icon-btn{background:none;border:1px solid var(--border);border-radius:7px;cursor:pointer;color:var(--muted);
@@ -325,8 +371,9 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .tooltip .t-row .sw{width:9px;height:9px;border-radius:2px}
 .tooltip .t-row .amt{font-weight:600;font-variant-numeric:tabular-nums}
 
-.section-title{font-size:13px;letter-spacing:0;color:var(--muted);
-  font-weight:650;margin:30px 2px 14px;display:flex;align-items:center;gap:10px}
+/* "Question" tier — the section questions that lead each block */
+.section-title{font-size:16px;letter-spacing:-0.01em;color:var(--text-secondary);
+  font-weight:600;margin:44px 2px 16px;display:flex;align-items:center;gap:14px}
 .section-title::after{content:"";flex:1;height:1px;background:var(--border)}
 .note{font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.55;max-width:680px}
 .assumptions{font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);
@@ -336,11 +383,11 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
    ISA / GIA BRIDGE PLANNER  ("Accessible Wealth")
    ===================================================================== */
 .bridge-planner{background:var(--surface-1);
-  border:1px solid var(--border);border-radius:16px;padding:22px 24px 20px;margin-bottom:20px}
+  border:1px solid var(--border);border-radius:var(--radius);padding:24px 26px 22px;margin-bottom:20px;box-shadow:var(--shadow)}
 .bp-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.bp-q{font-size:12.5px;letter-spacing:0;color:var(--muted);font-weight:600}
-.bp-title{font-size:19px;font-weight:650;letter-spacing:-0.01em;margin:3px 0 2px}
-.bp-title .bp-star{color:var(--warning)}
+.bp-q{font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);font-weight:650}
+.bp-title{font-size:19px;font-weight:600;letter-spacing:-0.015em;margin:6px 0 2px}
+.bp-title .bp-star{color:var(--accent)}
 .bp-terms{display:flex;gap:6px;align-items:center}
 /* headline result — three tiers: answer → evidence → help */
 .bp-result{margin:16px 0 14px}
@@ -365,9 +412,9 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .bp-chip.on .cage{color:var(--text-secondary)}
 /* result tiles */
 .bp-results{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0 6px}
-.bp-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:12px 14px}
+.bp-tile{background:var(--surface-2);border:none;border-radius:var(--radius-sm);padding:14px 15px}
 .bp-tile .bt-k{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600;line-height:1.3}
-.bp-tile .bt-v{font-size:18px;font-weight:650;margin-top:6px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.bp-tile .bt-v{font-size:18px;font-weight:600;margin-top:7px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
 .bp-tile .bt-v.pos{color:var(--good-text)} .bp-tile .bt-v.neg{color:var(--critical)}
 /* chart block */
 .bp-chart{margin-top:12px;padding:2px 0}
@@ -406,7 +453,7 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .bp-seg button+button{border-left:1px solid var(--border)}
 /* scenario editor cards */
 .bp-scenarios{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.bp-scard{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:13px 14px}
+.bp-scard{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 15px}
 .bp-scard.base{border-color:var(--baseline)}
 .bp-scard-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .bp-scard-head .sn{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700}
@@ -575,7 +622,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .es-line b{font-weight:600}
 /* three-up status tiles */
 .es-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:2px 0 4px}
-.es-tile{background:var(--surface-2);border:1px solid var(--border);border-left-width:3px;border-radius:11px;padding:12px 14px}
+.es-tile{background:var(--surface-2);border:none;border-left:3px solid var(--baseline);border-radius:var(--radius-sm);padding:14px 16px}
 .es-tile.good{border-left-color:var(--good)}
 .es-tile.warn{border-left-color:var(--warning)}
 .es-tile.bad{border-left-color:var(--critical)}
@@ -595,7 +642,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-why li b{color:var(--text-primary);font-weight:650}
 
 /* --- sequence-risk / drawdown stress test --- */
-.bp-stress{margin:6px 0 4px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);padding:16px 18px;box-shadow:var(--shadow)}
+.bp-stress{margin:6px 0 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);padding:16px 18px;box-shadow:var(--shadow)}
 /* when wrapped in the collapsible module section, the details provides the frame — drop the inner card's own chrome so it doesn't double-box */
 details.bp-stress-collapse{margin:12px 0}
 details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radius:0;box-shadow:none;margin:0;padding:15px 16px}
@@ -619,7 +666,7 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .bp-stress-sub{font-size:13px;color:var(--text-secondary);margin-top:11px;line-height:1.55}
 .bp-stress-sub.bad{color:var(--critical)}
 .ss-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 6px}
-.ss-card{border:1px solid var(--border);border-radius:11px;padding:11px 13px;background:var(--surface-1)}
+.ss-card{border:none;border-radius:var(--radius-sm);padding:12px 14px;background:var(--surface-2)}
 .ss-card .n{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:5px}
 .ss-card .n .cd{width:9px;height:9px;border-radius:50%}
 .ss-card .st{font-size:13px;font-weight:700}

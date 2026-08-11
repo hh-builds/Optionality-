@@ -177,7 +177,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-topline">
         <div>
           <div className="bp-q">Accessible wealth · bridge planner</div>
-          <div className="bp-title"><span className="bp-star">⭐</span> When does my accessible wealth give me full optionality?</div>
+          <div className="bp-title">When does your accessible wealth make work optional?</div>
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
@@ -671,7 +671,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-topline">
         <div>
           <div className="bp-q">Pension Coast · self-sustaining pension</div>
-          <div className="bp-title"><span className="bp-star">⭐</span> Have I reached Pension Coast?</div>
+          <div className="bp-title">Have I reached Pension Coast?</div>
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
@@ -1412,7 +1412,7 @@ function App() {
       '"'+(r.notes||'')+'"'].join(',')));
     const blob = new Blob([lines.join('\n')], {type:'text/csv'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download='optionality-cashflow.csv'; a.click();
+    const a = document.createElement('a'); a.href=url; a.download='future-funded-cashflow.csv'; a.click();
     URL.revokeObjectURL(url);
   };
   const reset = () => { if (confirm('Reset all inputs to defaults?')) { setInputs(JSON.parse(JSON.stringify(Engine.DEFAULTS))); setBridgeInputs(JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))); setCoastInputs(JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS))); } };
@@ -1444,8 +1444,7 @@ function App() {
     <div className="wrap">
       {/* top bar */}
       <div className="topbar">
-        <div className="brand"><span className="dot"></span><h1>Financial Optionality</h1>
-          <span className="muted brand-sub" style={{fontSize:13}}>Model your path to financial independence</span></div>
+        <div className="brand"><span className="ff-mark">FF</span><h1>Future Funded</h1></div>
         <button className="burger" aria-label={menuOpen?'Close menu':'Open menu'} aria-expanded={menuOpen}
           onClick={()=>setMenuOpen(o=>!o)}>{menuOpen?'✕':'☰'}</button>
         {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
@@ -1461,12 +1460,18 @@ function App() {
         </div>
       </div>
 
+      {/* ===== HERO ===== */}
+      <section className="hero">
+        <h2>Know when work becomes optional.</h2>
+        <p>See how your pension, investments and contributions could build towards financial independence — and when your money may be able to take it from here.</p>
+      </section>
+
       <div className="layout">
       <main className="main">
 
       {/* ===== EXECUTIVE SUMMARY ===== */}
       <div className="panel exec-sum">
-        <div className="es-head">📋 Your plan today — what to do</div>
+        <div className="es-head">Your plan today</div>
         {(function(){
           var cb = coast.base, bb = bridge.base, cAge = bridgeInputs.currentAge;
           var pen = cb.coasting
@@ -1478,18 +1483,18 @@ function App() {
           var br;
           if (bb.crossAge == null) {
             var gap = Math.max(0, bridge.targetPot - bridgeInputs.currentBalance);
-            br = {label:'Bridge fund', ic:'⚠️', cls:'warn', body:<span>Not there yet — roughly <b>{gbpC(gap)}</b> short of the pot needed to walk away. Keep saving or add a lump sum.</span>};
+            br = {label:'Bridge fund', ic:'', cls:'warn', body:<span>Not there yet — a funding gap of about <b>{gbpC(gap)}</b> to the pot needed to walk away. Keep saving or add a lump sum.</span>};
           } else if (!lasts) {
             br = {label:'Bridge fund', ic:'❌', cls:'bad', body:<span>Work-optional at {bb.crossAge}, but it runs dry at <b>age {bb.depletionAge}</b> — {bridgeInputs.pensionAccessAge-bb.depletionAge} year{(bridgeInputs.pensionAccessAge-bb.depletionAge)===1?'':'s'} short of pension access {bridgeInputs.pensionAccessAge}.</span>};
           } else {
             br = {label:'Bridge fund', ic:'✅', cls:'good', body:<span>{bb.crossAge<=cAge?'Complete — you can walk away now':'On track — work-optional at age '+bb.crossAge}; it lasts to pension access {bridgeInputs.pensionAccessAge}.</span>};
           }
           var opt = bb.crossAge != null
-            ? {label:'Full optionality', ic:'🎯', cls:(cb.reached?'good':'warn'), body:<span>Age <b>{bb.crossAge}</b>{cb.reached?'':' — though the pension is still building'}.</span>}
-            : {label:'Full optionality', ic:'🎯', cls:'warn', body:<span>Not reachable on the current plan — adjust savings, growth or targets below.</span>};
+            ? {label:'Funded age', ic:'', cls:(cb.reached?'good':'warn'), body:<span>Age <b>{bb.crossAge}</b> — where your accessible wealth can take it from here{cb.reached?'':', though the pension is still building'}.</span>}
+            : {label:'Funded age', ic:'', cls:'warn', body:<span>Not reachable on the current plan — adjust savings, growth or targets below.</span>};
           return <div className="es-tiles">{[pen, br, opt].map(function(l,i){ return (
             <div className={'es-tile '+l.cls} key={i}>
-              <div className="es-tile-h"><span className="es-ic">{l.ic}</span><span className="es-tile-label">{l.label}</span></div>
+              <div className="es-tile-h"><span className="es-tile-label">{l.label}</span></div>
               <div className="es-tile-body">{l.body}</div>
             </div>
           ); })}</div>;
@@ -1595,6 +1600,12 @@ function App() {
 
 
       </div>{/* end layout */}
+
+      {/* ===== FOOTER ===== */}
+      <footer className="site-foot">
+        <span className="foot-brand"><span className="foot-mark">FF</span>Future Funded</span>
+        <span className="foot-legal">A planning model to help you see when your money gives you choices — not financial, investment or tax advice. Figures are illustrative; sense-check them against your own circumstances. <a href="privacy.html">Privacy</a></span>
+      </footer>
     </div>
   );
 }

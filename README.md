@@ -1,4 +1,6 @@
-# Financial Optionality — Model your path to financial independence
+# Future Funded — Know when work becomes optional
+
+*(Working name: Financial Optionality. `optionality.*` storage keys and engine internals keep the old name for data-compatibility; the brand is Future Funded.)*
 
 A web app that answers one question: **at what age does work become optional?**
 

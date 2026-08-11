@@ -5,7 +5,7 @@
      offline. This deliberately avoids the "stale app on refresh" trap.
    - Static assets (icons, manifest) are CACHE-FIRST.
    Bump CACHE_VERSION whenever the cached shell/assets must be force-refreshed. */
-const CACHE_VERSION = 'fo-v1';
+const CACHE_VERSION = 'ff-v2';
 const CORE = [
   './',
   './index.html',

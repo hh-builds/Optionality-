@@ -8,5 +8,6 @@ vendor/
 !icon-512.png
 !icon-maskable-512.png
 !apple-touch-icon.png
+!og-image.png
 test-local.html
 .DS_Store
