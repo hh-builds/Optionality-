@@ -245,8 +245,8 @@ button{font-family:inherit}
 .tablewrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
 th,td{padding:7px 10px;text-align:right;white-space:nowrap}
-th{background:var(--surface-2);color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;
-  letter-spacing:.02em;position:sticky;top:0;text-align:right;border-bottom:1px solid var(--border)}
+th{background:var(--surface-2);color:var(--muted);font-weight:600;font-size:11.5px;
+  letter-spacing:0;position:sticky;top:0;text-align:right;border-bottom:1px solid var(--border)}
 th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--surface-1)}
 th:first-child{z-index:2}
 td{border-bottom:1px solid var(--grid)}
@@ -262,8 +262,8 @@ tr.retirement{background:var(--phase-ret)}
 
 /* chart */
 .chart-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;gap:8px}
-.terms-tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);
-  background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:999px;white-space:nowrap}
+.terms-tag{font-size:11px;font-weight:600;letter-spacing:0;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--border);padding:2px 9px;border-radius:999px;white-space:nowrap}
 /* table group header (Pension | ISA-GIA) */
 tr.grouprow th{background:var(--surface-2);border-bottom:1px solid var(--border);padding:5px 10px}
 tr.grouprow th.grp{text-align:center;font-size:11px;letter-spacing:.04em}
@@ -280,8 +280,8 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .tooltip .t-row .sw{width:9px;height:9px;border-radius:2px}
 .tooltip .t-row .amt{font-weight:600;font-variant-numeric:tabular-nums}
 
-.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
-  font-weight:700;margin:26px 2px 12px;display:flex;align-items:center;gap:8px}
+.section-title{font-size:13px;letter-spacing:0;color:var(--muted);
+  font-weight:650;margin:30px 2px 14px;display:flex;align-items:center;gap:10px}
 .section-title::after{content:"";flex:1;height:1px;background:var(--border)}
 .note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6}
 .assumptions{font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);
@@ -290,42 +290,50 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 /* =====================================================================
    ISA / GIA BRIDGE PLANNER  ("Accessible Wealth")
    ===================================================================== */
-.bridge-planner{background:linear-gradient(180deg,var(--accent-soft),transparent);
-  border:1px solid var(--border);border-radius:16px;padding:22px 24px;box-shadow:var(--shadow);margin-bottom:18px}
+.bridge-planner{background:var(--surface-1);
+  border:1px solid var(--border);border-radius:16px;padding:24px 26px 22px;box-shadow:var(--shadow);margin-bottom:22px}
 .bp-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.bp-q{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.bp-q{font-size:12.5px;letter-spacing:0;color:var(--muted);font-weight:600}
 .bp-title{font-size:19px;font-weight:650;letter-spacing:-0.01em;margin:3px 0 2px}
 .bp-title .bp-star{color:var(--warning)}
 .bp-terms{display:flex;gap:6px;align-items:center}
-/* headline result */
-.bp-headline{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:14px 0 4px}
-.bp-headline .bp-big{font-size:46px;font-weight:650;letter-spacing:-0.03em;line-height:1.02}
-.bp-headline .bp-big.reached{color:var(--good-text)}
-.bp-headline .bp-big.missed{color:var(--critical)}
-.bp-headline .bp-cap{font-size:14px;color:var(--text-secondary);max-width:420px}
-.bp-scen-chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 2px}
-.bp-chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
-  border:1px solid var(--border);border-radius:999px;padding:4px 11px;background:var(--surface-2);cursor:pointer;transition:.12s}
-.bp-chip .cd{width:9px;height:9px;border-radius:50%}
-.bp-chip.off{opacity:.5}
-.bp-chip:hover{border-color:var(--accent)}
-.bp-chip .cage{color:var(--muted);font-weight:700}
+/* headline result — three tiers: answer → evidence → help */
+.bp-result{margin:16px 0 14px}
+.bp-answer{font-size:40px;font-weight:650;letter-spacing:-0.025em;line-height:1.06}
+.bp-answer.reached{color:var(--good-text)}
+.bp-answer.missed{color:var(--critical)}
+.bp-evidence{font-size:17px;color:var(--text-secondary);margin-top:10px;line-height:1.4;
+  font-variant-numeric:tabular-nums;letter-spacing:-0.01em;max-width:640px}
+.bp-evidence b{color:var(--text-primary);font-weight:650}
+.bp-evidence .arrow{color:var(--muted);font-weight:400;margin:0 2px}
+.bp-help-line{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5;max-width:660px}
+.bp-scen-chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 4px}
+.bp-scen-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-right:3px}
+.bp-chip{display:inline-flex;align-items:baseline;gap:6px;font-size:12px;font-weight:600;
+  border:1px solid var(--border);border-radius:999px;padding:4px 12px;background:transparent;color:var(--muted);cursor:pointer;transition:.12s}
+.bp-chip .cd{width:8px;height:8px;border-radius:50%;align-self:center}
+.bp-chip.off{color:var(--muted)}
+.bp-chip:hover{border-color:var(--baseline);color:var(--text-secondary)}
+.bp-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--text-primary)}
+.bp-chip.on:hover{color:var(--text-primary)}
+.bp-chip .cage{color:var(--muted);font-weight:600}
+.bp-chip.on .cage{color:var(--text-secondary)}
 /* result tiles */
-.bp-results{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:14px 0 4px}
-.bp-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:11px 13px}
-.bp-tile .bt-k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;font-weight:600;line-height:1.25}
-.bp-tile .bt-v{font-size:18px;font-weight:650;margin-top:5px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+.bp-results{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0 6px}
+.bp-tile{background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:12px 14px}
+.bp-tile .bt-k{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600;line-height:1.3}
+.bp-tile .bt-v{font-size:18px;font-weight:650;margin-top:6px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
 .bp-tile .bt-v.pos{color:var(--good-text)} .bp-tile .bt-v.neg{color:var(--critical)}
 /* chart block */
-.bp-chart{margin-top:8px;background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px 14px 8px}
+.bp-chart{margin-top:16px;background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px 14px 8px}
 /* sub-headings inside the planner */
-.bp-sub{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;
-  margin:20px 2px 10px;display:flex;align-items:center;gap:8px}
+.bp-sub{font-size:12px;letter-spacing:0;color:var(--text-secondary);font-weight:650;
+  margin:22px 2px 10px;display:flex;align-items:center;gap:8px}
 .bp-sub::after{content:"";flex:1;height:1px;background:var(--border)}
 /* compact assumptions grid */
 .bp-assump{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .bp-fld{display:flex;flex-direction:column;gap:4px}
-.bp-fld label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;font-weight:600}
+.bp-fld label{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600}
 .bp-inwrap{position:relative;display:flex;align-items:center}
 .bp-inwrap>span.pfx{position:absolute;left:9px;color:var(--muted);font-size:13px;pointer-events:none}
 .bp-inwrap>span.sfx{position:absolute;right:9px;color:var(--muted);font-size:13px;pointer-events:none}
@@ -336,7 +344,7 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 /* phase editor */
 .bp-phases{display:flex;flex-direction:column;gap:8px}
 .bp-phase-head,.bp-phase{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:10px;align-items:center}
-.bp-phase-head span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700;padding-left:2px}
+.bp-phase-head span{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600;padding-left:2px}
 .bp-phase input{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);
   color:var(--text-primary);font-size:14px;font-weight:600;font-family:inherit;font-variant-numeric:tabular-nums}
 .bp-phase input:focus{outline:none;border-color:var(--accent)}
@@ -344,7 +352,7 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 /* segmented toggles */
 .bp-toggles{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
 .bp-tgroup{display:flex;flex-direction:column;gap:5px}
-.bp-tgroup>.tl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;font-weight:600}
+.bp-tgroup>.tl{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600}
 .bp-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface-2)}
 .bp-seg button{background:none;border:none;padding:7px 13px;font-size:12.5px;cursor:pointer;color:var(--text-secondary);font-family:inherit;font-weight:600}
 .bp-seg button.on{background:var(--accent);color:#fff}
@@ -352,7 +360,7 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 /* scenario editor cards */
 .bp-scenarios{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .bp-scard{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:13px 14px}
-.bp-scard.base{border-color:var(--accent)}
+.bp-scard.base{border-color:var(--baseline)}
 .bp-scard-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 .bp-scard-head .sn{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700}
 .bp-scard-head .sn .cd{width:11px;height:11px;border-radius:50%}
@@ -368,7 +376,7 @@ tr.bp-amber td:first-child{box-shadow:inset 3px 0 var(--warning)}
 tr.bp-green td:first-child{box-shadow:inset 3px 0 var(--good)}
 tr.bp-green{background:var(--phase-ret)}
 tr.bp-amber{background:var(--phase-bridge)}
-.bp-status{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.02em}
+.bp-status{font-weight:650;font-size:11.5px;letter-spacing:0}
 .bp-status.below{color:var(--critical)} .bp-status.amber{color:var(--warning)} .bp-status.green{color:var(--good-text)}
 html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="dark"] .bp-status.green{color:var(--good)}
 .bp-cross-row td{border-top:2px solid var(--accent)!important}
@@ -417,7 +425,8 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   /* reclaim horizontal space so content isn't pinched */
   .wrap{padding:14px 12px 60px}
   .bridge-planner{padding:16px 13px}
-  .bp-headline .bp-big{font-size:38px}
+  .bp-answer{font-size:31px}
+  .bp-evidence{font-size:15.5px}
   .bp-title{font-size:17px}
   /* segmented toggle groups stack rather than overflow */
   .bp-toggles{gap:14px}
@@ -441,8 +450,8 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
     background:var(--surface-1);padding:6px 13px 8px;margin-bottom:11px;box-shadow:var(--shadow)}
   .tablewrap.cards td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
     padding:6px 0;border:none;white-space:normal;text-align:right;font-size:13.5px;font-variant-numeric:tabular-nums}
-  .tablewrap.cards td::before{content:attr(data-label);color:var(--muted);font-size:11px;
-    text-transform:uppercase;letter-spacing:.02em;font-weight:600;text-align:left;flex:0 0 auto;
+  .tablewrap.cards td::before{content:attr(data-label);color:var(--muted);font-size:11.5px;
+    letter-spacing:0;font-weight:600;text-align:left;flex:0 0 auto;
     max-width:56%;line-height:1.3}
   .tablewrap.cards td:empty{display:none}
   /* the Age cell is the card header */
@@ -481,15 +490,16 @@ details.bp-collapse[open]>summary.bp-summary{border-bottom:1px solid var(--borde
 /* --- market-growth column --- */
 td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 
-/* --- real/nominal basis banner + tile sub-note --- */
-.bp-basis{font-size:12px;line-height:1.5;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin:2px 0 12px}
-.bp-basis.nom{border-color:var(--accent)}
-.bp-basis b{color:var(--text);font-weight:600}
-.bt-sub{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.3}
+/* --- unified "understanding these figures" info panel (neutral, low-emphasis) ---
+   Replaces the old blue basis banner + worked-example callout with one quiet panel. */
+.bp-info{font-size:12.5px;line-height:1.55;color:var(--text-secondary);background:var(--surface-2);
+  border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin:16px 0 4px}
+.bp-info .bp-info-h{font-weight:650;color:var(--text-primary);margin-bottom:2px}
+.bp-info .bp-info-eg{color:var(--muted);margin-top:3px}
+.bp-info b{color:var(--text-primary);font-weight:600}
 
-/* --- worked example line --- */
-.bp-worked{font-size:12px;color:var(--muted);background:var(--surface-2);border-left:3px solid var(--accent);border-radius:6px;padding:7px 11px;margin:0 0 12px;line-height:1.5}
-.bp-worked b{color:var(--text)}
+/* --- metric-tile sub-note (e.g. "= £801k in today's money") --- */
+.bt-sub{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.3}
 
 /* --- executive summary + bridge verdict --- */
 .exec-sum{margin-bottom:16px}
@@ -498,11 +508,7 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .es-ic{flex:0 0 auto;font-size:15px;line-height:1.4}
 .es-line b{font-weight:600}
 .es-foot{font-size:11.5px;color:var(--muted);margin-top:9px}
-.bp-verdict{margin:8px 0 2px;padding:9px 12px;border-radius:8px;font-size:13.5px;line-height:1.5}
-.bp-verdict.ok{background:rgba(34,150,83,0.10);border:1px solid var(--good-text,#2b8a4b)}
-.bp-verdict.bad{background:rgba(200,50,50,0.08);border:1px solid var(--critical,#c33)}
-.bp-verdict-sub{color:var(--muted);font-size:12px}
-.bp-why{margin:8px 0 2px;font-size:12.5px}
+.bp-why{margin:10px 0 2px;font-size:12.5px}
 .bp-why>summary{cursor:pointer;color:var(--accent);font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:5px;padding:2px 0}
 .bp-why>summary::-webkit-details-marker{display:none}
 .bp-why>summary::before{content:'?';display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;font-weight:700}
@@ -2027,14 +2033,17 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
     if (ratio>=1) return ['green','Reached']; if (ratio>=0.9) return ['amber','Close']; return ['below','Below'];
   };
 
-  const ScenChip = ({name,label,color,res,toggleable}) => (
-    <button className={'bp-chip'+(toggleable&&!scEnabled[name]?' off':'')}
+  const ScenChip = ({name,label,res,toggleable}) => {
+    const on = !toggleable || scEnabled[name];
+    return (
+    <button className={'bp-chip'+(on?' on':' off')}
       onClick={()=> toggleable ? updScen(name,{enabled:!scEnabled[name]}) : null}
       title={toggleable ? 'Show / hide this scenario on the chart' : 'The primary scenario — drives the headline and table'}>
-      <span className="cd" style={{background:color}}></span>{label}
+      {label}
       <span className="cage">{res.crossAge!=null ? 'age '+res.crossAge : 'not by '+bp.pensionAccessAge}</span>
     </button>
-  );
+    );
+  };
 
   return (
     <div className="bridge-planner">
@@ -2051,26 +2060,29 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* 1) HEADLINE */}
-      <div className="bp-headline">
-        <div className={'bp-big '+(reached?'reached':'missed')}>{reached ? 'Age '+(base.crossAgeExact!=null?base.crossAgeExact.toFixed(1):base.crossAge) : 'Not by '+bp.pensionAccessAge}</div>
-        <div className="bp-cap">{reached
+      {/* 1) RESULT — answer → evidence → help */}
+      <div className="bp-result">
+        <div className={'bp-answer '+(reached?'reached':'missed')}>{reached
+          ? 'Work-optional at '+(base.crossAgeExact!=null?base.crossAgeExact.toFixed(1):base.crossAge)
+          : 'Not by '+bp.pensionAccessAge}</div>
+        <div className="bp-evidence">{reached
           ? (bp.mode==='bridge'
-              ? 'Work-optional at age '+(base.crossAgeExact!=null?base.crossAgeExact.toFixed(1):base.crossAge)+' — your '+gbpC(base.crossBalance*bf(base.crossAge))+' accessible pot can fund '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr from then until pension access '+bp.pensionAccessAge+' (drawing down as you go), when your pension takes over.'
-              : 'Full optionality — your projected ISA/GIA first covers the '+gbpC(targetPot*bf(base.crossAge))+' portfolio needed to support '+gbpC(bp.targetIncome*bf(base.crossAge))+'/yr indefinitely at a '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal rate.')
-          : 'On these assumptions your accessible wealth doesn’t yet reach the pot needed to fund '+gbpC(bp.targetIncome)+'/yr by pension access age '+bp.pensionAccessAge+'. Adjust contributions, growth or the target below.'}</div>
-        {base.reached && bp.drawdownFromOptionality && (function(){
-          var lasts = base.depletionAge == null || base.depletionAge >= bp.pensionAccessAge;
-          var covers = (base.depletionAge!=null?base.depletionAge:(bp.lifeExpectancy||90)) - base.crossAge;
-          return <div className={'bp-verdict '+(lasts?'ok':'bad')}>
-            {lasts
-              ? <span>✅ <b>Your bridge lasts to pension access {bp.pensionAccessAge}.</b>{base.depletionAge?' On accessible wealth alone it would then run dry at age '+base.depletionAge+'.':''}</span>
-              : <span>❌ <b>Bridge runs dry at age {base.depletionAge}</b> — {bp.pensionAccessAge-base.depletionAge} year{(bp.pensionAccessAge-base.depletionAge)===1?'':'s'} short of pension access {bp.pensionAccessAge}.</span>}
-            <span className="bp-verdict-sub"> Covers {covers} year{covers===1?'':'s'} of withdrawals from age {base.crossAge}.</span>
-          </div>;
+              ? <span><b>{m(base.crossBalance, base.crossAge)}</b> funds <b>{gbpC(bp.targetIncome*bf(base.crossAge))}/yr</b> to pension access {bp.pensionAccessAge}</span>
+              : <span><b>{m(base.crossBalance, base.crossAge)}</b> covers the <b>{gbpC(targetPot*bf(base.crossAge))}</b> portfolio for {gbpC(bp.targetIncome*bf(base.crossAge))}/yr</span>)
+          : <span>Short of the <b>{gbpC(targetPot)}</b> pot needed to fund {gbpC(bp.targetIncome)}/yr by pension access {bp.pensionAccessAge}</span>}</div>
+        {(function(){
+          var runsDry = reached && bp.drawdownFromOptionality && base.depletionAge!=null && base.depletionAge < bp.pensionAccessAge;
+          var txt = !reached
+            ? 'Adjust contributions, growth or the target below.'
+            : (!bp.drawdownFromOptionality
+                ? 'From then your ISA/GIA can carry you until your pension takes over at '+bp.pensionAccessAge+'.'
+                : (runsDry
+                    ? 'On these assumptions it runs dry at age '+base.depletionAge+' — '+(bp.pensionAccessAge-base.depletionAge)+' year'+((bp.pensionAccessAge-base.depletionAge)===1?'':'s')+' short of pension access '+bp.pensionAccessAge+'.'
+                    : 'Your bridge lasts to pension access '+bp.pensionAccessAge+', when your pension takes over'+(base.depletionAge?' (on ISA/GIA alone it would run dry at '+base.depletionAge+').':'.')));
+          return <div className="bp-help-line" style={runsDry?{color:'var(--critical)'}:null}>{txt}</div>;
         })()}
       </div>
-      <details className="bp-why"><summary>Why does the bridge last to {bp.pensionAccessAge} but can run out later?</summary>
+      <details className="bp-why"><summary>Why can it run out later?</summary>
         <ol>
           <li>The bridge fund only has to cover the years <b>between stopping work and pension access ({bp.pensionAccessAge})</b> — from {bp.pensionAccessAge} your pension can take over the income.</li>
           <li>The chart keeps drawing from your ISA/GIA <b>past {bp.pensionAccessAge}</b> to stress-test it alone, so it can show the accessible pot emptying later{base.depletionAge?<span> (age {base.depletionAge})</span>:''} — but in reality your pension covers you from {bp.pensionAccessAge}, so that "run-out" is just the bridge on its own.</li>
@@ -2078,13 +2090,11 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </ol>
       </details>
       <div className="bp-scen-chips">
-        <ScenChip name="base" label="Base" color={C.pension} res={base} toggleable={false} />
-        <ScenChip name="conservative" label="Conservative" color={C.gia} res={cons} toggleable={true} />
-        <ScenChip name="optimistic" label="Optimistic" color={C.isa} res={opt} toggleable={true} />
+        <span className="bp-scen-lbl">Scenarios</span>
+        <ScenChip name="base" label="Base" res={base} toggleable={false} />
+        <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
+        <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
-      <div className={'bp-basis '+(realTerms?'real':'nom')}>{realTerms
-        ? <span><b>Today’s money (real).</b> Every figure is deflated by inflation into today’s purchasing power. Your return is nominal, so higher inflation means less real growth — raising inflation makes these figures worse.</span>
-        : <span><b>Nominal (future £).</b> The actual pounds of each future year, projected at your nominal return. Not adjusted for inflation, so they look bigger than their real worth.</span>}</div>
 
       {/* result tiles */}
       <div className="bp-results">
@@ -2122,6 +2132,22 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
         </div>
       </div>
+
+      {/* Understanding these figures — combines the old basis note into one quiet panel */}
+      {(function(){
+        var egAge = base.crossAge!=null ? base.crossAge : bp.pensionAccessAge;
+        var egReal = base.crossBalance!=null ? base.crossBalance : targetPot;
+        var egNom = egReal*Math.pow(1+(bp.inflation||0), Math.max(0, egAge-bp.currentAge));
+        return <div className="bp-info">
+          <div className="bp-info-h">{realTerms ? 'Today’s money (real)' : 'Nominal (future £)'}</div>
+          <div>{realTerms
+            ? 'Every figure is shown at today’s prices, with inflation stripped out.'
+            : 'Actual future pounds, including inflation — so they look bigger than their worth today.'}</div>
+          <div className="bp-info-eg">Example: {realTerms
+            ? gbpC(egReal)+' at age '+egAge+' ≈ '+gbpC(egNom)+' in future pounds.'
+            : gbpC(egReal)+' today ≈ '+gbpC(egNom)+' at age '+egAge+'.'} The toggle only relabels the units.</div>
+        </div>;
+      })()}
 
       {/* MODEL / FRAMING — pulled up so it drives which fields show below */}
       <div className="bp-sub">How your target works</div>
@@ -2304,14 +2330,17 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
     : base.reached ? base.yearsUntilCoast+(base.yearsUntilCoast===1?' yr to coast':' yrs to coast')
     : gbpC(base.shortfallNow)+' short';
 
-  const ScenChip = ({name,label,color,res,toggleable}) => (
-    <button className={'bp-chip'+(toggleable&&!scEnabled[name]?' off':'')}
+  const ScenChip = ({name,label,res,toggleable}) => {
+    const on = !toggleable || scEnabled[name];
+    return (
+    <button className={'bp-chip'+(on?' on':' off')}
       onClick={()=> toggleable ? updScen(name,{enabled:!scEnabled[name]}) : null}
-      title={toggleable ? 'Show / hide this scenario on the chart' : 'The primary scenario'}>
-      <span className="cd" style={{background:color}}></span>{label}
+      title={toggleable ? 'Show / hide this scenario on the chart' : 'The primary scenario — drives the headline'}>
+      {label}
       <span className="cage">{res.coastAge!=null ? 'coast '+res.coastAge : 'no coast by '+res.objAge}</span>
     </button>
-  );
+    );
+  };
 
   return (
     <div className="bridge-planner">
@@ -2328,14 +2357,24 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* 1) HEADLINE */}
-      <div className="bp-headline">
-        <div className={'bp-big '+(base.reached?'reached':'missed')}>{base.coasting ? 'Coasting now — pension self-funds' : base.reached ? (base.yearsUntilCoast===0 ? 'Coast achieved at '+(base.coastAgeExact!=null?base.coastAgeExact.toFixed(1):base.coastAge) : (base.yearsUntilCoast + ' more year' + (base.yearsUntilCoast===1?'':'s') + ' of contributions — coast achieved at ' + (base.coastAgeExact!=null?base.coastAgeExact.toFixed(1):base.coastAge))) : 'Not reached by '+base.objAge}</div>
-        <div className="bp-cap">{base.reached
-          ? 'Pension becomes self-sustaining — at '+(base.coasting?'your current balance':('age '+base.coastAge))+' it reaches '+m(base.coastBalance, base.coastAge)+', enough to grow to your '+gbpC(plan.targetPot*bf(base.objAge))+' target by age '+base.objAge+(realTerms?'':' (that’s your '+gbpC(plan.targetPot)+' target in today’s money, grown by inflation to age '+base.objAge+')')+', with no further contributions.'
-          : 'On these assumptions your pension doesn’t reach the '+gbpC(plan.targetPot)+' target by age '+base.objAge+' even with your planned contributions. Increase contributions, growth, or push the retirement age.'}</div>
+      {/* 1) RESULT — answer → evidence → help (the dominant answer first) */}
+      <div className="bp-result">
+        <div className={'bp-answer '+(base.reached?'reached':'missed')}>{
+          base.coasting ? 'Coasting now'
+          : base.reached ? 'Coast achieved at '+(base.coastAgeExact!=null?base.coastAgeExact.toFixed(1):base.coastAge)
+          : 'Not reached by '+base.objAge}</div>
+        <div className="bp-evidence">{base.reached
+          ? <span><b>{m(base.coastBalance, base.coastAge)}</b> <span className="arrow">→</span> <b>{gbpC(plan.targetPot*bf(base.objAge))}</b> by age {base.objAge}</span>
+          : <span>Projected <b>{m(base.potAtObj, base.objAge)}</b> vs <b>{gbpC(plan.targetPot*bf(base.objAge))}</b> target by age {base.objAge}</span>}</div>
+        <div className="bp-help-line">{base.reached
+          ? (base.coasting
+              ? 'Your pension already self-funds the target, with no further contributions.'
+              : (base.yearsUntilCoast===0 ? 'No further contributions needed — it grows there on its own.'
+                 : base.yearsUntilCoast+' more year'+(base.yearsUntilCoast===1?'':'s')+' of contributions, then it grows there on its own.'))
+            + (realTerms ? '' : ' Equivalent to your '+gbpC(plan.targetPot)+' target in today’s money.')
+          : 'Increase contributions or growth, or push the retirement age.'}</div>
       </div>
-      <details className="bp-why"><summary>Why does "Coast" happen so early?</summary>
+      <details className="bp-why"><summary>Why so early?</summary>
         <ol>
           <li><b>Coast</b> is the point where your existing pot, left to grow on its own, would still hit your target by age {base.objAge} — <b>with no further contributions</b>. It's not when you retire, it's when saving becomes optional.</li>
           <li>It lands early when your <b>real return is high</b> — a big pot compounding for {Math.max(0, base.objAge-cp.currentAge)} years does the heavy lifting, so even a modest balance today can coast.</li>
@@ -2343,15 +2382,11 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         </ol>
       </details>
       <div className="bp-scen-chips">
-        <ScenChip name="base" label="Base" color={C.pension} res={base} toggleable={false} />
-        <ScenChip name="conservative" label="Conservative" color={C.gia} res={cons} toggleable={true} />
-        <ScenChip name="optimistic" label="Optimistic" color={C.isa} res={opt} toggleable={true} />
+        <span className="bp-scen-lbl">Scenarios</span>
+        <ScenChip name="base" label="Base" res={base} toggleable={false} />
+        <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
+        <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
-      <div className={'bp-basis '+(realTerms?'real':'nom')}>{realTerms
-        ? <span><b>Today’s money (real).</b> Every figure is deflated by inflation into today’s purchasing power. Your return is nominal, so higher inflation means less real growth — raising inflation makes these figures worse.</span>
-        : <span><b>Nominal (future £).</b> The actual pounds of each future year, projected at your nominal return. Not adjusted for inflation, so they look bigger than their real worth.</span>}</div>
-
-      <div className="bp-worked"><b>Worked example:</b> {gbpC(base.potAtObj)} in today’s money is about {gbpC(base.potAtObj*Math.pow(1+cp.inflation, Math.max(0,base.objAge-cp.currentAge)))} in future pounds by age {base.objAge} (at {(cp.inflation*100).toFixed(1)}% inflation over {Math.max(0,base.objAge-cp.currentAge)} years) — same pot, the toggle just relabels the units.</div>
 
       {/* status tiles */}
       <div className="bp-results">
@@ -2389,6 +2424,17 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
         </div>
         <div className="bp-note" style={{marginTop:6}}>From your retirement/target age ({base.objAge}) contributions stop and the pension pays out <b>{gbpC(base.drawIncome)}/yr</b>{cp.goalMode==='income' && cp.statePensionAmount>0 ? <span> (dropping to {gbpC(Math.max(0, base.drawIncome-(cp.statePensionAmount||0)))}/yr once the State Pension starts at {cp.statePensionAge})</span> : null}, shown in the Withdrawal column below. {base.coastDepletionAge ? <span>On these assumptions the pot <b style={{color:'var(--critical)'}}>runs out at age {base.coastDepletionAge}</b>.</span> : <span>Growth still outpaces withdrawals here, so the pot keeps rising to age {base.rows.length?base.rows[base.rows.length-1].age:70} — a sustainable drawdown.</span>}</div>
+      </div>
+
+      {/* Understanding these figures — combines the old basis note + worked example into one quiet panel */}
+      <div className="bp-info">
+        <div className="bp-info-h">{realTerms ? 'Today’s money (real)' : 'Nominal (future £)'}</div>
+        <div>{realTerms
+          ? 'Every figure is shown at today’s prices, with inflation stripped out.'
+          : 'Actual future pounds, including inflation — so they look bigger than their worth today.'}</div>
+        <div className="bp-info-eg">Example: {realTerms
+          ? gbpC(base.potAtObj)+' at age '+base.objAge+' ≈ '+gbpC(base.potAtObj*Math.pow(1+cp.inflation, Math.max(0,base.objAge-cp.currentAge)))+' in future pounds by age '+base.objAge+'.'
+          : gbpC(base.potAtObj)+' today ≈ '+gbpC(base.potAtObj*Math.pow(1+cp.inflation, Math.max(0,base.objAge-cp.currentAge)))+' at age '+base.objAge+'.'} The toggle only relabels the units.</div>
       </div>
 
       {base.coasting && <div className="cmp-rec" style={{marginTop:12}}>
