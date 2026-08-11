@@ -416,7 +416,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         }
         return (
         <React.Fragment>
-          <div className="bp-sub">Sequence risk · can bad early markets break the bridge?</div>
+          <details className="bp-collapse bp-stress-collapse" open>
+          <summary className="bp-sub bp-summary">Sequence risk · can bad early markets break the bridge?</summary>
           <div className="bp-stress">
             <div className="bp-stress-head">
               <div className="bp-stress-q">{stress.reached ? 'Can I stop working at '+ageLabel+'?' : 'Can I stop working before pension access?'}</div>
@@ -530,6 +531,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               </div>
             </details>}
           </div>
+          </details>
         </React.Fragment>
         );
       })()}

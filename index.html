@@ -577,6 +577,9 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* --- sequence-risk / drawdown stress test --- */
 .bp-stress{margin:6px 0 4px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);padding:16px 18px;box-shadow:var(--shadow)}
+/* when wrapped in the collapsible module section, the details provides the frame — drop the inner card's own chrome so it doesn't double-box */
+details.bp-stress-collapse{margin:12px 0}
+details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radius:0;box-shadow:none;margin:0;padding:15px 16px}
 .bp-stress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
 .bp-stress-q{font-size:21px;font-weight:700;letter-spacing:-0.015em;line-height:1.14}
 .bp-stress-resid{display:flex;flex-direction:column;gap:4px;min-width:150px}
@@ -2675,7 +2678,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         }
         return (
         <React.Fragment>
-          <div className="bp-sub">Sequence risk · can bad early markets break the bridge?</div>
+          <details className="bp-collapse bp-stress-collapse" open>
+          <summary className="bp-sub bp-summary">Sequence risk · can bad early markets break the bridge?</summary>
           <div className="bp-stress">
             <div className="bp-stress-head">
               <div className="bp-stress-q">{stress.reached ? 'Can I stop working at '+ageLabel+'?' : 'Can I stop working before pension access?'}</div>
@@ -2789,6 +2793,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
               </div>
             </details>}
           </div>
+          </details>
         </React.Fragment>
         );
       })()}
