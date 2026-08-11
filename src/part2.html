@@ -821,6 +821,7 @@ function App() {
     try { return localStorage.getItem('optionality.dark') === '1'; } catch(e){ return false; }
   });
   const [showAllRows, setShowAllRows] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);   // mobile burger menu
   const [realTerms, setRealTerms] = useState(() => {
     try { const v = localStorage.getItem('optionality.realTerms'); return v==null ? true : v==='1'; } catch(e){ return true; }
   });
@@ -1084,16 +1085,19 @@ function App() {
       {/* top bar */}
       <div className="topbar">
         <div className="brand"><span className="dot"></span><h1>Financial Optionality</h1>
-          <span className="muted" style={{fontSize:13}}>Model your path to financial independence</span></div>
-        <div className="toolbar">
+          <span className="muted brand-sub" style={{fontSize:13}}>Model your path to financial independence</span></div>
+        <button className="burger" aria-label={menuOpen?'Close menu':'Open menu'} aria-expanded={menuOpen}
+          onClick={()=>setMenuOpen(o=>!o)}>{menuOpen?'✕':'☰'}</button>
+        {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
+        <div className={'toolbar'+(menuOpen?' open':'')}>
           <AuthButton />
           <button className="btn subtle" onClick={()=>setRealTerms(!realTerms)} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
           <button className="btn" onClick={()=>setDark(!dark)}>{dark?'☀ Light':'☾ Dark'}</button>
-          <button className="btn" onClick={exportCsv}>⬇ CSV</button>
-          <button className="btn" onClick={()=>window.print()}>⎙ Print</button>
-          <button className="btn" onClick={reset}>↺ Reset</button>
+          <button className="btn" onClick={()=>{exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>
+          <button className="btn" onClick={()=>{window.print(); setMenuOpen(false);}}>⎙ Print</button>
+          <button className="btn" onClick={()=>{reset(); setMenuOpen(false);}}>↺ Reset</button>
         </div>
       </div>
 

@@ -193,6 +193,11 @@ button{font-family:inherit}
 .brand .dot{width:11px;height:11px;border-radius:50%;background:var(--accent)}
 .brand h1{font-size:18px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+/* burger menu (mobile only) — hidden on desktop */
+.burger{display:none;background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
+  width:40px;height:40px;border-radius:9px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;align-items:center;justify-content:center}
+.burger:hover{border-color:var(--accent);color:var(--accent)}
+.menu-backdrop{display:none}
 .btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
   padding:7px 13px;border-radius:9px;font-size:13px;cursor:pointer;font-weight:500;transition:.12s}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -421,6 +426,19 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   /* bigger tap targets on the segmented toggles and toolbar buttons */
   .bp-seg button{padding:11px 14px;min-height:44px;font-size:13px}
   .btn{padding:10px 13px;min-height:42px}
+  /* ---- collapse the top bar into a burger menu so it stays one compact row ---- */
+  .topbar{flex-wrap:nowrap;gap:10px;padding:9px 0}
+  .brand-sub{display:none}          /* subtitle is dead weight on a phone */
+  .brand h1{font-size:16px}
+  .burger{display:inline-flex;position:relative;z-index:61}
+  .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
+  .toolbar{display:none}
+  .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:6px;
+    position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:200px;
+    background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
+    padding:8px;box-shadow:var(--shadow)}
+  .toolbar.open .btn{width:100%;justify-content:flex-start;text-align:left;min-height:44px}
+  .toolbar.open .btn.subtle{background:var(--surface-1);border:1px solid var(--border);color:var(--text-primary)}
   .bp-seg{flex-wrap:wrap}
   /* reclaim horizontal space so content isn't pinched */
   .wrap{padding:14px 12px 60px}
@@ -2697,6 +2715,7 @@ function App() {
     try { return localStorage.getItem('optionality.dark') === '1'; } catch(e){ return false; }
   });
   const [showAllRows, setShowAllRows] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);   // mobile burger menu
   const [realTerms, setRealTerms] = useState(() => {
     try { const v = localStorage.getItem('optionality.realTerms'); return v==null ? true : v==='1'; } catch(e){ return true; }
   });
@@ -2960,16 +2979,19 @@ function App() {
       {/* top bar */}
       <div className="topbar">
         <div className="brand"><span className="dot"></span><h1>Financial Optionality</h1>
-          <span className="muted" style={{fontSize:13}}>Model your path to financial independence</span></div>
-        <div className="toolbar">
+          <span className="muted brand-sub" style={{fontSize:13}}>Model your path to financial independence</span></div>
+        <button className="burger" aria-label={menuOpen?'Close menu':'Open menu'} aria-expanded={menuOpen}
+          onClick={()=>setMenuOpen(o=>!o)}>{menuOpen?'✕':'☰'}</button>
+        {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
+        <div className={'toolbar'+(menuOpen?' open':'')}>
           <AuthButton />
           <button className="btn subtle" onClick={()=>setRealTerms(!realTerms)} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
           <button className="btn" onClick={()=>setDark(!dark)}>{dark?'☀ Light':'☾ Dark'}</button>
-          <button className="btn" onClick={exportCsv}>⬇ CSV</button>
-          <button className="btn" onClick={()=>window.print()}>⎙ Print</button>
-          <button className="btn" onClick={reset}>↺ Reset</button>
+          <button className="btn" onClick={()=>{exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>
+          <button className="btn" onClick={()=>{window.print(); setMenuOpen(false);}}>⎙ Print</button>
+          <button className="btn" onClick={()=>{reset(); setMenuOpen(false);}}>↺ Reset</button>
         </div>
       </div>
 
