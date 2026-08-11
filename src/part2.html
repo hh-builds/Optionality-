@@ -657,6 +657,112 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
 }
 
 /* ============================================================= */
+/* Optional accounts: sign in to sync projections across devices. */
+function shortEmail(e){ if(!e) return 'Account'; return e.length>18 ? e.slice(0,16)+'…' : e; }
+function AuthButton(){
+  const Cloud = typeof window !== 'undefined' ? window.OptCloud : null;
+  const [user, setUser] = useState(() => (Cloud && Cloud.user) || null);
+  const [status, setStatus] = useState(() => (Cloud && Cloud.status) || 'idle');
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState('link');   // 'link' | 'password'
+  const [signup, setSignup] = useState(false);
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);        // {type:'ok'|'err', text}
+
+  useEffect(() => {
+    if (!Cloud) return;
+    const onAuth = (e) => setUser(e.detail || null);
+    const onStat = (e) => setStatus(e.detail || 'idle');
+    window.addEventListener('optcloud:auth', onAuth);
+    window.addEventListener('optcloud:status', onStat);
+    setUser(Cloud.user || null);
+    setStatus(Cloud.status || 'idle');
+    return () => { window.removeEventListener('optcloud:auth', onAuth); window.removeEventListener('optcloud:status', onStat); };
+  }, []);
+
+  if (!Cloud || !Cloud.available) return null;
+
+  const close = () => { setOpen(false); setMsg(null); setPw(''); setBusy(false); };
+  const submit = async () => {
+    setMsg(null);
+    if (!email || email.indexOf('@') < 0){ setMsg({type:'err', text:'Enter a valid email address.'}); return; }
+    setBusy(true);
+    try {
+      if (mode === 'link'){
+        const { error } = await Cloud.signInWithMagicLink(email);
+        if (error) setMsg({type:'err', text:error.message});
+        else setMsg({type:'ok', text:'Check your email — tap the link to sign in.'});
+      } else {
+        if (!pw || pw.length < 6){ setMsg({type:'err', text:'Password must be at least 6 characters.'}); setBusy(false); return; }
+        if (signup){
+          const { data, error } = await Cloud.signUpWithPassword(email, pw);
+          if (error) setMsg({type:'err', text:error.message});
+          else if (data && data.session){ setMsg({type:'ok', text:'Account created — you’re in!'}); setTimeout(close, 900); }
+          else setMsg({type:'ok', text:'Account created — check your email to confirm, then sign in.'});
+        } else {
+          const { error } = await Cloud.signInWithPassword(email, pw);
+          if (error) setMsg({type:'err', text:error.message});
+          else { setMsg({type:'ok', text:'Signed in!'}); setTimeout(close, 700); }
+        }
+      }
+    } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
+    setBusy(false);
+  };
+  const doSignOut = async () => { setBusy(true); await Cloud.signOut(); setBusy(false); close(); };
+
+  const statusLabel = status==='saving' ? 'Saving…' : status==='saved' ? 'Saved ✓' : status==='error' ? 'Save failed — will retry' : '';
+
+  return (
+    <React.Fragment>
+      <button className="btn" onClick={()=>setOpen(true)} title={user ? 'Your account' : 'Sign in to save your projections across devices'}>
+        {user ? ('☁ ' + shortEmail(user.email)) : '☁ Sign in'}
+      </button>
+      {open && (
+        <div className="auth-overlay" onClick={close}>
+          <div className="auth-modal" onClick={(e)=>e.stopPropagation()}>
+            <button className="auth-x" onClick={close} aria-label="Close">×</button>
+            {user ? (
+              <div>
+                <h3 className="auth-title">Your account</h3>
+                <p className="auth-sub">{user.email}</p>
+                <p className="auth-sub">{statusLabel ? ('Sync status: ' + statusLabel) : 'Your projections sync to your account automatically as you edit.'}</p>
+                <button className="btn" disabled={busy} onClick={doSignOut}>Sign out</button>
+              </div>
+            ) : (
+              <div>
+                <h3 className="auth-title">Save your projections</h3>
+                <p className="auth-sub">Create a free account (or sign in) to keep your inputs and open them on any device. Optional — the tool works fine without it, and your data stays in this browser until you do.</p>
+                <div className="auth-seg">
+                  <button className={mode==='link'?'on':''} onClick={()=>{setMode('link'); setMsg(null);}}>Email me a link</button>
+                  <button className={mode==='password'?'on':''} onClick={()=>{setMode('password'); setMsg(null);}}>Use a password</button>
+                </div>
+                <input className="auth-input" type="email" placeholder="you@example.com" value={email} onChange={(e)=>setEmail(e.target.value)} autoComplete="email"
+                  onKeyDown={(e)=>{ if(e.key==='Enter' && mode==='link') submit(); }} />
+                {mode==='password' && (
+                  <input className="auth-input" type="password" placeholder="Password (6+ characters)" value={pw} onChange={(e)=>setPw(e.target.value)}
+                    autoComplete={signup?'new-password':'current-password'} onKeyDown={(e)=>{ if(e.key==='Enter') submit(); }} />
+                )}
+                {msg && <div className={'auth-msg ' + (msg.type==='err'?'err':'ok')}>{msg.text}</div>}
+                <button className="btn primary auth-go" disabled={busy} onClick={submit}>
+                  {busy ? 'Working…' : mode==='link' ? 'Send magic link' : signup ? 'Create account' : 'Sign in'}
+                </button>
+                {mode==='password' && (
+                  <button className="auth-link" onClick={()=>{setSignup(!signup); setMsg(null);}}>
+                    {signup ? 'Have an account? Sign in' : 'New here? Create an account'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </React.Fragment>
+  );
+}
+
+/* ============================================================= */
 function App() {
   const C = useColors();
   const narrow = useIsNarrow();
@@ -940,6 +1046,7 @@ function App() {
         <div className="brand"><span className="dot"></span><h1>Financial Optionality</h1>
           <span className="muted" style={{fontSize:13}}>Model your path to financial independence</span></div>
         <div className="toolbar">
+          <AuthButton />
           <button className="btn subtle" onClick={()=>setRealTerms(!realTerms)} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>

@@ -26,6 +26,120 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.4/babel.min.js"></script>
+<!-- Supabase: OPTIONAL accounts so a signed-in user's projections sync across devices.
+     The publishable key below is safe to ship in client code — Row Level Security on the
+     'projections' table (each row locked to its owner) is what actually protects the data. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var SUPABASE_URL = 'https://tvlnfhghextzsmizkuce.supabase.co';
+  var SUPABASE_KEY = 'sb_publishable_5gOqH6o9-cmDFWRTyLWtNA_414o6Wco';
+  var PREFIX = 'optionality.';
+
+  var Cloud = { user:null, status:'idle', ready:false, available:false,
+                getUser:function(){ return this.user; } };
+  window.OptCloud = Cloud;
+
+  function emit(name, detail){ try{ window.dispatchEvent(new CustomEvent(name,{detail:detail})); }catch(e){} }
+  function setStatus(s){ Cloud.status = s; emit('optcloud:status', s); }
+  function setUser(u){ Cloud.user = u; emit('optcloud:auth', u); }
+
+  // If the library didn't load (offline / blocked), degrade gracefully: the app
+  // keeps working purely on localStorage and the Sign-in button hides itself.
+  if (!window.supabase || !window.supabase.createClient){ Cloud.ready = true; return; }
+  Cloud.available = true;
+
+  var supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true }
+  });
+  Cloud.client = supa;
+
+  function redirectUrl(){ return location.origin + location.pathname; }
+
+  // ---- snapshot helpers over the optionality.* localStorage keys ----
+  var rawSet = localStorage.setItem.bind(localStorage);
+  var rawRemove = localStorage.removeItem.bind(localStorage);
+  function snapshot(){
+    var o = {};
+    for (var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if (k && k.indexOf(PREFIX)===0) o[k] = localStorage.getItem(k);
+    }
+    return o;
+  }
+  function canon(obj){
+    var keys = Object.keys(obj).sort(), out = {};
+    for (var i=0;i<keys.length;i++) out[keys[i]] = obj[keys[i]];
+    return JSON.stringify(out);
+  }
+  function applySnapshot(data){
+    var cur = snapshot();
+    for (var k in cur){ if (!(k in data)) rawRemove(k); }
+    for (var j in data){ rawSet(j, data[j]); }
+  }
+
+  // ---- save (debounced) ----
+  var saveTimer = null;
+  function saveNow(){
+    if (!Cloud.user) return Promise.resolve();
+    setStatus('saving');
+    return supa.from('projections').upsert({
+      user_id: Cloud.user.id, data: snapshot(), updated_at: new Date().toISOString()
+    }).then(function(res){
+      setStatus(res.error ? 'error' : 'saved');
+      if (res.error) console.warn('[OptCloud] save failed', res.error);
+    });
+  }
+  function scheduleSave(){
+    if (!Cloud.user) return;
+    setStatus('saving');
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){ saveTimer = null; saveNow(); }, 1200);
+  }
+  // Patch setItem so any change to the app's inputs syncs up when signed in.
+  localStorage.setItem = function(k,v){
+    rawSet(k,v);
+    if (Cloud.user && String(k).indexOf(PREFIX)===0) scheduleSave();
+  };
+
+  // ---- pull on login: cloud wins if it has data, else seed cloud from local ----
+  var syncedFor = null;
+  function syncFromCloud(){
+    if (!Cloud.user) return;
+    var uid = Cloud.user.id;
+    if (syncedFor === uid) return;
+    syncedFor = uid;
+    supa.from('projections').select('data').eq('user_id', uid).maybeSingle().then(function(res){
+      if (res.error){ console.warn('[OptCloud] pull failed', res.error); syncedFor = null; return; }
+      var row = res.data;
+      if (row && row.data && Object.keys(row.data).length){
+        if (canon(row.data) !== canon(snapshot())){ applySnapshot(row.data); location.reload(); return; }
+        setStatus('saved');
+      } else {
+        saveNow();   // brand-new account: seed it with whatever's in the browser now
+      }
+    });
+  }
+
+  // ---- auth methods (resolve to { data, error }) ----
+  Cloud.signInWithPassword = function(email,pw){ return supa.auth.signInWithPassword({ email:email, password:pw }); };
+  Cloud.signUpWithPassword = function(email,pw){ return supa.auth.signUp({ email:email, password:pw, options:{ emailRedirectTo:redirectUrl() } }); };
+  Cloud.signInWithMagicLink = function(email){ return supa.auth.signInWithOtp({ email:email, options:{ emailRedirectTo:redirectUrl(), shouldCreateUser:true } }); };
+  Cloud.signOut = function(){ return supa.auth.signOut().then(function(r){ setUser(null); syncedFor = null; setStatus('idle'); return r; }); };
+
+  supa.auth.onAuthStateChange(function(event, session){
+    var u = session && session.user ? session.user : null;
+    setUser(u);
+    if (u) syncFromCloud();
+  });
+
+  supa.auth.getSession().then(function(res){
+    var u = res.data && res.data.session ? res.data.session.user : null;
+    if (u){ setUser(u); syncFromCloud(); }
+    Cloud.ready = true; emit('optcloud:ready', true);
+  });
+})();
+</script>
 <style>
 :root{
   --surface-1:#fcfcfb; --surface-2:#ffffff; --page:#f4f4f1;
@@ -86,6 +200,23 @@ button{font-family:inherit}
 .btn.primary:hover{opacity:.9;color:#fff}
 .btn.subtle{background:transparent;border-color:transparent;color:var(--muted);padding:6px 9px;font-size:12px;font-weight:600}
 .btn.subtle:hover{border-color:var(--border);color:var(--text-primary)}
+/* ---- accounts / auth ---- */
+.auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
+.auth-modal{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);width:100%;max-width:380px;padding:22px 20px;position:relative}
+.auth-x{position:absolute;top:8px;right:11px;background:none;border:none;color:var(--muted);font-size:23px;line-height:1;cursor:pointer;padding:2px 6px}
+.auth-x:hover{color:var(--text-primary)}
+.auth-title{font-size:17px;margin:0 0 6px}
+.auth-sub{font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.45}
+.auth-seg{display:flex;gap:6px;background:var(--page);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:12px}
+.auth-seg button{flex:1;border:none;background:none;color:var(--text-secondary);padding:8px 6px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer}
+.auth-seg button.on{background:var(--surface-2);color:var(--accent);box-shadow:var(--shadow)}
+.auth-input{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface-1);color:var(--text-primary);font-size:16px;margin-bottom:10px}
+.auth-input:focus{outline:none;border-color:var(--accent)}
+.auth-go{display:flex;width:100%;justify-content:center;margin-top:2px;padding:11px}
+.auth-msg{font-size:13px;border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.4}
+.auth-msg.ok{background:var(--accent-soft);color:var(--accent)}
+.auth-msg.err{background:rgba(208,59,59,.12);color:var(--critical)}
+.auth-link{display:block;width:100%;text-align:center;background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;margin-top:12px;font-weight:600}
 
 
 .panel{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
