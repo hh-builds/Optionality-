@@ -1373,6 +1373,9 @@
     withdrawalRate: 0.035,         // (income - State Pension) / rate = required pot (income mode)
     statePensionAmount: 11900,     // full new State Pension ~2025/26 (today's money); 0 to exclude
     statePensionAge: 67,           // State Pension age
+    lifeExpectancy: 90,            // sequence-risk: drawdown horizon for the pension stress test
+    minResidual: 0,                // sequence-risk: buffer (today's money) to keep at life expectancy
+    confidence: 0.90,              // sequence-risk Phase 2: target confidence for the stress-tested retirement age
     impactLevels: [5000, 10000, 15000],
     scenarios: {
       // scenarios are explicit return + inflation + withdrawal-rate triples
@@ -1558,6 +1561,154 @@
     };
   }
 
+  // =====================================================================
+  //  SEQUENCE RISK — PENSION DRAWDOWN (Coast planner)
+  //  The same idea as the bridge stress test, applied to the RETIREMENT
+  //  drawdown: from the retirement age you draw your income (real, less the
+  //  State Pension once it starts) against variable real returns, out to life
+  //  expectancy. A bad run of markets early in retirement — while you're
+  //  drawing income — can exhaust a pot that a flat-return line calls safe.
+  //  Outputs deliberately reuse the bridge stress/sim FIELD NAMES so the UI
+  //  block is shared: startAge/crossAge = retirement age, accessAge = life
+  //  expectancy, bridgeYears = drawdown years.
+  // =====================================================================
+  function coastRetireAge(cp) {
+    return Math.round(Math.max(cp.currentAge + 1, cp.retirementAge != null ? cp.retirementAge : cp.pensionAccessAge));
+  }
+  function coastRetireIncome(cp) {
+    var targetPot = coastTargetPot(cp, {});
+    return cp.goalMode === 'income' ? (cp.targetIncome || 0) : targetPot * cp.withdrawalRate;
+  }
+  // Pension pot at retAge if contributions continue to then (deterministic real return).
+  function coastBalanceIfRetireAt(cp, retAge) {
+    var infl = cp.inflation || 0, g = realReturn(cp.growth, infl), bal = cp.currentPension;
+    var end = Math.round(retAge);
+    for (var a = cp.currentAge; a < end; a++) {
+      var c = coastContribAt(cp, a) / Math.pow(1 + infl, a - cp.currentAge);
+      bal = (bal + c) * (1 + g);
+    }
+    return bal;
+  }
+  // One retirement drawdown path from retAge to lifeExp against a real-return
+  // sequence. Net withdrawal = income less the State Pension once it starts.
+  function coastDrawdownPath(o) {
+    var bal = o.startBalance, minR = o.minResidual || 0;
+    var rows = [], survived = true, failAge = null, low = Infinity;
+    for (var a = o.retAge, i = 0; a < o.lifeExp; a++, i++) {
+      var r = (o.shock && i < o.shock.length) ? o.shock[i] : o.baseReal;
+      var sp = (a >= o.spAge) ? o.statePension : 0;
+      var net = Math.max(0, o.income - sp);
+      var startBal = bal;
+      var afterDraw = startBal - net;
+      var breached = afterDraw < minR - 1e-6;
+      if (breached) { survived = false; if (failAge === null) failAge = a; }
+      var endBal = Math.max(0, afterDraw) * (1 + r);
+      low = Math.min(low, afterDraw);
+      rows.push({ age: a, startBalance: round2(startBal), withdraw: round2(net), ret: r, endBalance: round2(endBal), funded: !breached });
+      bal = endBal;
+    }
+    var residual = bal;
+    if (residual < minR - 1e-6) survived = false;
+    if (low === Infinity) low = bal;
+    return { rows: rows, survived: survived, failAge: failAge, residual: round2(residual), lowPoint: round2(low), startAge: o.retAge, accessAge: o.lifeExp };
+  }
+  // Phase-1 deterministic stress overlays for the pension drawdown.
+  function coastStressTest(cp, minResidual) {
+    var retAge = coastRetireAge(cp);
+    var lifeExp = Math.round(cp.lifeExpectancy || 90);
+    var minR = minResidual != null ? minResidual : (cp.minResidual || 0);
+    var baseReal = realReturn(cp.growth, cp.inflation);
+    var income = coastRetireIncome(cp);
+    var spAmt = cp.goalMode === 'income' ? (cp.statePensionAmount || 0) : 0;
+    var spAge = cp.statePensionAge || 67;
+    var startBalance = coastBalanceIfRetireAt(cp, retAge);
+    var out = {
+      reached: true, startAge: retAge, startAgeExact: retAge, accessAge: lifeExp,
+      bridgeYears: Math.max(0, lifeExp - retAge), minResidual: minR, income: income,
+      baseReal: baseReal, startBalance: round2(startBalance), spAge: spAge, statePension: spAmt, scenarios: {}
+    };
+    for (var s = 0; s < BRIDGE_STRESS.length; s++) {
+      var sc = BRIDGE_STRESS[s];
+      out.scenarios[sc.key] = coastDrawdownPath({ retAge: retAge, lifeExp: lifeExp, spAge: spAge,
+        startBalance: startBalance, income: income, statePension: spAmt, minResidual: minR, baseReal: baseReal, shock: sc.shock });
+    }
+    out.survivesNormal = out.scenarios.normal.survived;
+    out.survivesBadStart = out.scenarios.poorStart.survived && out.scenarios.crash.survived;
+    out.worstFail = !out.scenarios.crash.survived ? 'crash' : (!out.scenarios.poorStart.survived ? 'poorStart' : null);
+    return out;
+  }
+  // Monte-Carlo survival of the pension drawdown if you retire at retAge.
+  function coastSurvivalRateAt(cp, retAge, minR, opts) {
+    var lifeExp = Math.round(cp.lifeExpectancy || 90);
+    var years = Math.max(0, lifeExp - Math.round(retAge));
+    var startBalance = coastBalanceIfRetireAt(cp, retAge);
+    var income = coastRetireIncome(cp), floor = minR || 0;
+    var spAmt = cp.goalMode === 'income' ? (cp.statePensionAmount || 0) : 0, spAge = cp.statePensionAge || 67;
+    if (years <= 0) {
+      return { rate: startBalance >= floor - 1e-6 ? 1 : 0, years: 0, trials: 0, startBalance: startBalance,
+               bands: [{ age: Math.round(retAge), p10: startBalance, p50: startBalance, p90: startBalance }] };
+    }
+    var trials = opts.trials, blockLen = opts.blockLen, rng = mulberry32(opts.seed);
+    var success = 0, perYear = []; for (var k = 0; k <= years; k++) perYear.push([]);
+    for (var t = 0; t < trials; t++) {
+      var seq = blockBootstrap(HIST_EQUITY_REAL, years, blockLen, rng);
+      var bal = startBalance, ok = true; perYear[0].push(bal);
+      for (var i = 0; i < years; i++) {
+        var a = Math.round(retAge) + i;
+        var net = Math.max(0, income - ((a >= spAge) ? spAmt : 0));
+        var afterDraw = bal - net;
+        if (afterDraw < floor - 1e-6) ok = false;
+        bal = Math.max(0, afterDraw) * (1 + seq[i]);
+        perYear[i + 1].push(bal);
+      }
+      if (ok && bal >= floor - 1e-6) success++;
+    }
+    var bands = perYear.map(function (arr, i) {
+      arr.sort(function (a, b) { return a - b; });
+      var q = function (p) { return arr[Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))))]; };
+      return { age: Math.round(retAge) + i, p10: round2(q(0.10)), p50: round2(q(0.50)), p90: round2(q(0.90)) };
+    });
+    return { rate: success / trials, years: years, trials: trials, startBalance: round2(startBalance), bands: bands };
+  }
+  // Earliest retirement age whose pension drawdown clears the target confidence.
+  function coastStressTestedRetireAge(cp, confidence, minR, opts) {
+    var lifeExp = Math.round(cp.lifeExpectancy || 90);
+    var floorAge = Math.max(Math.ceil(cp.currentAge), Math.round(cp.pensionAccessAge || 57));
+    var prevRate = null, prevAge = null;
+    for (var a = floorAge; a <= lifeExp; a++) {
+      var res = coastSurvivalRateAt(cp, a, minR, opts);
+      if (res.rate >= confidence) {
+        if (prevAge == null || res.rate === prevRate) return { age: a, exact: a, rateAt: res.rate };
+        var f = (confidence - prevRate) / (res.rate - prevRate); f = Math.max(0, Math.min(1, f));
+        return { age: a, exact: Math.round((prevAge + f) * 10) / 10, rateAt: res.rate };
+      }
+      prevRate = res.rate; prevAge = a;
+    }
+    return { age: null, exact: null, rateAt: prevRate };
+  }
+  // Full Phase-2 pension-drawdown simulation (bridge-compatible fields).
+  function coastSimulate(cp, o) {
+    o = o || {};
+    var opts = { trials: o.trials || 2000, blockLen: o.blockLen || 5, seed: (o.seed || 1234567) >>> 0 };
+    var confidence = o.confidence != null ? o.confidence : (cp.confidence != null ? cp.confidence : 0.90);
+    var minR = o.minResidual != null ? o.minResidual : (cp.minResidual || 0);
+    var retAge = coastRetireAge(cp);
+    var lifeExp = Math.round(cp.lifeExpectancy || 90);
+    var out = {
+      reached: true, crossAge: retAge, crossAgeExact: retAge, accessAge: lifeExp,
+      confidence: confidence, minResidual: minR, trials: opts.trials, blockLen: opts.blockLen, hist: HIST_META
+    };
+    var atRet = coastSurvivalRateAt(cp, retAge, minR, opts);
+    out.confidenceAtCrossover = atRet.rate;
+    out.bands = atRet.bands;
+    out.bridgeYears = atRet.years;
+    out.startBalance = atRet.startBalance;
+    var st = coastStressTestedRetireAge(cp, confidence, minR, opts);
+    out.stressAge = st.age; out.stressAgeExact = st.exact; out.stressAgeRate = st.rateAt;
+    out.meetsAtCrossover = atRet.rate >= confidence;
+    return out;
+  }
+
   // Combined LIFETIME view: accumulate both pots to the work-optional (retire) age,
   // then draw the target income down to age 90 — the accessible ISA/GIA pot bridges
   // the years until pension access, then the pension takes over. Values are REAL
@@ -1625,6 +1776,10 @@
     COAST_DEFAULTS: COAST_DEFAULTS,
     coastPlan: coastPlan,
     coastProject: coastProject,
+    coastStressTest: coastStressTest,
+    coastSimulate: coastSimulate,
+    coastSurvivalRateAt: coastSurvivalRateAt,
+    coastBalanceIfRetireAt: coastBalanceIfRetireAt,
     combinedPlan: combinedPlan,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,

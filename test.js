@@ -273,3 +273,35 @@ const prich = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)); prich.currentB
 const simR = Engine.bridgeSimulate(prich, {confidence:0.95});
 passert(simR.confidenceAtCrossover > 0.99, 'a richly funded bridge clears ~100% confidence');
 console.log(pfails === 0 ? 'ALL PHASE-2 SIM ASSERTIONS PASSED' : (pfails + ' PHASE-2 SIM ASSERTION(S) FAILED'));
+
+// ===== Sequence-risk — pension drawdown (Coast) =====
+line();
+console.log('SEQUENCE-RISK — PENSION DRAWDOWN (Coast)');
+let dfails = 0; function dassert(c,m){ if(!c){ console.log('FAIL:', m); dfails++; } }
+const dcp = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+const dst = Engine.coastStressTest(dcp, 0);
+console.log('Retire', dst.startAge, '-> life', dst.accessAge, '('+dst.bridgeYears+'y draw) · pot', money(dst.startBalance), '· income', money(dst.income));
+['normal','poorStart','crash'].forEach(k=>{const s=dst.scenarios[k];console.log('  '+k.padEnd(10)+' survived '+s.survived+'  residual '+money(s.residual)+(s.failAge!=null?'  dry @'+s.failAge:''));});
+dassert(dst.startAge === Math.round(dcp.retirementAge), 'pension stress starts at the retirement age');
+dassert(dst.accessAge === 90, 'drawdown horizon is life expectancy 90');
+dassert(dst.bridgeYears === 90 - dst.startAge, 'draw years = life expectancy − retirement age');
+dassert(dst.scenarios.normal.rows.length === dst.bridgeYears, 'one row per drawdown year');
+// Normal drawdown-path residual reproduces a plain constant-return projection to the pound
+(function(){
+  var g = Engine.realReturn(dcp.growth, dcp.inflation), bal = dst.startBalance;
+  for (var a = dst.startAge; a < 90; a++){ var sp = a >= 67 ? 11900 : 0; bal = Math.max(0, bal - Math.max(0, dst.income - sp)) * (1+g); }
+  dassert(Math.abs(bal - dst.scenarios.normal.residual) < 1, 'Normal path reproduces the deterministic drawdown residual');
+})();
+dassert(dst.scenarios.crash.residual <= dst.scenarios.normal.residual, 'a crash never leaves more than the normal path');
+const dsim = Engine.coastSimulate(dcp);
+console.log('Confidence retiring @'+dst.startAge+':', (dsim.confidenceAtCrossover*100).toFixed(1)+'% · stress-tested retire age (90%):', dsim.stressAgeExact);
+dassert(dsim.confidenceAtCrossover > 0 && dsim.confidenceAtCrossover <= 1, 'pension survival probability in (0,1]');
+dassert(Engine.coastSimulate(dcp).confidenceAtCrossover === dsim.confidenceAtCrossover, 'seeded pension sim is deterministic');
+// monotonic: retiring later (bigger pot, shorter draw) never lowers survival
+let dmono = true, dprev = -1;
+for (let a = 60; a <= 75; a++){ const r = Engine.coastSurvivalRateAt(dcp, a, 0, {trials:1500, blockLen:5, seed:1234567}).rate; if (r < dprev - 1e-9) dmono = false; dprev = r; }
+dassert(dmono, 'pension survival is monotonic non-decreasing in the retirement age');
+const dA = Engine.coastSimulate(dcp,{confidence:0.80}).stressAgeExact, dB = Engine.coastSimulate(dcp,{confidence:0.90}).stressAgeExact, dC = Engine.coastSimulate(dcp,{confidence:0.95}).stressAgeExact;
+console.log('Stress-tested retire ages: 80% '+dA+' · 90% '+dB+' · 95% '+dC);
+dassert(dA <= dB && dB <= dC, 'higher confidence => equal-or-later stress-tested retirement age');
+console.log(dfails === 0 ? 'ALL PENSION-DRAWDOWN ASSERTIONS PASSED' : (dfails + ' PENSION-DRAWDOWN ASSERTION(S) FAILED'));

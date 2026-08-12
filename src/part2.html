@@ -131,7 +131,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
   const bf = (age) => realTerms ? 1 : Math.pow(1 + (bp.inflation||0), (age||bp.currentAge) - bp.currentAge);
   const m = (v, age) => gbpC(v * bf(age));
 
-  const scEnabled = { conservative: !!(bp.scenarios&&bp.scenarios.conservative&&bp.scenarios.conservative.enabled),
+  const scEnabled = { base: !(bp.scenarios&&bp.scenarios.base&&bp.scenarios.base.enabled===false),
+                      conservative: !!(bp.scenarios&&bp.scenarios.conservative&&bp.scenarios.conservative.enabled),
                       optimistic: !!(bp.scenarios&&bp.scenarios.optimistic&&bp.scenarios.optimistic.enabled) };
 
   const data = base.rows.map((r,i) => {
@@ -231,7 +232,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       </details>
       <div className="bp-scen-chips">
         <span className="bp-scen-lbl">Scenarios</span>
-        <ScenChip name="base" label="Base" res={base} toggleable={false} />
+        <ScenChip name="base" label="Base" res={base} toggleable={true} />
         <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
@@ -261,11 +262,11 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
             <Line type="monotone" dataKey="target" name="Target portfolio" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
-            <Line type="monotone" dataKey="balance" name="Projected ISA/GIA" stroke={C.pension} strokeWidth={2.6} dot={false} />
+            {scEnabled.base && <Line type="monotone" dataKey="balance" name="Projected ISA/GIA" stroke={C.pension} strokeWidth={2.6} dot={false} />}
           </LineChart>
         </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
         <div className="legend-row" style={{marginBottom:2}}>
-          <span><span className="sw" style={{background:C.pension}}></span>Projected ISA/GIA (Base)</span>
+          {scEnabled.base && <span><span className="sw" style={{background:C.pension}}></span>Projected ISA/GIA (Base)</span>}
           <span><span className="sw" style={{background:C.red}}></span>Target portfolio</span>
           {scEnabled.conservative && <span><span className="sw" style={{background:C.gia}}></span>Conservative</span>}
           {scEnabled.optimistic && <span><span className="sw" style={{background:C.isa}}></span>Optimistic</span>}
@@ -627,10 +628,14 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
+  // sequence-risk (pension drawdown) — memoised; the Monte Carlo is ~50ms
+  const stress = useMemo(() => Engine.coastStressTest(cp, cp.minResidual||0), [cp]);
+  const sim = useMemo(() => Engine.coastSimulate(cp), [cp]);
   const bf = (age) => realTerms ? 1 : Math.pow(1 + (cp.inflation||0), (age||cp.currentAge) - cp.currentAge);
   const m = (v, age) => gbpC(v * bf(age));
 
-  const scEnabled = { conservative: !!(cp.scenarios&&cp.scenarios.conservative&&cp.scenarios.conservative.enabled),
+  const scEnabled = { base: !(cp.scenarios&&cp.scenarios.base&&cp.scenarios.base.enabled===false),
+                      conservative: !!(cp.scenarios&&cp.scenarios.conservative&&cp.scenarios.conservative.enabled),
                       optimistic: !!(cp.scenarios&&cp.scenarios.optimistic&&cp.scenarios.optimistic.enabled) };
 
   const data = base.rows.map((r,i) => {
@@ -707,7 +712,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       </details>
       <div className="bp-scen-chips">
         <span className="bp-scen-lbl">Scenarios</span>
-        <ScenChip name="base" label="Base" res={base} toggleable={false} />
+        <ScenChip name="base" label="Base" res={base} toggleable={true} />
         <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
@@ -737,11 +742,11 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
             <Line type="monotone" dataKey="required" name="Required coast balance" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
-            <Line type="monotone" dataKey="projected" name="Projected pension" stroke={C.pension} strokeWidth={2.6} dot={false} />
+            {scEnabled.base && <Line type="monotone" dataKey="projected" name="Projected pension" stroke={C.pension} strokeWidth={2.6} dot={false} />}
           </LineChart>
         </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
         <div className="legend-row" style={{marginBottom:2}}>
-          <span><span className="sw" style={{background:C.pension}}></span>Projected pension (Base)</span>
+          {scEnabled.base && <span><span className="sw" style={{background:C.pension}}></span>Projected pension (Base)</span>}
           <span><span className="sw" style={{background:C.red}}></span>Required coast balance</span>
           {scEnabled.conservative && <span><span className="sw" style={{background:C.gia}}></span>Conservative</span>}
           {scEnabled.optimistic && <span><span className="sw" style={{background:C.isa}}></span>Optimistic</span>}
@@ -819,26 +824,174 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}.{base.objAge < (cp.statePensionAge||67) ? <span> Because you retire at {base.objAge}, before the State Pension starts at {cp.statePensionAge||67}, the pot also carries the capital to self-fund the <b>full</b> {gbpC(cp.targetIncome)}/yr for those {(cp.statePensionAge||67)-base.objAge} year{((cp.statePensionAge||67)-base.objAge)===1?'':'s'} — the year-by-year table below draws the full income until {cp.statePensionAge||67}, then nets off the State Pension.</span> : null} The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
         : <span>No State Pension included — the pension funds the full {gbpC(cp.targetIncome)}/yr. Add it above to model the ~£11.9k/yr it typically provides from age {cp.statePensionAge||67}.</span>}</div>
 
-      {/* OPTIONALITY — stop-each-year */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">How many more years must I contribute?</summary>
-      <div className="bp-chart">
-        <div className="bp-note" style={{marginTop:0,marginBottom:8}}>Each point: your pension at age {base.objAge} <b>if you stopped contributing at that age</b>. Where it meets the target is the last year you need to keep paying in — <b>{base.reached ? (base.yearsUntilCoast===0?'you can stop now':'about '+base.yearsUntilCoast+' more year'+(base.yearsUntilCoast===1?'':'s')) : 'not reached on these assumptions'}</b>.</div>
-        {ResponsiveContainer ? (
-        <ResponsiveContainer width="100%" height={narrow?160:200}>
-          <LineChart data={stopData} margin={{top:10,right:18,left:8,bottom:2}}>
-            <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="stopAge" stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
-            <Tooltip content={<ChartTip/>} />
-            {base.reached && !base.coasting && <ReferenceLine x={base.coastAge} stroke={C.good} strokeDasharray="4 3" label={{value:'Stop '+base.coastAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700}} />}
-            <Line type="monotone" dataKey="target" name="Target" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
-            <Line type="monotone" dataKey="final" name="Pension at retirement if you stop then" stroke={C.pension} strokeWidth={2.4} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
-      </div>
+      {/* ===== SEQUENCE RISK — PENSION DRAWDOWN ===== */}
+      {(function(){
+        const sc = stress.scenarios;
+        const accessNf = realTerms ? 1 : Math.pow(1+(cp.inflation||0), stress.accessAge - cp.currentAge);
+        const fmtAge = a => a==null?null:(Number.isInteger(a)?String(a):a.toFixed(1));
+        const ageLabel = fmtAge(stress.startAgeExact!=null?stress.startAgeExact:stress.startAge);
+        const hasDraw = stress.reached && stress.bridgeYears>0;
+        const targetPct = Math.round((cp.confidence!=null?cp.confidence:0.9)*100);
+        const confPct = sim.confidenceAtCrossover!=null ? Math.round(sim.confidenceAtCrossover*100) : null;
+        const meetsTarget = sim.confidenceAtCrossover!=null && sim.confidenceAtCrossover >= (cp.confidence!=null?cp.confidence:0.9);
+        const stressAgeLabel = fmtAge(sim.stressAgeExact);
+        const trialsLbl = sim.trials ? sim.trials.toLocaleString() : '';
+        const realPct = (((1+cp.growth)/(1+(cp.inflation||0))-1)*100).toFixed(1);
+        let sData = [];
+        if (hasDraw){
+          const n = sc.normal.rows.length;
+          for (let i=0;i<n;i++){ const a = sc.normal.rows[i].age;
+            sData.push({ age:a, normal: sc.normal.rows[i].startBalance*bf(a),
+              poor: sc.poorStart.rows[i].startBalance*bf(a), crash: sc.crash.rows[i].startBalance*bf(a) }); }
+          const acc = stress.accessAge;
+          sData.push({ age:acc, normal: Math.max(0,sc.normal.residual)*bf(acc),
+            poor: Math.max(0,sc.poorStart.residual)*bf(acc), crash: Math.max(0,sc.crash.residual)*bf(acc) });
+        }
+        let fData = [];
+        if (hasDraw && sim.bands){ fData = sim.bands.map(function(b){ return { age:b.age, p10:b.p10*bf(b.age), p50:b.p50*bf(b.age), p90:b.p90*bf(b.age) }; }); }
+        const yn = (b)=> b ? <span className="v ok">Yes</span> : <span className="v no">No</span>;
+        let sub, subBad=false;
+        if (!hasDraw){
+          sub = 'Your retirement age is at or beyond life expectancy, so there’s no drawdown to stress-test.';
+        } else if (meetsTarget){
+          sub = 'Across '+trialsLbl+' historical market sequences the pension lasted to life expectancy '+stress.accessAge+' in '+confPct+'% of them — at or above your '+targetPct+'% target. Retiring at '+ageLabel+' holds up even against bad early runs.';
+        } else if (stressAgeLabel==null){
+          sub = 'Even retiring right at life expectancy can’t reach '+targetPct+'% confidence with a '+gbpC(cp.minResidual||0)+' buffer — lower the income or the buffer.';
+          subBad=true;
+        } else {
+          sub = 'Across '+trialsLbl+' historical sequences the pension lasted '+confPct+'% of the time retiring at '+ageLabel+' — below your '+targetPct+'% target. To clear '+targetPct+'% you’d retire at about '+stressAgeLabel+' (or lower the income, keep a bigger buffer, or flex spending after a fall).';
+          subBad=true;
+        }
+        return (
+        <React.Fragment>
+          <details className="bp-collapse bp-stress-collapse">
+          <summary className="bp-sub bp-summary"><span>{(function(){
+            if(!(hasDraw && confPct!=null)) return 'Sequence risk · can bad early markets drain the pension?';
+            let t = 'Sequence risk · '+confPct+'% confidence retiring at '+ageLabel;
+            if(meetsTarget) t += ' — clears '+targetPct+'%';
+            else if(stressAgeLabel!=null) t += ' — '+targetPct+'% at '+stressAgeLabel;
+            else t += ' — below '+targetPct+'%';
+            return t;
+          })()}</span></summary>
+          <div className="bp-stress">
+            <div className="bp-stress-head">
+              <div className="bp-stress-q">{'Will my pension last if I retire at '+ageLabel+'?'}</div>
+              <div className="bp-stress-controls">
+                <div className="bp-stress-resid">
+                  <label>Buffer to leave at {stress.accessAge}</label>
+                  <BpNum money value={cp.minResidual||0} step={5000} onChange={v=>setCp({minResidual:Math.max(0,v)})} />
+                </div>
+                <div className="bp-stress-resid">
+                  <label>Confidence target</label>
+                  <div className="bp-seg sm" role="group" aria-label="confidence target">
+                    {[80,90,95].map(function(p){ return <button key={p} className={targetPct===p?'on':''} onClick={()=>setCp({confidence:p/100})}>{p}%</button>; })}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bp-stress-lines">
+              <div className="ssl"><span className="k">Base projection <span className="muted">(steady returns)</span></span>{hasDraw?yn(stress.survivesNormal):<span className="v muted">—</span>}</div>
+              <div className="ssl"><span className="k">Bad early markets <span className="muted">(poor start / crash)</span></span>{hasDraw?yn(stress.survivesBadStart):<span className="v muted">—</span>}</div>
+              <div className="ssl"><span className="k">Simulation confidence <span className="muted">({trialsLbl} historical runs)</span></span>{hasDraw&&confPct!=null?<span className={'v '+(meetsTarget?'ok':'')}>{confPct}%</span>:<span className="v muted">—</span>}</div>
+              <div className="ssl"><span className="k">Stress-tested retirement age <span className="muted">(at {targetPct}%)</span></span>{hasDraw?(stressAgeLabel!=null?<span className={'v '+(meetsTarget?'ok':'')}>{stressAgeLabel}</span>:<span className="v no">—</span>):<span className="v muted">—</span>}</div>
+            </div>
+            <div className={'bp-stress-sub'+(subBad?' bad':'')}>{sub}</div>
+
+            <details className="bp-why"><summary>What does “bad early markets” mean?</summary>
+              <ol>
+                <li><b>Sequence risk is about order, not average.</b> Once you retire you’re <b>drawing income from the pension</b> with no wage to top it up. If markets fall in the <b>first few years</b>, you’re selling units to live on while prices are low, so there’s less left to recover when markets bounce — the same set of returns in a different order can pass or fail. Bad years <b>early</b> do far more damage than the same bad years later.</li>
+                <li><b>“Yes” means the pension lasts through both stress runs.</b> We replay your plan — retire at {ageLabel}, draw {gbpC(stress.income)}/yr{stress.statePension>0?<span> (less the {gbpC(stress.statePension)} State Pension from {stress.spAge})</span>:''} — against two deliberately harsh openings: <b>Poor start</b> (a weak first three years, roughly −6%, −10%, −3% real) and <b>Crash</b> (−35% in year one, then a normal +18% / +12% rebound). After the shock, returns revert to your {(stress.baseReal*100).toFixed(1)}% trend.</li>
+                <li><b>Survive = the pot never runs below your buffer</b> ({gbpC(cp.minResidual||0)}) before life expectancy {stress.accessAge}. If <b>either</b> run drains it first, this reads <b>No</b>{stress.worstFail?<span> — here a {stress.worstFail==='crash'?'crash':'poor start'} runs it dry at age {sc[stress.worstFail].failAge}</span>:''}. It’s a deliberately tough test: your Base projection can say Yes while this says No, which is exactly the sequence risk a single average-return line hides.</li>
+              </ol>
+            </details>
+
+            {hasDraw && <details className="bp-collapse">
+              <summary className="bp-sub bp-summary">Stress test detail &amp; methodology</summary>
+              <div className="ss-cards">
+                {[{k:'normal',l:'Normal',c:C.pension},{k:'poorStart',l:'Poor start',c:C.cash},{k:'crash',l:'Crash',c:C.red}].map(function(x){
+                  const s = sc[x.k];
+                  return <div className="ss-card" key={x.k}>
+                    <div className="n"><span className="cd" style={{background:x.c}}></span>{x.l}</div>
+                    <div className={'st '+(s.survived?'ok':'no')}>{s.survived?'Lasts to '+stress.accessAge:'Runs dry @ '+s.failAge}</div>
+                    <div className="dt">{s.survived? 'Leaves '+m(s.residual, stress.accessAge)+' at '+stress.accessAge : (stress.accessAge-s.failAge)+' yr'+((stress.accessAge-s.failAge)===1?'':'s')+' short of '+stress.accessAge}</div>
+                  </div>;
+                })}
+              </div>
+              <div className="bp-chart" style={{marginTop:6}}>
+                {ResponsiveContainer ? (
+                <ResponsiveContainer width="100%" height={narrow?220:290}>
+                  <LineChart data={sData} margin={{top:22,right:18,left:8,bottom:2}}>
+                    <CartesianGrid stroke={C.grid} vertical={false} />
+                    <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
+                    <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
+                    <Tooltip content={<ChartTip/>} />
+                    {(cp.minResidual||0)>0 && <ReferenceLine y={(cp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
+                    <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
+                    <Line type="monotone" dataKey="normal" name="Normal" stroke={C.pension} strokeWidth={2.4} dot={false} />
+                    <Line type="monotone" dataKey="poor" name="Poor start" stroke={C.cash} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="crash" name="Crash" stroke={C.red} strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+                <div className="legend-row" style={{marginBottom:2}}>
+                  <span><span className="sw" style={{background:C.pension}}></span>Normal</span>
+                  <span><span className="sw" style={{background:C.cash}}></span>Poor start</span>
+                  <span><span className="sw" style={{background:C.red}}></span>Crash</span>
+                  <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
+                </div>
+              </div>
+              <div className="tablewrap" style={{marginTop:12}}>
+                <table>
+                  <thead><tr><th>Age</th><th>Normal</th><th>Poor start</th><th>Crash</th></tr></thead>
+                  <tbody>
+                    {sData.map(function(r,i){
+                      const cell = (v)=> v<=0 ? <span style={{color:'var(--critical)'}}>Empty</span> : gbpC(v);
+                      return <tr key={i}>
+                        <td>{r.age}{r.age===stress.accessAge?' (life exp)':''}</td>
+                        <td>{cell(r.normal)}</td><td>{cell(r.poor)}</td><td>{cell(r.crash)}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="bp-note" style={{marginTop:10}}>
+                <b>Method (stress overlays).</b> Starting from the pension you’d hold at retirement ({ageLabel}) — <b>{m(stress.startBalance, stress.startAge)}</b> — each scenario draws your <b>{gbpC(stress.income)}/yr</b>{stress.statePension>0?<span> (less the {gbpC(stress.statePension)} State Pension from {stress.spAge})</span>:''}, constant in today’s money, and grows the remainder at a <b>variable</b> real return, year by year, to life expectancy {stress.accessAge}. The base real return is {(stress.baseReal*100).toFixed(1)}%. <b>Poor start</b> applies roughly −6%, −10%, −3% real over the first three years, then reverts to trend; <b>Crash</b> applies −35% in year one then a +18% / +12% rebound, then trend. A scenario <b>survives</b> if it funds every year and still holds at least your {gbpC(cp.minResidual||0)} buffer at {stress.accessAge}. These three are hand-picked overlays; the historical simulation below turns the same idea into a probability across thousands of sequences.
+              </div>
+
+              <div className="bp-sub" style={{marginTop:20}}>Historical simulation · {trialsLbl} sequences</div>
+              <div className="bp-note" style={{marginTop:0,marginBottom:8}}>The lines are the 10th / 50th / 90th percentiles of where the pension lands each year across {trialsLbl} bootstrapped historical return sequences, retiring at {ageLabel}. <b>{confPct}%</b> stay funded to life expectancy {stress.accessAge}{(cp.minResidual||0)>0?<span> above your {gbpC(cp.minResidual||0)} buffer</span>:''}; the 10th-percentile line is where sequence risk bites hardest.</div>
+              <div className="bp-chart" style={{marginTop:0}}>
+                {ResponsiveContainer ? (
+                <ResponsiveContainer width="100%" height={narrow?220:290}>
+                  <LineChart data={fData} margin={{top:22,right:18,left:8,bottom:2}}>
+                    <CartesianGrid stroke={C.grid} vertical={false} />
+                    <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
+                    <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
+                    <Tooltip content={<ChartTip/>} />
+                    {(cp.minResidual||0)>0 && <ReferenceLine y={(cp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
+                    <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
+                    <Line type="monotone" dataKey="p90" name="90th pct" stroke={C.isa} strokeWidth={1.8} dot={false} strokeDasharray="5 4" />
+                    <Line type="monotone" dataKey="p50" name="Median" stroke={C.pension} strokeWidth={2.6} dot={false} />
+                    <Line type="monotone" dataKey="p10" name="10th pct" stroke={C.red} strokeWidth={1.8} dot={false} strokeDasharray="5 4" />
+                  </LineChart>
+                </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+                <div className="legend-row" style={{marginBottom:2}}>
+                  <span><span className="sw" style={{background:C.isa}}></span>90th percentile</span>
+                  <span><span className="sw" style={{background:C.pension}}></span>Median</span>
+                  <span><span className="sw" style={{background:C.red}}></span>10th percentile</span>
+                  <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
+                </div>
+              </div>
+              <div className="bp-note" style={{marginTop:10}}>
+                <b>Simulation method.</b> The pension drawdown is replayed against <b>{trialsLbl}</b> return sequences drawn from <b>actual history</b> — annual real total returns of US large-cap equity (S&P 500 with dividends, deflated by US CPI), <b>{sim.hist?sim.hist.from:1928}–{sim.hist?sim.hist.to:2024}</b> ({sim.hist?sim.hist.n:97} years; ~{sim.hist?(sim.hist.geoMean*100).toFixed(1):'6.7'}% real return, ~{sim.hist?(sim.hist.vol*100).toFixed(0):'20'}% volatility) as the equity proxy. A <b>block bootstrap</b> stitches random 5-year runs so crashes and recoveries cluster as they did historically, not as independent coin-flips. Because these are <b>raw</b> historical returns, the simulation’s average comes from history (~{sim.hist?(sim.hist.geoMean*100).toFixed(1):'6.7'}% real), not your {realPct}% assumption — which is used only to build the pot up to the day you retire. The <b>stress-tested retirement age</b> is the earliest retirement age whose drawdown clears your {targetPct}% confidence. Runs are seeded, so the figures are stable. Planning model, not financial advice.
+              </div>
+            </details>}
+          </div>
+          </details>
+        </React.Fragment>
+        );
+      })()}
 
       {/* YEAR-BY-YEAR */}
-      </details>
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.rows.length?base.rows[base.rows.length-1].age:base.objAge}</summary>
       <div className="tablewrap cards">
         <table>
@@ -1276,6 +1429,8 @@ function App() {
       ds5.optimistic.enabled = !!(was5.optimistic && was5.optimistic.enabled);
       c.scenarios = ds5; c._cv = 5;
     }
+    // one-time migration (v6): sequence-risk fields for the pension drawdown
+    if (c._cv < 6) { if (c.lifeExpectancy == null) c.lifeExpectancy = 90; if (c.minResidual == null) c.minResidual = 0; if (c.confidence == null) c.confidence = 0.90; c._cv = 6; }
     return c;
   });
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
