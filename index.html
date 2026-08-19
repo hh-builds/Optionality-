@@ -50,6 +50,8 @@
   window.addEventListener('appinstalled', function(){
     window.__ffInstall.deferred = null;
     window.__ffInstall.installed = true;
+    // Chromium only — iOS never fires this, so app_launch below is the real signal there.
+    try { window.OptTrack && window.OptTrack.track('app_installed'); } catch(err){}
     try { window.dispatchEvent(new CustomEvent('ff:installed')); } catch(err){}
   });
 })();
@@ -344,6 +346,14 @@
     var last = parseInt(ls(K.last) || '0', 10);
     if (last && (nowMs - last) > RETURN_GAP_MS) track('return_visit');
     ss(K.last, String(nowMs));
+    // Running from the home screen rather than a browser tab. On iOS this is the
+    // ONLY evidence anyone ever installed it — Safari fires no install events.
+    var standalone = false;
+    try {
+      standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                   || navigator.standalone === true;
+    } catch(e){}
+    if (standalone) track('app_launch');
   }
 })();
 </script>
@@ -2774,8 +2784,10 @@ function useInstall() {
     const d = window.__ffInstall && window.__ffInstall.deferred;
     if (!d) return false;
     try {
+      TRK.ev('install_prompted');
       d.prompt();
-      await d.userChoice;
+      const choice = await d.userChoice;
+      TRK.ev(choice && choice.outcome === 'accepted' ? 'install_accepted' : 'install_dismissed');
       window.__ffInstall.deferred = null;
       setSt(read());
       return true;
@@ -4514,9 +4526,10 @@ function App() {
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
           {!install.standalone && <button className="btn" onClick={async ()=>{
+            TRK.ev('install_click', { platform: install.platform });
             const shown = await install.promptInstall();
             setMenuOpen(false);
-            if (!shown) setInstallHelp(true);
+            if (!shown) { TRK.ev('install_help', { platform: install.platform }); setInstallHelp(true); }
           }}>⤓ Install app</button>}
           <button className="btn" onClick={()=>{TRK.once('session','theme_toggle'); setDark(!dark);}}>{dark?'☀ Light':'☾ Dark'}</button>
           <button className="btn" onClick={()=>{TRK.ev('export_csv'); exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>

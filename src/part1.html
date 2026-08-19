@@ -50,6 +50,8 @@
   window.addEventListener('appinstalled', function(){
     window.__ffInstall.deferred = null;
     window.__ffInstall.installed = true;
+    // Chromium only — iOS never fires this, so app_launch below is the real signal there.
+    try { window.OptTrack && window.OptTrack.track('app_installed'); } catch(err){}
     try { window.dispatchEvent(new CustomEvent('ff:installed')); } catch(err){}
   });
 })();
@@ -344,6 +346,14 @@
     var last = parseInt(ls(K.last) || '0', 10);
     if (last && (nowMs - last) > RETURN_GAP_MS) track('return_visit');
     ss(K.last, String(nowMs));
+    // Running from the home screen rather than a browser tab. On iOS this is the
+    // ONLY evidence anyone ever installed it — Safari fires no install events.
+    var standalone = false;
+    try {
+      standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                   || navigator.standalone === true;
+    } catch(e){}
+    if (standalone) track('app_launch');
   }
 })();
 </script>

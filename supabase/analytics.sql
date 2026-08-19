@@ -60,18 +60,22 @@ create table if not exists public.events (
   props       jsonb not null default '{}'::jsonb
 );
 
-do $$ begin
-  alter table public.events add constraint events_name_allowed check (name in (
-    -- funnel
-    'visit', 'return_visit', 'register', 'sign_in',
-    'finances_entered', 'plan_completed', 'plan_updated',
-    -- features
-    'edit_savings', 'edit_target_income', 'edit_target_age',
-    'open_advanced', 'edit_return_inflation', 'per_pot_assumptions',
-    'view_projection', 'scenario_toggle', 'sooner_levers',
-    'units_toggle', 'theme_toggle', 'export_csv'
-  ));
-exception when duplicate_object then null; end $$;
+-- Dropped and recreated rather than "add if missing", so that adding a new
+-- event name to this list and re-running the file actually widens it.
+alter table public.events drop constraint if exists events_name_allowed;
+alter table public.events add constraint events_name_allowed check (name in (
+  -- funnel
+  'visit', 'return_visit', 'register', 'sign_in',
+  'finances_entered', 'plan_completed', 'plan_updated',
+  -- features
+  'edit_savings', 'edit_target_income', 'edit_target_age',
+  'open_advanced', 'edit_return_inflation', 'per_pot_assumptions',
+  'view_projection', 'scenario_toggle', 'sooner_levers',
+  'units_toggle', 'theme_toggle', 'export_csv',
+  -- install / "add to home screen"  (see 002-install-tracking.sql)
+  'install_click', 'install_prompted', 'install_accepted', 'install_dismissed',
+  'install_help', 'app_installed', 'app_launch'
+));
 
 do $$ begin
   alter table public.events add constraint events_device_kind_allowed
@@ -377,7 +381,9 @@ begin
     ('sooner_levers',         'Used "get me there sooner"'),
     ('units_toggle',          'Switched today''s money / nominal'),
     ('export_csv',            'Exported CSV'),
-    ('plan_updated',          'Returned and updated a plan')
+    ('plan_updated',          'Returned and updated a plan'),
+    ('install_click',         'Tapped Install app'),
+    ('app_launch',            'Opened it as an installed app')
   )
   select names.n,
          names.l,
@@ -528,6 +534,52 @@ $$;
 
 
 -- ---------------------------------------------------------------------
+-- 9b. INSTALL — "add to home screen" funnel and usage
+--
+--    NOTE — iOS gives us nothing. Safari fires neither beforeinstallprompt nor
+--    appinstalled, so on iPhone/iPad 'install_prompted' and 'app_installed' are
+--    always zero. The honest signal there is `launch_devices`: devices that have
+--    actually opened the app in standalone mode. Read that as "installed and
+--    being used", and treat it as the real number.
+-- ---------------------------------------------------------------------
+create or replace function public.admin_installs(p text default 'all', kind text default 'all')
+returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare r jsonb; since timestamptz;
+begin
+  perform public.admin_guard();
+  since := public.period_start(p);
+
+  with scoped as (
+    select * from public.events
+    where occurred_at >= since and (kind = 'all' or device_kind = kind)
+  )
+  select jsonb_build_object(
+    'clicked',        (select count(distinct device_id) from scoped where name = 'install_click'),
+    'prompted',       (select count(distinct device_id) from scoped where name = 'install_prompted'),
+    'accepted',       (select count(distinct device_id) from scoped where name = 'install_accepted'),
+    'dismissed',      (select count(distinct device_id) from scoped where name = 'install_dismissed'),
+    'help_shown',     (select count(distinct device_id) from scoped where name = 'install_help'),
+    'installed',      (select count(distinct device_id) from scoped where name = 'app_installed'),
+    'launch_devices', (select count(distinct device_id) from scoped where name = 'app_launch'),
+    'launches',       (select count(*)                  from scoped where name = 'app_launch'),
+    -- which platform people are on when we have to fall back to written steps
+    'help_by_platform', coalesce((
+      select jsonb_object_agg(pf, n) from (
+        select coalesce(props ->> 'platform', 'unknown') pf, count(distinct device_id) n
+        from scoped where name = 'install_help' group by 1
+      ) t), '{}'::jsonb),
+    -- of everyone who visited in the window, how many run it as an app
+    'visitors',       (select count(distinct device_id) from scoped)
+  ) into r;
+
+  return r;
+end;
+$$;
+
+
+-- ---------------------------------------------------------------------
 -- 10. GRANTS — only signed-in users may even call these; each one then
 --     checks is_admin() for itself.
 -- ---------------------------------------------------------------------
@@ -541,7 +593,8 @@ begin
     'admin_funnel(text,text)',
     'admin_features(text,text)',
     'admin_trend(text)',
-    'admin_users(text,text,text,text,int,int)'
+    'admin_users(text,text,text,text,int,int)',
+    'admin_installs(text,text)'
   ] loop
     execute format('revoke all on function public.%s from public, anon', f);
     execute format('grant execute on function public.%s to authenticated', f);

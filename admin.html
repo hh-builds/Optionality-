@@ -234,6 +234,12 @@ th.s .ar{opacity:.55;font-size:10px}
     </div>
 
     <div class="sec">
+      <div class="sec-h">Installed as an app <span class="hint" id="instHint"></span></div>
+      <div class="tiles" id="instTiles"></div>
+      <div class="note" id="instNote"></div>
+    </div>
+
+    <div class="sec">
       <div class="sec-h">Feature usage <span class="hint">% of devices that entered finances in this period</span></div>
       <div class="card"><div class="feat" id="feat"></div></div>
     </div>
@@ -430,6 +436,26 @@ th.s .ar{opacity:.55;font-size:10px}
       + '<i>once</i> they have something worth keeping — not a gate on the way in.';
   }
 
+  function renderInstalls(d){
+    if (!d) { $('instTiles').innerHTML = ''; $('instNote').textContent = ''; return; }
+    var share = d.visitors > 0 ? (100 * d.launch_devices / d.visitors) : null;
+    $('instTiles').innerHTML =
+      tile('Using it as an app', n(d.launch_devices),
+           share == null ? 'devices' : pct(share) + ' of visitors') +
+      tile('Tapped Install', n(d.clicked)) +
+      tile('Browser offered it', n(d.prompted), 'native dialog shown') +
+      tile('Accepted', n(d.accepted), d.dismissed ? n(d.dismissed) + ' dismissed' : null) +
+      tile('Shown written steps', n(d.help_shown), 'no native dialog available') +
+      tile('App opens', n(d.launches), 'sessions in standalone');
+    var byPlat = d.help_by_platform || {};
+    var platBits = Object.keys(byPlat).map(function(k){ return byPlat[k] + ' ' + k; }).join(' · ');
+    $('instNote').innerHTML = '<b>“Using it as an app” is the number to trust.</b> '
+      + 'It counts devices that opened Future Funded from a home screen or launcher rather than a browser tab. '
+      + 'iOS reports nothing else at all — Safari fires no install events — so on iPhone and iPad '
+      + '“Browser offered it” and any install confirmation will always read zero even when people have installed it.'
+      + (platBits ? ' Written steps shown to: ' + esc(platBits) + '.' : '');
+  }
+
   function renderFeatures(rows){
     if (!rows.length){ $('feat').innerHTML = '<div class="empty">No events in this period yet.</div>'; return; }
     var max = Math.max.apply(null, rows.map(function(r){ return r.devices || 0; })) || 1;
@@ -529,7 +555,8 @@ th.s .ar{opacity:.55;font-size:10px}
         supa.rpc('admin_features', { p: state.p, kind: state.kind }),
         supa.rpc('admin_model_medians'),
         supa.rpc('admin_median_optionality_age'),
-        supa.rpc('admin_trend',    { p: state.p })
+        supa.rpc('admin_trend',    { p: state.p }),
+        supa.rpc('admin_installs', { p: state.p, kind: state.kind })
       ]);
       var bad = out.filter(function(r){ return r.error; });
       if (bad.length) throw new Error(bad.map(function(b){ return b.error.message; }).join(' · '));
@@ -538,6 +565,9 @@ th.s .ar{opacity:.55;font-size:10px}
       renderFeatures(out[2].data || []);
       renderModel(out[3].data || {}, out[4].data || {});
       renderTrend(out[5].data || []);
+      renderInstalls(out[6].data || null);
+      $('instHint').textContent = ({'7d':'last 7 days','30d':'last 30 days','all':'all time'})[state.p]
+        + (state.kind === 'all' ? '' : ' · ' + state.kind);
       $('funnelHint').textContent = ({'7d':'last 7 days','30d':'last 30 days','all':'all time'})[state.p]
         + (state.kind === 'all' ? '' : ' · ' + state.kind);
     } catch (e) {
