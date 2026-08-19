@@ -191,6 +191,14 @@
   --phase-accum:rgba(62,92,153,0.05);
   --phase-bridge:rgba(193,134,31,0.07);
   --phase-ret:rgba(47,138,103,0.07);
+  /* ---- ONE type scale. Four tiers, nothing in between:
+         section heading -> primary result -> label -> helper text. ---- */
+  --fs-display:40px;   /* the headline answer in a card */
+  --fs-result:21px;    /* a secondary result / planner title */
+  --fs-h:16px;         /* section + panel headings */
+  --fs-body:14px;      /* running text, input values */
+  --fs-label:12.5px;   /* field labels, card keys, legends */
+  --fs-help:12px;      /* helper / note text */
 }
 html[data-theme="dark"]{
   --surface-1:#17181b; --surface-2:#1e2024; --page:#0e0f11;
@@ -240,11 +248,35 @@ button{font-family:inherit}
 .brand h1{font-size:17px;font-weight:650;letter-spacing:-0.02em}
 .brand .brand-sub{color:var(--muted)}
 
-/* hero — clean, high-whitespace proposition (Question → Answer starts here) */
-.hero{margin:16px 2px 34px;max-width:760px}
-.hero h2{font-size:33px;line-height:1.12;letter-spacing:-0.03em;font-weight:650;color:var(--text-primary);margin:0}
-.hero p{font-size:16px;line-height:1.62;color:var(--text-secondary);margin:14px 0 0;max-width:630px}
-@media (max-width:560px){ .hero h2{font-size:25px} .hero p{font-size:14.5px} .hero{margin:10px 2px 26px} }
+/* strapline — one line, then straight into the cards. The cards are the hero. */
+.hero{margin:14px 2px 18px;max-width:660px}
+.hero h2{font-size:var(--fs-h);line-height:1.5;letter-spacing:-0.01em;font-weight:500;color:var(--text-secondary);margin:0}
+@media (max-width:560px){ .hero{margin:8px 2px 14px} .hero h2{font-size:var(--fs-body)} }
+
+/* =====================================================================
+   HEADLINE CARDS — the three answers. Mobile first: stacked, one per row;
+   three across from 721px. Number dominates; everything else recedes.
+   ===================================================================== */
+.hcards{display:grid;grid-template-columns:1fr;gap:11px;margin:0 0 10px}
+.hcard{background:var(--surface-1);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:17px 18px 16px;min-width:0;display:flex;flex-direction:column}
+.hc-k{font-size:var(--fs-label);font-weight:600;color:var(--muted);margin:0 0 9px;
+  display:flex;align-items:center;gap:8px;line-height:1.2}
+.hc-dot{width:8px;height:8px;border-radius:50%;background:var(--baseline);flex:0 0 auto}
+.hc-dot.good{background:var(--good)}
+.hc-dot.warn{background:var(--warning)}
+.hc-dot.bad{background:var(--critical)}
+.hc-v{font-size:clamp(29px,8vw,var(--fs-display));font-weight:650;letter-spacing:-0.03em;
+  line-height:1.03;font-variant-numeric:tabular-nums;color:var(--text-primary)}
+.hc-v.good{color:var(--good-text)}
+.hc-v.bad{color:var(--critical)}
+.hc-sub{font-size:var(--fs-help);color:var(--text-secondary);line-height:1.45;margin-top:8px}
+.hc-foot{font-size:var(--fs-help);color:var(--muted);margin:2px 2px 0;line-height:1.5}
+@media (min-width:721px){
+  .hcards{grid-template-columns:repeat(3,1fr);gap:14px}
+  .hcard{padding:20px 20px 18px}
+  .hc-v{font-size:var(--fs-display)}
+}
 
 /* footer */
 .site-foot{margin:56px 2px 0;padding-top:22px;border-top:1px solid var(--border);
@@ -311,9 +343,9 @@ button{font-family:inherit}
 .acc-row .pw-eye{top:50%;transform:translateY(-50%)}
 
 
-.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow)}
-.panel > h2{font-size:16px;margin-bottom:4px;letter-spacing:-0.01em}
-.panel .desc{font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.55}
+.panel{background:var(--surface-1);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow)}
+.panel > h2{font-size:var(--fs-h);margin-bottom:4px;letter-spacing:-0.01em}
+.panel .desc{font-size:var(--fs-help);color:var(--muted);margin-bottom:16px;line-height:1.55}
 
 
 .icon-btn{background:none;border:1px solid var(--border);border-radius:7px;cursor:pointer;color:var(--muted);
@@ -327,13 +359,10 @@ button{font-family:inherit}
 
 
 
-.cmp-rec{font-size:13.5px;color:var(--text-secondary);line-height:1.55;margin-top:12px;
-  background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
-.cmp-rec b{color:var(--text-primary)}
 
 
 /* table */
-.tablewrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+.tablewrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);background:var(--surface-1)}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
 th,td{padding:7px 10px;text-align:right;white-space:nowrap}
 th{background:var(--surface-2);color:var(--muted);font-weight:600;font-size:11.5px;
@@ -346,15 +375,15 @@ tr.bridge td:first-child{box-shadow:inset 3px 0 var(--warning)}
 tr.retirement td:first-child{box-shadow:inset 3px 0 var(--series-isa)}
 tr.bridge{background:var(--phase-bridge)}
 tr.retirement{background:var(--phase-ret)}
-.legend-row{display:flex;gap:16px;margin:10px 0;font-size:12px;flex-wrap:wrap}
+.legend-row{display:flex;gap:10px 16px;margin:12px 0 2px;font-size:var(--fs-label);flex-wrap:wrap}
 .legend-row span{display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary)}
 .legend-row .sw{width:11px;height:11px;border-radius:3px}
 .notecell{color:var(--muted);font-size:11px;max-width:180px;white-space:normal;text-align:left}
 
 /* chart */
 .chart-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;gap:8px}
-.terms-tag{font-size:11px;font-weight:600;letter-spacing:0;color:var(--muted);
-  background:var(--surface-2);border:1px solid var(--border);padding:2px 9px;border-radius:999px;white-space:nowrap}
+.terms-tag{font-size:var(--fs-help);font-weight:600;color:var(--muted);
+  background:var(--surface-2);border:none;padding:3px 10px;border-radius:999px;white-space:nowrap}
 /* table group header (Pension | ISA-GIA) */
 tr.grouprow th{background:var(--surface-2);border-bottom:1px solid var(--border);padding:5px 10px}
 tr.grouprow th.grp{text-align:center;font-size:11px;letter-spacing:.04em}
@@ -371,38 +400,42 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .tooltip .t-row .sw{width:9px;height:9px;border-radius:2px}
 .tooltip .t-row .amt{font-weight:600;font-variant-numeric:tabular-nums}
 
-/* "Question" tier — the section questions that lead each block */
-.section-title{font-size:16px;letter-spacing:-0.01em;color:var(--text-secondary);
-  font-weight:600;margin:44px 2px 16px;display:flex;align-items:center;gap:14px}
-.section-title::after{content:"";flex:1;height:1px;background:var(--border)}
-.note{font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.55;max-width:680px}
-.assumptions{font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);
+.note{font-size:var(--fs-help);color:var(--muted);margin-top:9px;line-height:1.55;max-width:680px}
+.assumptions{font-size:var(--fs-help);color:var(--muted);background:var(--surface-2);border:none;
   border-radius:10px;padding:12px 14px;margin-top:8px;line-height:1.7}
 
 /* =====================================================================
    ISA / GIA BRIDGE PLANNER  ("Accessible Wealth")
    ===================================================================== */
 .bridge-planner{background:var(--surface-1);
-  border:1px solid var(--border);border-radius:var(--radius);padding:24px 26px 22px;margin-bottom:20px;box-shadow:var(--shadow)}
+  border-radius:var(--radius);padding:24px 26px 22px;margin-bottom:20px;box-shadow:var(--shadow)}
 .bp-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.bp-q{font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);font-weight:650}
-.bp-title{font-size:19px;font-weight:600;letter-spacing:-0.015em;margin:6px 0 2px}
+.bp-q{display:none}
+.bp-title{font-size:var(--fs-result);font-weight:600;letter-spacing:-0.02em;margin:0 0 2px;line-height:1.2}
 .bp-title .bp-star{color:var(--accent)}
-.bp-terms{display:flex;gap:6px;align-items:center}
+.bp-terms{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+/* the units switch is a utility, not a headline — keep it compact and on one line */
+.bp-terms .bp-seg button{white-space:nowrap;padding:7px 11px;min-height:34px;font-size:var(--fs-help);font-weight:600}
+@media (max-width:560px){
+  .bp-topline{gap:10px}
+  .bp-terms{width:100%}
+  .bp-terms .bp-seg{width:100%}
+  .bp-terms .bp-seg button{flex:1 1 0;min-height:38px}
+}
 /* headline result — three tiers: answer → evidence → help */
 .bp-result{margin:16px 0 14px}
-.bp-answer{font-size:40px;font-weight:650;letter-spacing:-0.025em;line-height:1.06}
+.bp-answer{font-size:var(--fs-display);font-weight:650;letter-spacing:-0.03em;line-height:1.05}
 .bp-answer.reached{color:var(--good-text)}
 .bp-answer.missed{color:var(--critical)}
-.bp-evidence{font-size:17px;color:var(--text-secondary);margin-top:10px;line-height:1.4;
-  font-variant-numeric:tabular-nums;letter-spacing:-0.01em;max-width:640px}
+.bp-evidence{font-size:var(--fs-body);color:var(--text-secondary);margin-top:9px;line-height:1.45;
+  font-variant-numeric:tabular-nums;max-width:640px}
 .bp-evidence b{color:var(--text-primary);font-weight:650}
 .bp-evidence .arrow{color:var(--muted);font-weight:400;margin:0 2px}
-.bp-help-line{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5;max-width:660px}
+.bp-help-line{font-size:var(--fs-help);color:var(--muted);margin-top:6px;line-height:1.5;max-width:660px}
 .bp-scen-chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 4px}
-.bp-scen-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-right:3px}
-.bp-chip{display:inline-flex;align-items:baseline;gap:6px;font-size:12px;font-weight:600;
-  border:1px solid var(--border);border-radius:999px;padding:4px 12px;background:transparent;color:var(--muted);cursor:pointer;transition:.12s}
+.bp-scen-lbl{font-size:var(--fs-label);color:var(--muted);font-weight:600;margin-right:3px}
+.bp-chip{display:inline-flex;align-items:baseline;gap:6px;font-size:var(--fs-label);font-weight:600;
+  border:1px solid var(--border);border-radius:999px;padding:7px 13px;min-height:34px;background:transparent;color:var(--muted);cursor:pointer;transition:.12s}
 .bp-chip .cd{width:8px;height:8px;border-radius:50%;align-self:center}
 .bp-chip.off{color:var(--muted)}
 .bp-chip:hover{border-color:var(--baseline);color:var(--text-secondary)}
@@ -410,58 +443,65 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .bp-chip.on:hover{color:var(--text-primary)}
 .bp-chip .cage{color:var(--muted);font-weight:600}
 .bp-chip.on .cage{color:var(--text-secondary)}
-/* result tiles */
-.bp-results{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0 6px}
-.bp-tile{background:var(--surface-2);border:none;border-radius:var(--radius-sm);padding:14px 15px}
-.bp-tile .bt-k{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600;line-height:1.3}
-.bp-tile .bt-v{font-size:18px;font-weight:600;margin-top:7px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
+/* supporting figures — no boxes, just hairlines and whitespace */
+.bp-results{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:18px 0 4px;
+  border-top:1px solid var(--border)}
+.bp-tile{background:none;border:none;border-bottom:1px solid var(--border);padding:12px 16px 12px 0}
+.bp-tile .bt-k{font-size:var(--fs-label);color:var(--muted);font-weight:600;line-height:1.3}
+.bp-tile .bt-v{font-size:var(--fs-h);font-weight:650;margin-top:5px;letter-spacing:-0.01em;font-variant-numeric:tabular-nums}
 .bp-tile .bt-v.pos{color:var(--good-text)} .bp-tile .bt-v.neg{color:var(--critical)}
 /* chart block */
 .bp-chart{margin-top:12px;padding:2px 0}
-/* sub-headings inside the planner */
-.bp-sub{font-size:11px;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);font-weight:700;
-  margin:20px 2px 9px;display:flex;align-items:center;gap:8px}
-/* collapse summaries carry live content — keep them sentence-case and a touch stronger */
-.bp-summary{text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text-secondary)}
+/* sub-headings inside the planner — sentence case, one weight, a hairline rule */
+.bp-sub{font-size:var(--fs-body);letter-spacing:-0.01em;color:var(--text-primary);font-weight:650;
+  margin:24px 2px 11px;display:flex;align-items:center;gap:10px}
+.bp-summary{font-size:var(--fs-body);color:var(--text-primary)}
 .bp-sub::after{content:"";flex:1;height:1px;background:var(--border)}
-/* compact assumptions grid */
-.bp-assump{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.bp-fld{display:flex;flex-direction:column;gap:4px}
-.bp-fld label{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600}
+/* input grid — one comfortable column on a phone, widening with the viewport */
+.bp-assump{display:grid;grid-template-columns:1fr;gap:14px}
+@media (min-width:561px){ .bp-assump{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))} }
+.bp-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.bp-fld label{font-size:var(--fs-label);color:var(--text-secondary);font-weight:600;line-height:1.3}
+.bp-fld .bp-hint{font-size:var(--fs-help);color:var(--muted);line-height:1.4}
 .bp-inwrap{position:relative;display:flex;align-items:center}
-.bp-inwrap>span.pfx{position:absolute;left:9px;color:var(--muted);font-size:13px;pointer-events:none}
-.bp-inwrap>span.sfx{position:absolute;right:9px;color:var(--muted);font-size:13px;pointer-events:none}
-.bp-inwrap input{width:100%;padding:6px 9px;border:1px solid var(--grid);border-radius:7px;background:var(--surface-2);
-  color:var(--text-primary);font-size:13.5px;font-weight:600;font-family:inherit;font-variant-numeric:tabular-nums}
-.bp-inwrap input:focus{outline:none;border-color:var(--accent)}
-.bp-inwrap.money input{padding-left:19px} .bp-inwrap.pct input{padding-right:22px}
-/* phase editor */
-.bp-phases{display:flex;flex-direction:column;gap:8px}
-.bp-phase-head,.bp-phase{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:10px;align-items:center}
-.bp-phase-head span{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600;padding-left:2px}
-.bp-phase input{width:100%;padding:6px 9px;border:1px solid var(--grid);border-radius:7px;background:var(--surface-2);
-  color:var(--text-primary);font-size:13.5px;font-weight:600;font-family:inherit;font-variant-numeric:tabular-nums}
-.bp-phase input:focus{outline:none;border-color:var(--accent)}
-.bp-phase .bp-inwrap.money input{padding-left:19px}
+.bp-inwrap>span.pfx{position:absolute;left:11px;color:var(--muted);font-size:var(--fs-body);pointer-events:none}
+.bp-inwrap>span.sfx{position:absolute;right:11px;color:var(--muted);font-size:var(--fs-body);pointer-events:none}
+.bp-inwrap input{width:100%;padding:9px 11px;border:1px solid var(--grid);border-radius:9px;background:var(--surface-2);
+  color:var(--text-primary);font-size:var(--fs-body);font-weight:600;font-family:inherit;font-variant-numeric:tabular-nums;
+  min-height:40px}
+.bp-inwrap input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.bp-inwrap.money input{padding-left:23px} .bp-inwrap.pct input{padding-right:26px}
+/* phase editor — every field carries its own label, so it reads on a phone */
+.bp-phases{display:flex;flex-direction:column;gap:6px}
+.bp-phase{display:grid;grid-template-columns:1fr 1fr 1.6fr auto;gap:10px;align-items:end}
+.bp-pf{display:flex;flex-direction:column;gap:5px;min-width:0}
+.bp-pf label{font-size:var(--fs-label);color:var(--text-secondary);font-weight:600;line-height:1.3}
+.bp-phase .icon-btn{align-self:end;margin-bottom:5px}
+@media (max-width:560px){
+  .bp-phase{grid-template-columns:1fr 1fr auto;gap:10px}
+  .bp-pf.wide{grid-column:1 / 4;grid-row:2}
+  .bp-phase .icon-btn{grid-column:3;grid-row:1}
+}
 /* segmented toggles */
-.bp-toggles{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
-.bp-tgroup{display:flex;flex-direction:column;gap:5px}
-.bp-tgroup>.tl{font-size:11.5px;color:var(--muted);letter-spacing:0;font-weight:600}
-.bp-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface-2)}
-.bp-seg button{background:none;border:none;padding:7px 13px;font-size:12.5px;cursor:pointer;color:var(--text-secondary);font-family:inherit;font-weight:600}
-.bp-seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.bp-toggles{display:flex;gap:16px 20px;flex-wrap:wrap;align-items:flex-start;margin-bottom:4px}
+.bp-tgroup{display:flex;flex-direction:column;gap:5px;min-width:0}
+.bp-tgroup>.tl{font-size:var(--fs-label);color:var(--text-secondary);font-weight:600;line-height:1.3}
+.bp-seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;background:var(--surface-2)}
+.bp-seg button{background:none;border:none;padding:9px 14px;font-size:var(--fs-label);cursor:pointer;color:var(--text-secondary);font-family:inherit;font-weight:600;min-height:40px}
+/* the selected option needs to be unmistakable — an accent-soft fill alone is too
+   close to the track colour to read as "on", so ring it in the accent as well */
+.bp-seg button.on{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
 .bp-seg button+button{border-left:1px solid var(--border)}
 /* scenario editor cards */
-.bp-scenarios{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.bp-scard{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 15px}
-.bp-scard.base{border-color:var(--baseline)}
+.bp-scenarios{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.bp-scard{background:var(--surface-2);border:none;border-radius:var(--radius-sm);padding:14px 15px}
 .bp-scard-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-.bp-scard-head .sn{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700}
+.bp-scard-head .sn{display:flex;align-items:center;gap:8px;font-size:var(--fs-body);font-weight:650}
 .bp-scard-head .sn .cd{width:11px;height:11px;border-radius:50%}
-.bp-scard-sub{font-size:11.5px;color:var(--muted);margin:-4px 0 9px;font-variant-numeric:tabular-nums}
+.bp-scard-sub{font-size:var(--fs-help);color:var(--muted);margin:-4px 0 9px;font-variant-numeric:tabular-nums}
 .bp-scard.base .bp-scard-sub{color:var(--text-primary);font-weight:600}
 .bp-scard .bp-fld{margin-bottom:9px}
-.bp-scard .cross-line{font-size:12px;color:var(--muted);margin-top:2px}
+.bp-scard .cross-line{font-size:var(--fs-help);color:var(--muted);margin-top:2px}
 .bp-scard .cross-line b{color:var(--text-primary);font-weight:650}
 .bp-scen-toggle{font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;background:none;border:none;font-family:inherit}
 /* colour-coded table indicators */
@@ -470,20 +510,21 @@ tr.bp-amber td:first-child{box-shadow:inset 3px 0 var(--warning)}
 tr.bp-green td:first-child{box-shadow:inset 3px 0 var(--good)}
 tr.bp-green{background:var(--phase-ret)}
 tr.bp-amber{background:var(--phase-bridge)}
-.bp-status{font-weight:650;font-size:11.5px;letter-spacing:0}
+.bp-status{font-weight:650;font-size:var(--fs-help);letter-spacing:0}
 .bp-status.below{color:var(--critical)} .bp-status.amber{color:var(--warning)} .bp-status.green{color:var(--good-text)}
 html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="dark"] .bp-status.green{color:var(--good)}
 .bp-cross-row td{border-top:2px solid var(--accent)!important}
-.bp-note{font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.55;max-width:680px}
+.bp-note{font-size:var(--fs-help);color:var(--muted);margin-top:9px;line-height:1.55;max-width:680px}
 @media (max-width:960px){
   .bp-results{grid-template-columns:repeat(2,1fr)}
-  .bp-assump{grid-template-columns:repeat(2,1fr)}
   .bp-scenarios{grid-template-columns:1fr}
 }
 @media (max-width:560px){
-  .bp-results{grid-template-columns:1fr}
-  .bp-assump{grid-template-columns:1fr}
-  .bp-phase-head,.bp-phase{grid-template-columns:1fr 1fr 1.2fr auto}
+  /* supporting figures become a plain label/value list — no grid squeeze */
+  .bp-results{grid-template-columns:1fr;border-top:none}
+  .bp-tile{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:11px 0}
+  .bp-tile .bt-k{flex:1 1 auto}
+  .bp-tile .bt-v{margin-top:0;flex:0 0 auto;text-align:right}
   .bridge-planner{padding:18px 15px}
 }
 
@@ -511,10 +552,13 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
 }
 @media (max-width:560px){
   /* iOS zooms any focused input under 16px — bump font, and give comfy targets */
-  .bp-inwrap input,.bp-phase input{font-size:16px;min-height:42px}
+  .bp-inwrap input,.bp-phase input{font-size:16px;min-height:46px;padding-top:11px;padding-bottom:11px}
+  .bp-inwrap.money input{padding-left:25px} .bp-inwrap.pct input{padding-right:28px}
+  .bp-inwrap>span.pfx,.bp-inwrap>span.sfx{font-size:15px}
   /* bigger tap targets on the segmented toggles and toolbar buttons */
-  .bp-seg button{padding:11px 14px;min-height:44px;font-size:13px}
-  .btn{padding:10px 13px;min-height:42px}
+  .bp-seg button{padding:12px 14px;min-height:46px;font-size:13.5px}
+  .btn{padding:10px 13px;min-height:44px}
+  .icon-btn{width:44px;height:44px}
   /* ---- collapse the top bar into a burger menu so it stays one compact row ---- */
   .topbar{flex-wrap:nowrap;gap:10px;padding:9px 0}
   .brand-sub{display:none}          /* subtitle is dead weight on a phone */
@@ -536,20 +580,18 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .toolbar.open > .btn:active{background:var(--accent-soft)}
   .toolbar.open > .btn + .btn{border-top:1px solid var(--border);border-radius:0}
   .bp-seg{flex-wrap:wrap}
+  .bp-scen-chips{gap:8px}
   /* reclaim horizontal space so content isn't pinched */
   .wrap{padding:14px 12px 60px}
   .bridge-planner{padding:16px 13px}
-  .bp-answer{font-size:31px}
-  .bp-evidence{font-size:15.5px}
-  .bp-title{font-size:17px}
+  .bp-answer{font-size:30px}
+  .bp-title{font-size:18px}
+  .bp-sub{margin:20px 2px 10px}
   /* segmented toggle groups stack rather than overflow */
   .bp-toggles{gap:14px}
   .bp-tgroup{width:100%}
   .bp-seg{width:100%}
   .bp-seg button{flex:1 1 0}
-  /* result tiles: 2-up rather than one-per-row, so the summary is scannable */
-  .bp-results{grid-template-columns:1fr 1fr}
-  .bp-tile .bt-v{font-size:16px}
 
   /* ---- Year-by-year tables become STACKED CARDS (one row = one card) ----
      Pure CSS, driven by data-label on each <td>; the <table> markup and the
@@ -587,67 +629,49 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .wrap{max-width:100%}
 }
 
-/* --- collapsible planner sections (obvious expander bar) --- */
-details.bp-collapse{margin:10px 0;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);overflow:hidden}
-details.bp-collapse[open]{border-color:var(--baseline)}
-summary.bp-summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:9px;padding:11px 13px;margin:0;color:var(--text)}
+/* --- collapsible planner sections: a hairline and a row, not a nested box --- */
+details.bp-collapse{margin:0;border:none;border-top:1px solid var(--border);border-radius:0;background:none}
+details.bp-collapse + details.bp-collapse{margin-top:0}
+summary.bp-summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;
+  padding:15px 2px;margin:0;min-height:52px;color:var(--text-primary);font-weight:650}
 summary.bp-summary::-webkit-details-marker{display:none}
 summary.bp-summary::before{content:"▸";flex:0 0 auto;font-size:12px;color:var(--accent);transition:transform .15s ease}
 details.bp-collapse[open]>summary.bp-summary::before{transform:rotate(90deg)}
-summary.bp-summary::after{content:"Show ›";flex:0 0 auto;margin-left:auto;background:none;height:auto;font-size:11px;text-transform:none;letter-spacing:0;font-weight:600;color:var(--accent);white-space:nowrap}
-details.bp-collapse[open]>summary.bp-summary::after{content:"Hide ‹"}
-summary.bp-summary:hover{background:var(--surface-1)}
-details.bp-collapse[open]>summary.bp-summary{border-bottom:1px solid var(--border)}
+summary.bp-summary::after{content:"Show";flex:0 0 auto;margin-left:auto;background:none;height:auto;
+  font-size:var(--fs-help);font-weight:600;color:var(--accent);white-space:nowrap}
+details.bp-collapse[open]>summary.bp-summary::after{content:"Hide"}
+summary.bp-summary:hover::after{text-decoration:underline}
+details.bp-collapse > :not(summary){padding-bottom:16px}
 /* --- per-phase year/total readout --- */
-.bp-phase-sum{font-size:11.5px;color:var(--muted);margin:-2px 0 4px 2px;line-height:1.45}
+.bp-phase-sum{font-size:var(--fs-help);color:var(--muted);margin:2px 0 10px 2px;line-height:1.45;
+  padding-bottom:10px;border-bottom:1px solid var(--border)}
+.bp-phases > .bp-phase-sum:last-of-type{border-bottom:none;padding-bottom:2px}
 .bp-phase-sum b{color:var(--text);font-weight:600}
 /* --- market-growth column --- */
 td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 
-/* --- unified "understanding these figures" info panel (neutral, low-emphasis) ---
-   Replaces the old blue basis banner + worked-example callout with one quiet panel. */
-.bp-info{font-size:11.5px;line-height:1.5;color:var(--muted);margin:12px 0 4px;max-width:640px}
-.bp-info .bp-info-h{font-weight:650;color:var(--text-secondary);margin-bottom:1px}
-.bp-info .bp-info-eg{display:none}
-.bp-info b{color:var(--text-primary);font-weight:600}
 
 /* --- metric-tile sub-note (e.g. "= £801k in today's money") --- */
-.bt-sub{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.3}
+.bt-sub{font-size:var(--fs-help);color:var(--muted);margin-top:3px;line-height:1.3}
 
-/* --- executive summary + bridge verdict --- */
-.exec-sum{margin-bottom:16px}
-.es-head{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px}
-.es-line{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;line-height:1.5;padding:5px 0;color:var(--text)}
-.es-ic{flex:0 0 auto;font-size:15px;line-height:1.4}
-.es-line b{font-weight:600}
-/* three-up status tiles */
-.es-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:2px 0 4px}
-.es-tile{background:var(--surface-2);border:none;border-left:3px solid var(--baseline);border-radius:var(--radius-sm);padding:14px 16px}
-.es-tile.good{border-left-color:var(--good)}
-.es-tile.warn{border-left-color:var(--warning)}
-.es-tile.bad{border-left-color:var(--critical)}
-.es-tile-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.es-tile-label{font-size:13px;font-weight:700;color:var(--text-primary)}
-.es-tile-body{font-size:12.5px;color:var(--text-secondary);line-height:1.5}
-.es-tile-body b{color:var(--text-primary);font-weight:650}
-@media (max-width:720px){ .es-tiles{grid-template-columns:1fr} }
-.es-foot{font-size:11.5px;color:var(--muted);margin-top:9px}
-.bp-why{margin:10px 0 2px;font-size:12.5px}
-.bp-why>summary{cursor:pointer;color:var(--accent);font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:5px;padding:2px 0}
+.bp-why{margin:10px 0 2px;font-size:var(--fs-help)}
+/* a footnote, not a call to action — keep it quiet next to the headline answer */
+.bp-why>summary{cursor:pointer;color:var(--muted);font-weight:600;list-style:none;display:inline-flex;align-items:center;gap:6px;padding:4px 0}
+.bp-why>summary:hover{color:var(--text-secondary)}
 .bp-why>summary::-webkit-details-marker{display:none}
-.bp-why>summary::before{content:'?';display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;font-weight:700}
+.bp-why>summary::before{content:'?';display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:none;border:1px solid var(--baseline);color:inherit;font-size:10px;font-weight:700}
 .bp-why[open]>summary{margin-bottom:4px}
 .bp-why ol{margin:2px 0 4px;padding-left:20px;color:var(--muted);line-height:1.6}
 .bp-why li{margin-bottom:4px}
 .bp-why li b{color:var(--text-primary);font-weight:650}
 
 /* --- sequence-risk / drawdown stress test --- */
-.bp-stress{margin:6px 0 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-2);padding:16px 18px;box-shadow:var(--shadow)}
+.bp-stress{margin:6px 0 4px;border:none;border-radius:var(--radius);background:var(--surface-2);padding:16px 18px}
 /* when wrapped in the collapsible module section, the details provides the frame — drop the inner card's own chrome so it doesn't double-box */
 details.bp-stress-collapse{margin:12px 0}
 details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radius:0;box-shadow:none;margin:0;padding:15px 16px}
 .bp-stress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
-.bp-stress-q{font-size:21px;font-weight:700;letter-spacing:-0.015em;line-height:1.14}
+.bp-stress-q{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;line-height:1.15}
 .bp-stress-resid{display:flex;flex-direction:column;gap:4px;min-width:150px}
 .bp-stress-resid label{font-size:11px;color:var(--muted);font-weight:600}
 .bp-stress-controls{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
@@ -656,22 +680,22 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .bp-stress-lines{display:flex;flex-direction:column}
 .ssl{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 2px;border-top:1px solid var(--border)}
 .ssl:first-child{border-top:none}
-.ssl .k{font-size:13.5px;color:var(--text-secondary)}
+.ssl .k{font-size:var(--fs-body);color:var(--text-secondary)}
 .ssl .k .muted{font-weight:500}
-.ssl .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.ssl .v{font-size:var(--fs-h);font-weight:650;font-variant-numeric:tabular-nums}
 .ssl .v.ok{color:var(--good-text)}
 .ssl .v.no{color:var(--critical)}
 .ssl .v.muted{color:var(--muted);font-weight:600;font-size:12px}
 .ssl.next .k{color:var(--muted)}
-.bp-stress-sub{font-size:13px;color:var(--text-secondary);margin-top:11px;line-height:1.55}
+.bp-stress-sub{font-size:var(--fs-help);color:var(--text-secondary);margin-top:11px;line-height:1.55}
 .bp-stress-sub.bad{color:var(--critical)}
 .ss-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 6px}
 .ss-card{border:none;border-radius:var(--radius-sm);padding:12px 14px;background:var(--surface-2)}
-.ss-card .n{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.ss-card .n{font-size:var(--fs-label);font-weight:650;display:flex;align-items:center;gap:7px;margin-bottom:5px}
 .ss-card .n .cd{width:9px;height:9px;border-radius:50%}
-.ss-card .st{font-size:13px;font-weight:700}
+.ss-card .st{font-size:var(--fs-body);font-weight:650}
 .ss-card .st.ok{color:var(--good-text)} .ss-card .st.no{color:var(--critical)}
-.ss-card .dt{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+.ss-card .dt{font-size:var(--fs-help);color:var(--muted);margin-top:3px;line-height:1.4}
 @media (max-width:560px){ .ss-cards{grid-template-columns:1fr} .bp-stress-q{font-size:18px} .bp-stress-resid{min-width:0;width:100%} }
 </style>
 </head>

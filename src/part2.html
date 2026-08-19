@@ -3,7 +3,7 @@
 const { useState, useMemo, useEffect, useRef } = React;
 const R = window.Recharts || {};
 const { ResponsiveContainer, LineChart, Line, AreaChart, Area, ComposedChart, Bar,
-        XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell } = R;
+        XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, Cell } = R;
 
 /* ---------- formatting helpers ---------- */
 const gbp = (x, dp) => {
@@ -24,6 +24,16 @@ const monthsStr = (m) => {
   if (y === 0) return mo + ' month' + (mo===1?'':'s');
   if (mo === 0) return y + ' year' + (y===1?'':'s');
   return y + 'y ' + mo + 'm';
+};
+/* "6 years 8 months away" — the distance-from-today line under a headline age */
+const awayStr = (yrs) => {
+  if (yrs == null || isNaN(yrs)) return '';
+  const t = Math.max(0, Math.round(yrs * 12));
+  if (t <= 0) return 'Reached — you could stop now';
+  const y = Math.floor(t / 12), mo = t % 12, parts = [];
+  if (y) parts.push(y + ' year' + (y === 1 ? '' : 's'));
+  if (mo) parts.push(mo + ' month' + (mo === 1 ? '' : 's'));
+  return parts.join(' ') + ' away';
 };
 
 /* ---------- theme-aware chart colours ---------- */
@@ -150,6 +160,17 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
   const reached = base.reached;
   const targetPot = plan.targetPot;
+  // keep the crossover annotation inside the plot: flip sides past the midpoint
+  const crossLabelPos = (function(){
+    const rs = base.rows; if (!rs || !rs.length || base.crossAge==null) return 'insideTopLeft';
+    const a0 = rs[0].age, a1 = rs[rs.length-1].age;
+    return base.crossAge > a0 + (a1-a0)*0.55 ? 'insideTopRight' : 'insideTopLeft';
+  })();
+  const accessLabelPos = (function(){
+    const rs = base.rows; if (!rs || !rs.length) return 'insideBottomRight';
+    const a0 = rs[0].age, a1 = rs[rs.length-1].age;
+    return bp.pensionAccessAge > a0 + (a1-a0)*0.6 ? 'insideBottomRight' : 'insideBottomLeft';
+  })();
   const surplusGood = base.surplusAtCross!=null && base.surplusAtCross>=0;
 
   const rowClass = (r) => {
@@ -168,7 +189,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       onClick={()=> toggleable ? updScen(name,{enabled:!scEnabled[name]}) : null}
       title={toggleable ? 'Show / hide this scenario on the chart' : 'The primary scenario — drives the headline and table'}>
       {label}
-      <span className="cage">{res.crossAge!=null ? 'age '+res.crossAge : 'not by '+bp.pensionAccessAge}</span>
+      <span className="cage">{res.crossAge!=null ? res.crossAge : 'not by '+bp.pensionAccessAge}</span>
     </button>
     );
   };
@@ -178,7 +199,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-topline">
         <div>
           <div className="bp-q">Accessible wealth · bridge planner</div>
-          <div className="bp-title">When does your accessible wealth make work optional?</div>
+          <h2 className="bp-title">When can I stop needing to work?</h2>
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
@@ -191,12 +212,12 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       {/* 1) RESULT — answer → evidence → help */}
       <div className="bp-result">
         <div className={'bp-answer '+(reached?'reached':'missed')}>{reached
-          ? 'Work-optional at '+(base.crossAgeExact!=null?base.crossAgeExact.toFixed(1):base.crossAge)
+          ? 'Work-optional at '+base.crossAge
           : 'Not by '+bp.pensionAccessAge}</div>
         <div className="bp-evidence">{reached
           ? (bp.mode==='bridge'
               ? <span><b>{m(base.crossBalance, base.crossAge)}</b> funds <b>{gbpC(bp.targetIncome*bf(base.crossAge))}/yr</b> to pension access {bp.pensionAccessAge}</span>
-              : <span><b>{m(base.crossBalance, base.crossAge)}</b> covers the <b>{gbpC(targetPot*bf(base.crossAge))}</b> portfolio for {gbpC(bp.targetIncome*bf(base.crossAge))}/yr</span>)
+              : <span><b>{m(base.crossBalance, base.crossAge)}</b> pot — enough for <b>{gbpC(bp.targetIncome*bf(base.crossAge))}/yr</b> at {(bp.withdrawalRate*100).toFixed(1)}%</span>)
           : <span>Short of the <b>{gbpC(targetPot)}</b> pot needed to fund {gbpC(bp.targetIncome)}/yr by pension access {bp.pensionAccessAge}</span>}</div>
         {(function(){
           var perp = bp.mode !== 'bridge';   // perpetual portfolio — a pot you live off indefinitely
@@ -207,18 +228,17 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
             txt = 'Adjust contributions, growth or the target below.';
           } else if (perp) {
             // perpetual: no bridge / pension-handover framing — the pot is meant to last forever
-            txt = 'A pot this size supports '+gbpC(bp.targetIncome)+'/yr at your '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal rate.'
-              + (bp.drawdownFromOptionality
-                  ? (base.depletionAge
-                      ? ' Drawing that income it still empties by age '+base.depletionAge+' on these figures — trim the draw or raise growth for a truly perpetual pot.'
-                      : ' Drawing that income, growth keeps the pot intact out to '+lifeAge+'.')
-                  : '');
+            txt = !bp.drawdownFromOptionality
+              ? 'A pot you could live off indefinitely at your '+(bp.withdrawalRate*100).toFixed(1)+'% withdrawal rate.'
+              : (base.depletionAge
+                  ? 'Drawing that income it still empties by age '+base.depletionAge+' — trim the draw or raise growth for a truly perpetual pot.'
+                  : 'Drawing that income, growth keeps the pot intact to '+lifeAge+'.');
           } else if (runsDry) {
             txt = 'On these assumptions it runs dry at age '+base.depletionAge+' — '+(bp.pensionAccessAge-base.depletionAge)+' year'+((bp.pensionAccessAge-base.depletionAge)===1?'':'s')+' short of pension access '+bp.pensionAccessAge+'.';
           } else if (!bp.drawdownFromOptionality) {
             txt = 'From then your ISA/GIA can carry you until your pension takes over at '+bp.pensionAccessAge+'.';
           } else {
-            txt = 'Your bridge lasts to pension access '+bp.pensionAccessAge+', when your pension takes over'+(base.depletionAge?' (on ISA/GIA alone it would run dry at '+base.depletionAge+').':'.');
+            txt = 'Your bridge lasts to pension access '+bp.pensionAccessAge+', when your pension takes over.';
           }
           return <div className="bp-help-line" style={runsDry?{color:'var(--critical)'}:null}>{txt}</div>;
         })()}
@@ -250,15 +270,16 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-chart">
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={narrow?236:320}>
-          <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
+          <LineChart data={data} margin={{top:28,right:14,left:narrow?0:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?48:52} tickCount={narrow?4:6} />
             <Tooltip content={<ChartTip/>} />
-            {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
-              label={{ value:(narrow?'Opt ':'Optionality ')+base.crossAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
-            <ReferenceLine x={bp.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:(narrow?'Access ':'Pension access ')+bp.pensionAccessAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
-            {base.depletionAge && <ReferenceLine x={base.depletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:(narrow?'Out ':'Runs out ')+base.depletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
+            {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeWidth={1.5}
+              label={{ value:(narrow?'Optionality — age ':'Optionality reached — age ')+base.crossAge, position:crossLabelPos, fill:C.good, fontSize:narrow?11:12, fontWeight:700 }} />}
+            {reached && base.crossBalance!=null && <ReferenceDot x={base.crossAge} y={base.crossBalance*bf(base.crossAge)} r={5} fill={C.good} stroke="none" isFront={true} />}
+            <ReferenceLine x={bp.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:'Pension access '+bp.pensionAccessAge, position:accessLabelPos, fill:C.axis, fontSize:narrow?10:11 }} />
+            {base.depletionAge && base.depletionAge < bp.pensionAccessAge && <ReferenceLine x={base.depletionAge} stroke={C.red} strokeDasharray="4 3" strokeWidth={1.5} label={{ value:'Runs out '+base.depletionAge, position:'insideBottomRight', fill:C.red, fontSize:narrow?10:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="target" name="Target portfolio" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -274,71 +295,71 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* Understanding these figures — combines the old basis note into one quiet panel */}
-      {(function(){
-        var egAge = base.crossAge!=null ? base.crossAge : bp.pensionAccessAge;
-        var egReal = base.crossBalance!=null ? base.crossBalance : targetPot;
-        var egNom = egReal*Math.pow(1+(bp.inflation||0), Math.max(0, egAge-bp.currentAge));
-        return <div className="bp-info">
-          <div className="bp-info-h">{realTerms ? 'Today’s money (real)' : 'Nominal (future £)'}</div>
-          <div>{realTerms
-            ? 'Every figure is shown at today’s prices, with inflation stripped out.'
-            : 'Actual future pounds, including inflation — so they look bigger than their worth today.'}</div>
-          <div className="bp-info-eg">Example: {realTerms
-            ? gbpC(egReal)+' at age '+egAge+' ≈ '+gbpC(egNom)+' in future pounds.'
-            : gbpC(egReal)+' today ≈ '+gbpC(egNom)+' at age '+egAge+'.'} The toggle only relabels the units.</div>
-        </div>;
-      })()}
-
-      {/* 3) KEY ASSUMPTIONS */}
-      <div className="bp-sub">Key assumptions</div>
+      {/* 3) YOUR NUMBERS — the few inputs most people can answer straight away.
+             Everything more technical lives under Advanced assumptions below. */}
+      <div className="bp-sub">Your numbers</div>
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} step="0.1" onChange={v=>setBp({currentAge:Math.round(v*10)/10})} /></div>
-        <div className="bp-fld"><label>Current ISA / GIA</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
-        <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
+        <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
+        <div className="bp-fld"><label>Income you want each year</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /><div className="bp-hint">In today’s money</div></div>
+        <div className="bp-fld"><label>Target optionality age</label>
+          <BpNum value={bp.targetAge!=null?bp.targetAge:''} onChange={v=>setBp({targetAge: v>0?Math.round(v):null})} />
+          <div className="bp-hint">{(function(){
+            if (bp.targetAge==null) return 'Optional — set an age to see if you’re ahead or behind.';
+            if (base.crossAge==null) return 'Not reachable before pension access '+bp.pensionAccessAge+'.';
+            var d = bp.targetAge - base.crossAge;
+            if (Math.abs(d)<0.5) return 'On target.';
+            return d>0 ? monthsStr(Math.round(d*12))+' ahead of target' : monthsStr(Math.round(-d*12))+' behind target';
+          })()}</div>
+        </div>
       </div>
-      <div className="bp-note">Growth is a <b>nominal</b> return; inflation is netted off to the real return that drives the projection. Withdrawals rise with inflation; contributions stay as entered.</div>
 
       {/* 4) CONTRIBUTION PHASES */}
-      <div className="bp-sub">Contribution phases</div>
+      <div className="bp-sub">What you save each year</div>
       <div className="bp-phases">
-        <div className="bp-phase-head"><span>From age</span><span>To age</span><span>Annual contribution</span><span></span></div>
         {bp.phases.map((p,i)=>{
           const yrs = (p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
           return (
           <React.Fragment key={i}>
           <div className="bp-phase">
-            <BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} />
-            <BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} />
-            <BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} />
+            <div className="bp-pf"><label>From age</label><BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} /></div>
+            <div className="bp-pf"><label>To age</label><BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} /></div>
+            <div className="bp-pf wide"><label>Saved each year</label><BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} /></div>
             <button className="icon-btn" onClick={()=>delPhase(i)} disabled={bp.phases.length<=1} title="Remove phase">✕</button>
           </div>
           <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
           </React.Fragment>
           );
         })}
-        <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
+        <button className="add-link" onClick={addPhase}>+ Add another period</button>
       </div>
-      <div className="bp-note"><b>From/To are inclusive</b> and phases <b>stack</b> where they overlap — a one-off lump is just a single-year phase. A £0 phase stops contributions.</div>
+      <div className="bp-note"><b>From/To are inclusive</b> and periods <b>stack</b> where they overlap — a one-off lump sum is just a single-year period. A £0 period stops contributions.</div>
 
-      {/* MODEL / FRAMING — pulled up so it drives which fields show below */}
+      {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <div>
+      <div className="bp-assump" style={{marginTop:4}}>
+        <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
+        <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
+        <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
+      </div>
+      <div className="bp-note">Growth is a <b>nominal</b> return; inflation is netted off to the real return that drives the projection. Withdrawals rise with inflation; contributions stay as entered.</div>
+
+      {/* MODEL / FRAMING — drives which fields show below */}
       <div className="bp-sub">How your target works</div>
       <div className="bp-toggles">
         <div className="bp-tgroup"><span className="tl">Model</span>
           <div className="bp-seg">
-            <button className={bp.mode==='perpetual'?'on':''} onClick={()=>setBp({mode:'perpetual'})} title="Target = a perpetual pot (income ÷ withdrawal rate) you never run down">Perpetual portfolio</button>
-            <button className={bp.mode==='bridge'?'on':''} onClick={()=>setBp({mode:'bridge'})} title="Target = only the pot needed to bridge to pension access — falls as access nears">Bridge to pension access</button>
+            <button className={bp.mode==='perpetual'?'on':''} onClick={()=>setBp({mode:'perpetual'})} title="Target = a perpetual pot (income ÷ withdrawal rate) you never run down">Perpetual pot</button>
+            <button className={bp.mode==='bridge'?'on':''} onClick={()=>setBp({mode:'bridge'})} title="Target = only the pot needed to bridge to pension access — falls as access nears">Bridge to access</button>
           </div>
         </div>
-        <div className="bp-tgroup"><span className="tl">Target income / yr (today’s money)</span><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         {!(bp.mode==='bridge' && bp.bridgeDepletion==='full') && <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(bp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setBp({withdrawalRate:(v||0)/100})} /></div>}
         {bp.mode==='bridge' && <div className="bp-tgroup"><span className="tl">By pension access, I’m comfortable…</span>
           <div className="bp-seg">
-            <button className={bp.bridgeDepletion==='preserve'?'on':''} onClick={()=>setBp({bridgeDepletion:'preserve'})}>Preserving capital</button>
-            <button className={bp.bridgeDepletion==='partial'?'on':''} onClick={()=>setBp({bridgeDepletion:'partial'})}>Partially depleting</button>
-            <button className={bp.bridgeDepletion==='full'?'on':''} onClick={()=>setBp({bridgeDepletion:'full'})}>Fully using the bridge</button>
+            <button className={bp.bridgeDepletion==='preserve'?'on':''} onClick={()=>setBp({bridgeDepletion:'preserve'})}>Preserve</button>
+            <button className={bp.bridgeDepletion==='partial'?'on':''} onClick={()=>setBp({bridgeDepletion:'partial'})}>Partly deplete</button>
+            <button className={bp.bridgeDepletion==='full'?'on':''} onClick={()=>setBp({bridgeDepletion:'full'})}>Use it all</button>
           </div>
         </div>}
         {bp.mode==='bridge' && bp.bridgeDepletion==='partial' && <div className="bp-tgroup"><span className="tl">Capital left at access</span>
@@ -373,6 +394,50 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-note" style={{marginTop:8,marginBottom:14}}>{bp.drawdownFromOptionality
         ? <span>From optionality (age {base.crossAge!=null?base.crossAge:'—'}) the chart {bp.keepContributingAfterOptionality?<span>keeps your contributions running <b>and</b> </span>:null}draws <b>{gbpC(bp.targetIncome)}/yr</b>{bp.stopDrawAtAccess?<span> until pension access {bp.pensionAccessAge}, then stops — your pension takes over, so the pot can recover afterwards.</span>:<span> right through to age {bp.lifeExpectancy||90}, to stress-test the accessible pot on its own.</span>} {(!bp.stopDrawAtAccess && base.depletionAge) ? <span>On these figures it <b style={{color:'var(--critical)'}}>empties at age {base.depletionAge}</b>.</span> : null}</span>
         : <span>Pure accumulation: contributions keep running and nothing is withdrawn, so you can watch the pot reach the target and keep going.</span>}</div>
+
+      {/* CONTRIBUTION FREQUENCY & SCENARIOS */}
+      <div className="bp-sub">Contribution frequency &amp; scenarios</div>
+      <div className="bp-toggles">
+        <div className="bp-tgroup"><span className="tl">Contributions</span>
+          <div className="bp-seg">
+            <button className={bp.frequency==='annual'?'on':''} onClick={()=>setBp({frequency:'annual'})}>Annual</button>
+            <button className={bp.frequency==='monthly'?'on':''} onClick={()=>setBp({frequency:'monthly'})}>Monthly</button>
+          </div>
+        </div>
+      </div>
+      <div className="bp-scenarios" style={{marginTop:14}}>
+        {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(sc=>{
+          const isBase = sc.key==='base';
+          const s = isBase ? {growth:bp.growth, inflation:bp.inflation, contribScale:1} : (bp.scenarios[sc.key]||{});
+          const scInfl = s.inflation!=null?s.inflation:bp.inflation;
+          const res = isBase ? base : (sc.key==='conservative'?cons:opt);
+          return (
+          <div className={'bp-scard'+(isBase?' base':'')} key={sc.key}>
+            <div className="bp-scard-head">
+              <span className="sn"><span className="cd" style={{background:sc.color}}></span>{sc.label}{isBase && ' (primary)'}</span>
+              {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(sc.key,{enabled:!scEnabled[sc.key]})}>{scEnabled[sc.key]?'On chart ✓':'Show on chart'}</button>}
+            </div>
+            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation · {(((s.withdrawalRate!=null?s.withdrawalRate:bp.withdrawalRate))*100).toFixed(1)}% draw → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
+            {isBase
+              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your assumptions above. Edit the return / inflation there to move this line.</div>
+              : <React.Fragment>
+                <div className="bp-fld"><label>Nominal return</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(sc.key,{growth:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(sc.key,{inflation:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Contributions (× Base)</label><BpNum pct value={+((s.contribScale!=null?s.contribScale:1)*100).toFixed(0)} step="5"
+                  onChange={v=>updScen(sc.key,{contribScale:(v||0)/100})} /></div>
+              </React.Fragment>}
+            <div className="cross-line">Optionality: <b>{res.crossAge!=null?'age '+res.crossAge:'not by '+bp.pensionAccessAge}</b>{res.crossAge!=null && ' · target '+gbpC(res.perpetualPot)}</div>
+          </div>
+          );
+        })}
+      </div>
+      <div className="bp-note" style={{marginTop:12}}><b>{realTerms ? 'Today’s money' : 'Future £ (nominal)'}.</b> {realTerms
+        ? 'Every figure is shown at today’s prices, with inflation stripped out.'
+        : 'Actual future pounds, including inflation — so they look bigger than their worth today.'} The toggle only relabels the units; it never changes the plan.</div>
+      </div>
+      </details>
 
       {/* ===== SEQUENCE RISK / DRAWDOWN STRESS TEST (Phase 1) ===== */}
       {(function(){
@@ -545,46 +610,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       })()}
 
 
-      {/* 6) ADVANCED — contribution frequency & scenarios */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · contribution frequency &amp; scenarios</summary>
-      <div className="bp-toggles">
-        <div className="bp-tgroup"><span className="tl">Contributions</span>
-          <div className="bp-seg">
-            <button className={bp.frequency==='annual'?'on':''} onClick={()=>setBp({frequency:'annual'})}>Annual</button>
-            <button className={bp.frequency==='monthly'?'on':''} onClick={()=>setBp({frequency:'monthly'})}>Monthly</button>
-          </div>
-        </div>
-      </div>
-      <div className="bp-scenarios">
-        {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(sc=>{
-          const isBase = sc.key==='base';
-          const s = isBase ? {growth:bp.growth, inflation:bp.inflation, contribScale:1} : (bp.scenarios[sc.key]||{});
-          const scInfl = s.inflation!=null?s.inflation:bp.inflation;
-          const res = isBase ? base : (sc.key==='conservative'?cons:opt);
-          return (
-          <div className={'bp-scard'+(isBase?' base':'')} key={sc.key}>
-            <div className="bp-scard-head">
-              <span className="sn"><span className="cd" style={{background:sc.color}}></span>{sc.label}{isBase && ' (primary)'}</span>
-              {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(sc.key,{enabled:!scEnabled[sc.key]})}>{scEnabled[sc.key]?'On chart ✓':'Show on chart'}</button>}
-            </div>
-            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation · {(((s.withdrawalRate!=null?s.withdrawalRate:bp.withdrawalRate))*100).toFixed(1)}% draw → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
-            {isBase
-              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your Key assumptions above. Edit the return / inflation there to move this line.</div>
-              : <React.Fragment>
-                <div className="bp-fld"><label>Nominal return</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
-                  onChange={v=> updScen(sc.key,{growth:(v||0)/100})} /></div>
-                <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
-                  onChange={v=> updScen(sc.key,{inflation:(v||0)/100})} /></div>
-                <div className="bp-fld"><label>Contributions (× Base)</label><BpNum pct value={+((s.contribScale!=null?s.contribScale:1)*100).toFixed(0)} step="5"
-                  onChange={v=>updScen(sc.key,{contribScale:(v||0)/100})} /></div>
-              </React.Fragment>}
-            <div className="cross-line">Optionality: <b>{res.crossAge!=null?'age '+res.crossAge:'not by '+bp.pensionAccessAge}</b>{res.crossAge!=null && ' · target '+gbpC(res.perpetualPot)}</div>
-          </div>
-          );
-        })}
-      </div>
-      </details>
-
       {/* 5) YEAR-BY-YEAR TABLE */}
       <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {bp.currentAge}–{bp.pensionAccessAge}</summary>
       <div className="tablewrap cards">
@@ -655,9 +680,19 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
   const rowClass = (r) => { if (r.drawing) return r.projected>1?'bp-green':'bp-below'; const ratio = r.required>0 ? r.projected/r.required : 2; return ratio>=1?'bp-green':ratio>=0.9?'bp-amber':'bp-below'; };
   const rowStat = (r) => { if (r.drawing) return r.projected>1?['green','Drawing']:['below','Depleted']; const ratio = r.required>0 ? r.projected/r.required : 2; return ratio>=1?['green','Above']:ratio>=0.9?['amber','Close']:['below','Below']; };
 
+  const coastLabelPos = (function(){
+    const rs = base.rows; if (!rs || !rs.length || base.coastAge==null) return 'insideTopLeft';
+    const a0 = rs[0].age, a1 = rs[rs.length-1].age;
+    return base.coastAge > a0 + (a1-a0)*0.55 ? 'insideTopRight' : 'insideTopLeft';
+  })();
+  const objLabelPos = (function(){
+    const rs = base.rows; if (!rs || !rs.length) return 'insideBottomRight';
+    const a0 = rs[0].age, a1 = rs[rs.length-1].age;
+    return base.objAge > a0 + (a1-a0)*0.6 ? 'insideBottomRight' : 'insideBottomLeft';
+  })();
   const statusText = base.coasting ? 'Already coasting'
     : base.reached ? base.yearsUntilCoast+(base.yearsUntilCoast===1?' yr to coast':' yrs to coast')
-    : gbpC(base.shortfallNow)+' short';
+    : gbpC(base.shortfallNow)+' below coast';
 
   const ScenChip = ({name,label,res,toggleable}) => {
     const on = !toggleable || scEnabled[name];
@@ -676,7 +711,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-topline">
         <div>
           <div className="bp-q">Pension Coast · self-sustaining pension</div>
-          <div className="bp-title">Have I reached Pension Coast?</div>
+          <h2 className="bp-title">When can my pension look after itself?</h2>
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
@@ -700,7 +735,6 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
               ? 'Your pension already self-funds the target, with no further contributions.'
               : (base.yearsUntilCoast===0 ? 'No further contributions needed — it grows there on its own.'
                  : base.yearsUntilCoast+' more year'+(base.yearsUntilCoast===1?'':'s')+' of contributions, then it grows there on its own.'))
-            + (realTerms ? '' : ' Equivalent to your '+gbpC(plan.targetPot)+' target in today’s money.')
           : 'Increase contributions or growth, or push the retirement age.'}</div>
       </div>
       <details className="bp-why"><summary>Why so early?</summary>
@@ -730,15 +764,16 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-chart">
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={narrow?236:320}>
-          <LineChart data={data} margin={{top:24,right:18,left:8,bottom:2}}>
+          <LineChart data={data} margin={{top:28,right:14,left:narrow?0:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?42:52} tickCount={narrow?4:6} />
             <Tooltip content={<ChartTip/>} />
-            {base.reached && !base.coasting && <ReferenceLine x={base.coastAge} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
-              label={{ value:'Coast '+base.coastAge, position:'insideTopRight', fill:C.good, fontSize:11, fontWeight:700 }} />}
-            <ReferenceLine x={base.objAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:(narrow?'Draw ':'Retire / draw ')+base.objAge, position:'insideTop', fill:C.axis, fontSize:10 }} />
-            {base.coastDepletionAge && <ReferenceLine x={base.coastDepletionAge} stroke={C.red} strokeWidth={1.5} label={{ value:(narrow?'Out ':'Runs out ')+base.coastDepletionAge, position:'insideTopRight', fill:C.red, fontSize:11, fontWeight:700 }} />}
+            {base.reached && !base.coasting && <ReferenceLine x={base.coastAge} stroke={C.good} strokeWidth={1.5}
+              label={{ value:'Pension self-funding — age '+base.coastAge, position:coastLabelPos, fill:C.good, fontSize:narrow?11:12, fontWeight:700 }} />}
+            {base.reached && !base.coasting && base.coastBalance!=null && <ReferenceDot x={base.coastAge} y={base.coastBalance*bf(base.coastAge)} r={5} fill={C.good} stroke="none" isFront={true} />}
+            <ReferenceLine x={base.objAge} stroke={C.axis} strokeDasharray="3 3" label={{ value:'Draw from '+base.objAge, position:objLabelPos, fill:C.axis, fontSize:narrow?10:11 }} />
+            {base.coastDepletionAge && <ReferenceLine x={base.coastDepletionAge} stroke={C.red} strokeDasharray="4 3" strokeWidth={1.5} label={{ value:'Runs out '+base.coastDepletionAge, position:'insideTopRight', fill:C.red, fontSize:narrow?10:11, fontWeight:700 }} />}
             <Line type="monotone" dataKey="required" name="Required coast balance" stroke={C.red} strokeWidth={2} dot={false} strokeDasharray="5 4" />
             {scEnabled.conservative && <Line type="monotone" dataKey="cons" name="Conservative" stroke={C.gia} strokeWidth={1.6} dot={false} />}
             {scEnabled.optimistic && <Line type="monotone" dataKey="opt" name="Optimistic" stroke={C.isa} strokeWidth={1.6} dot={false} />}
@@ -755,74 +790,106 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-note" style={{marginTop:6}}>From your retirement/target age ({base.objAge}) contributions stop and the pension pays out <b>{gbpC(base.drawIncome)}/yr</b>{cp.goalMode==='income' && cp.statePensionAmount>0 ? <span> (dropping to {gbpC(Math.max(0, base.drawIncome-(cp.statePensionAmount||0)))}/yr once the State Pension starts at {cp.statePensionAge})</span> : null}, shown in the Withdrawal column below. {base.coastDepletionAge ? <span>On these assumptions the pot <b style={{color:'var(--critical)'}}>runs out at age {base.coastDepletionAge}</b>.</span> : <span>Growth still outpaces withdrawals here, so the pot keeps rising to age {base.rows.length?base.rows[base.rows.length-1].age:70} — a sustainable drawdown.</span>}</div>
       </div>
 
-      {/* Understanding these figures — combines the old basis note + worked example into one quiet panel */}
-      <div className="bp-info">
-        <div className="bp-info-h">{realTerms ? 'Today’s money (real)' : 'Nominal (future £)'}</div>
-        <div>{realTerms
-          ? 'Every figure is shown at today’s prices, with inflation stripped out.'
-          : 'Actual future pounds, including inflation — so they look bigger than their worth today.'}</div>
-        <div className="bp-info-eg">Example: {realTerms
-          ? gbpC(base.potAtObj)+' at age '+base.objAge+' ≈ '+gbpC(base.potAtObj*Math.pow(1+cp.inflation, Math.max(0,base.objAge-cp.currentAge)))+' in future pounds by age '+base.objAge+'.'
-          : gbpC(base.potAtObj)+' today ≈ '+gbpC(base.potAtObj*Math.pow(1+cp.inflation, Math.max(0,base.objAge-cp.currentAge)))+' at age '+base.objAge+'.'} The toggle only relabels the units.</div>
-      </div>
-
-      {base.coasting && <div className="cmp-rec" style={{marginTop:12}}>
+      {base.coasting && <div className="bp-note" style={{marginTop:12}}>
         <b>You’ve reached Pension Coast.</b> Your pension is projected to meet your retirement objective without further contributions. Additional pension contributions may raise retirement income, but likely add less <i>flexibility</i> than investing into accessible assets (your ISA/GIA Bridge Fund), which can fund the years before pension access. Not advice — just noting the optimisation problem has changed.</div>}
 
-      <div className="bp-sub">Key assumptions</div>
+      {/* 3) YOUR NUMBERS — the few inputs most people can answer straight away */}
+      <div className="bp-sub">Your numbers</div>
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setCp({currentAge:Math.round(v*10)/10})} /></div>
-        <div className="bp-fld"><label>Current pension</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
-        <div className="bp-fld"><label>Expected annual return (nominal)</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
-        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
+        <div className="bp-fld"><label>Pension balance today</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
+        {cp.goalMode==='pot'
+          ? <div className="bp-fld"><label>Target pension pot</label><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /><div className="bp-hint">In today’s money</div></div>
+          : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">In today’s money, State Pension included</div></div>}
+        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /><div className="bp-hint">57 is the earliest from 2028</div></div>
       </div>
-      <div className="bp-note">The age you start taking your pension — floored at <b>57</b> (earliest private-pension access from 2028); earlier years are what the Bridge planner covers. Required coast balance = target ÷ (1+real growth)^(years to {base.objAge}) — the pot that would reach your target with <b>no more contributions</b>.</div>
 
       {/* CONTRIBUTION PHASES */}
-      <div className="bp-sub">Contribution phases</div>
+      <div className="bp-sub">What you pay in each year</div>
       <div className="bp-phases">
-        <div className="bp-phase-head"><span>From age</span><span>To age</span><span>Annual contribution</span><span></span></div>
         {cp.phases.map((p,i)=>{
           const yrs = (p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
           return (
           <React.Fragment key={i}>
           <div className="bp-phase">
-            <BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} />
-            <BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} />
-            <BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} />
+            <div className="bp-pf"><label>From age</label><BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} /></div>
+            <div className="bp-pf"><label>To age</label><BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} /></div>
+            <div className="bp-pf wide"><label>Paid in each year</label><BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} /></div>
             <button className="icon-btn" onClick={()=>delPhase(i)} disabled={cp.phases.length<=1} title="Remove phase">✕</button>
           </div>
           <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
           </React.Fragment>
           );
         })}
-        <button className="add-link" onClick={addPhase}>+ Add contribution phase</button>
+        <button className="add-link" onClick={addPhase}>+ Add another period</button>
       </div>
-      <div className="bp-note"><b>From/To are inclusive</b> and overlapping phases <b>stack</b> (amounts add). Shown as entered, not inflation-adjusted.</div>
+      <div className="bp-note"><b>From/To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Employee plus employer. Shown as entered, not inflation-adjusted.</div>
 
-      {/* 3) OBJECTIVE + KEY ASSUMPTIONS */}
-      <div className="bp-sub">Objective</div>
+      {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
+      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <div>
+      <div className="bp-assump" style={{marginTop:4}}>
+        <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
+        <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
+      </div>
+      <div className="bp-note">Required coast balance = target ÷ (1+real growth)^(years to {base.objAge}) — the pot that would reach your target with <b>no more contributions</b>.</div>
+
+      {/* OBJECTIVE */}
+      <div className="bp-sub">How your target works</div>
       <div className="bp-toggles">
         <div className="bp-tgroup"><span className="tl">Plan against</span>
           <div className="bp-seg">
-            <button className={cp.goalMode==='pot'?'on':''} onClick={()=>setCp({goalMode:'pot'})}>Target pension pot</button>
-            <button className={cp.goalMode==='income'?'on':''} onClick={()=>setCp({goalMode:'income'})}>Target retirement income</button>
+            <button className={cp.goalMode==='pot'?'on':''} onClick={()=>setCp({goalMode:'pot'})}>Target pot</button>
+            <button className={cp.goalMode==='income'?'on':''} onClick={()=>setCp({goalMode:'income'})}>Target income</button>
           </div>
         </div>
         {cp.goalMode==='pot'
-          ? <div className="bp-tgroup"><span className="tl">Target pension pot (today’s money)</span><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
+          ? null
           : <React.Fragment>
-              <div className="bp-tgroup"><span className="tl">Desired income / yr</span><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /></div>
               <div className="bp-tgroup"><span className="tl">less State Pension / yr</span><BpNum money value={cp.statePensionAmount||0} step={500} onChange={v=>setCp({statePensionAmount:v})} /></div>
               <div className="bp-tgroup"><span className="tl">State Pension from age</span><BpNum value={cp.statePensionAge||67} onChange={v=>setCp({statePensionAge:Math.round(v)})} /></div>
               <div className="bp-tgroup"><span className="tl">Withdrawal rate</span><BpNum pct value={+(cp.withdrawalRate*100).toFixed(2)} step="0.1" onChange={v=>setCp({withdrawalRate:(v||0)/100})} /></div>
-              <div className="bp-tgroup"><span className="tl">= Required pension @ {base.objAge}</span><div className="bp-tile" style={{padding:'8px 12px'}}><div className="bt-v" style={{fontSize:16}}>{m(plan.targetPot, base.objAge)}</div></div></div>
+              <div className="bp-tgroup"><span className="tl">= Required pension @ {base.objAge}</span><div className="bp-tile" style={{padding:'8px 12px'}}><div className="bt-v">{m(plan.targetPot, base.objAge)}</div></div></div>
             </React.Fragment>}
       </div>
       <div className="bp-note" style={{marginTop:8}}>{(cp.statePensionAmount||0)>0
         ? <span>Your pension only needs to fund the income <b>above</b> the State Pension: {gbpC(cp.targetIncome)} − {gbpC(cp.statePensionAmount)} = <b>{gbpC(Math.max(0,cp.targetIncome-(cp.statePensionAmount||0)))}</b>/yr, so the required pot is {gbpC(plan.targetPot)}.{base.objAge < (cp.statePensionAge||67) ? <span> Because you retire at {base.objAge}, before the State Pension starts at {cp.statePensionAge||67}, the pot also carries the capital to self-fund the <b>full</b> {gbpC(cp.targetIncome)}/yr for those {(cp.statePensionAge||67)-base.objAge} year{((cp.statePensionAge||67)-base.objAge)===1?'':'s'} — the year-by-year table below draws the full income until {cp.statePensionAge||67}, then nets off the State Pension.</span> : null} The State Pension (from age {cp.statePensionAge||67}) also reduces pot withdrawals in the lifetime charts below.</span>
         : <span>No State Pension included — the pension funds the full {gbpC(cp.targetIncome)}/yr. Add it above to model the ~£11.9k/yr it typically provides from age {cp.statePensionAge||67}.</span>}</div>
+
+      {/* SCENARIOS */}
+      <div className="bp-sub">Scenarios</div>
+      <div className="bp-scenarios">
+        {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(scn=>{
+          const isBase = scn.key==='base';
+          const s = isBase ? {growth:cp.growth, inflation:cp.inflation} : (cp.scenarios[scn.key]||{});
+          const scInfl = s.inflation!=null?s.inflation:cp.inflation;
+          const res = isBase ? base : (scn.key==='conservative'?cons:opt);
+          return (
+          <div className={'bp-scard'+(isBase?' base':'')} key={scn.key}>
+            <div className="bp-scard-head">
+              <span className="sn"><span className="cd" style={{background:scn.color}}></span>{scn.label}{isBase && ' (primary)'}</span>
+              {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(scn.key,{enabled:!scEnabled[scn.key]})}>{scEnabled[scn.key]?'On chart ✓':'Show on chart'}</button>}
+            </div>
+            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation · {(((s.withdrawalRate!=null?s.withdrawalRate:cp.withdrawalRate))*100).toFixed(1)}% draw → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
+            {isBase
+              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your assumptions above. Edit the return / inflation there to move this line.</div>
+              : <React.Fragment>
+                <div className="bp-fld"><label>Nominal return</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(scn.key,{growth:(v||0)/100})} /></div>
+                <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
+                  onChange={v=> updScen(scn.key,{inflation:(v||0)/100})} /></div>
+              </React.Fragment>}
+            <div className="cross-line">Coast: <b>{res.coastAge!=null?'age '+res.coastAge:'not by '+res.objAge}</b></div>
+          </div>
+          );
+        })}
+      </div>
+      <div className="bp-note">Scenarios differ by market assumptions <b>and</b> the safe withdrawal rate (return / inflation / draw): <b>Optimistic</b> 9% / 2% / 4.0% · <b>Base</b> {(cp.growth*100).toFixed(0)}% / {(cp.inflation*100).toFixed(1)}% / {(cp.withdrawalRate*100).toFixed(1)}% · <b>Conservative</b> 5% / 3% / 3.0%.</div>
+      <div className="bp-note" style={{marginTop:10}}><b>{realTerms ? 'Today’s money' : 'Future £ (nominal)'}.</b> {realTerms
+        ? 'Every figure is shown at today’s prices, with inflation stripped out.'
+        : 'Actual future pounds, including inflation — so they look bigger than their worth today.'} The toggle only relabels the units; it never changes the plan.</div>
+      </div>
+      </details>
 
       {/* ===== SEQUENCE RISK — PENSION DRAWDOWN ===== */}
       {(function(){
@@ -1013,36 +1080,6 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         </table>
       </div>
 
-      {/* ADVANCED — scenarios */}
-      </details>
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced · scenarios</summary>
-      <div className="bp-scenarios">
-        {[{key:'base',label:'Base',color:C.pension},{key:'conservative',label:'Conservative',color:C.gia},{key:'optimistic',label:'Optimistic',color:C.isa}].map(scn=>{
-          const isBase = scn.key==='base';
-          const s = isBase ? {growth:cp.growth, inflation:cp.inflation} : (cp.scenarios[scn.key]||{});
-          const scInfl = s.inflation!=null?s.inflation:cp.inflation;
-          const res = isBase ? base : (scn.key==='conservative'?cons:opt);
-          return (
-          <div className={'bp-scard'+(isBase?' base':'')} key={scn.key}>
-            <div className="bp-scard-head">
-              <span className="sn"><span className="cd" style={{background:scn.color}}></span>{scn.label}{isBase && ' (primary)'}</span>
-              {!isBase && <button className="bp-scen-toggle" onClick={()=>updScen(scn.key,{enabled:!scEnabled[scn.key]})}>{scEnabled[scn.key]?'On chart ✓':'Show on chart'}</button>}
-            </div>
-            <div className="bp-scard-sub">{(s.growth*100).toFixed(0)}% return · {(scInfl*100).toFixed(1)}% inflation · {(((s.withdrawalRate!=null?s.withdrawalRate:cp.withdrawalRate))*100).toFixed(1)}% draw → {(((1+s.growth)/(1+scInfl)-1)*100).toFixed(1)}% real</div>
-            {isBase
-              ? <div className="bp-note" style={{margin:'2px 0 6px'}}>Uses your assumptions above. Edit the return / inflation there to move this line.</div>
-              : <React.Fragment>
-                <div className="bp-fld"><label>Nominal return</label><BpNum pct value={+((s.growth||0)*100).toFixed(2)} step="0.1"
-                  onChange={v=> updScen(scn.key,{growth:(v||0)/100})} /></div>
-                <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
-                  onChange={v=> updScen(scn.key,{inflation:(v||0)/100})} /></div>
-              </React.Fragment>}
-            <div className="cross-line">Coast: <b>{res.coastAge!=null?'age '+res.coastAge:'not by '+res.objAge}</b></div>
-          </div>
-          );
-        })}
-      </div>
-      <div className="bp-note">Scenarios differ by market assumptions <b>and</b> the safe withdrawal rate (return / inflation / draw): <b>Optimistic</b> 9% / 2% / 4.0% · <b>Base</b> {(cp.growth*100).toFixed(0)}% / {(cp.inflation*100).toFixed(1)}% / {(cp.withdrawalRate*100).toFixed(1)}% · <b>Conservative</b> 5% / 3% / 3.0%. Red below the coast line · amber within 10% · green once self-sustaining. Figures in {realTerms?'today’s money':'future £ (nominal)'}. Not financial advice.</div>
       </details>
     </div>
   );
@@ -1624,70 +1661,104 @@ function App() {
         </div>
       </div>
 
-      {/* ===== HERO ===== */}
+      {/* ===== STRAPLINE — one line; the three cards below are the hero ===== */}
       <section className="hero">
-        <h2>Know when work becomes optional.</h2>
-        <p>See how your pension, investments and contributions could build towards financial independence — and when your money may be able to take it from here.</p>
+        <h2>Know when work becomes optional — and whether your bridge and pension are funded.</h2>
       </section>
 
       <div className="layout">
       <main className="main">
 
-      {/* ===== EXECUTIVE SUMMARY ===== */}
-      <div className="panel exec-sum">
-        <div className="es-head">Your plan today</div>
-        {(function(){
-          var cb = coast.base, bb = bridge.base, cAge = bridgeInputs.currentAge;
-          var pen = cb.coasting
-            ? {label:'Pension', ic:'✅', cls:'good', body:<span>Complete — it already self-funds your target (coasting), so further pension contributions are optional.</span>}
-            : cb.reached
-              ? {label:'Pension', ic:'🎯', cls:'good', body:<span>On track — you can stop contributing at <b>age {cb.coastAge}</b> ({cb.yearsUntilCoast} more year{cb.yearsUntilCoast===1?'':'s'} of saving).</span>}
-              : {label:'Pension', ic:'⚠️', cls:'warn', body:<span>Behind — projected <b>{gbpC(cb.potAtObj)}</b> vs your {gbpC(coast.targetPot)} target by {cb.objAge}. Raise contributions or push the objective age.</span>};
-          var lasts = bb.depletionAge == null || bb.depletionAge >= bridgeInputs.pensionAccessAge;
-          var br;
-          if (bb.crossAge == null) {
-            var gap = Math.max(0, bridge.targetPot - bridgeInputs.currentBalance);
-            br = {label:'Bridge fund', ic:'', cls:'warn', body:<span>Not there yet — a funding gap of about <b>{gbpC(gap)}</b> to the pot needed to walk away. Keep saving or add a lump sum.</span>};
-          } else if (!lasts) {
-            br = {label:'Bridge fund', ic:'❌', cls:'bad', body:<span>Work-optional at {bb.crossAge}, but it runs dry at <b>age {bb.depletionAge}</b> — {bridgeInputs.pensionAccessAge-bb.depletionAge} year{(bridgeInputs.pensionAccessAge-bb.depletionAge)===1?'':'s'} short of pension access {bridgeInputs.pensionAccessAge}.</span>};
-          } else {
-            br = {label:'Bridge fund', ic:'✅', cls:'good', body:<span>{bb.crossAge<=cAge?'Complete — you can walk away now':'On track — work-optional at age '+bb.crossAge}; it lasts to pension access {bridgeInputs.pensionAccessAge}.</span>};
-          }
-          var opt = bb.crossAge != null
-            ? {label:'Funded age', ic:'', cls:(cb.reached?'good':'warn'), body:<span>Age <b>{bb.crossAge}</b> — where your accessible wealth can take it from here{cb.reached?'':', though the pension is still building'}.</span>}
-            : {label:'Funded age', ic:'', cls:'warn', body:<span>Not reachable on the current plan — adjust savings, growth or targets below.</span>};
-          return <div className="es-tiles">{[pen, br, opt].map(function(l,i){ return (
-            <div className={'es-tile '+l.cls} key={i}>
-              <div className="es-tile-h"><span className="es-tile-label">{l.label}</span></div>
-              <div className="es-tile-body">{l.body}</div>
+      {/* ===== THE THREE HEADLINE CARDS — this is the hero =====
+           One question each, answered by a number: when can I stop needing to
+           work · is my bridge funded · is my pension funded. Copy stays minimal
+           on purpose; the detail lives in the planners below. */}
+      {(function(){
+        var cb = coast.base, bb = bridge.base;
+        var cAge = bridgeInputs.currentAge, access = bridgeInputs.pensionAccessAge;
+
+        /* Reaching optionality only AT pension access is not an early exit — it is just
+           the pension unlocking. Treat that as "no bridge", not as a green result. */
+        var early = bb.crossAge != null && bb.crossAge < access;
+
+        /* 1 — When can I stop needing to work? */
+        var one;
+        if (bb.crossAge == null) {
+          one = { k:'Work optional', dot:'warn', vcls:'', v:'Not yet',
+                  sub:'Not reachable before pension access '+access+' on this plan' };
+        } else if (!early) {
+          one = { k:'Work optional', dot:'warn', vcls:'', v:'Age '+bb.crossAge,
+                  sub:'Only when your pension unlocks — no earlier' };
+        } else {
+          one = { k:'Work optional', dot:'good', vcls:'good', v:'Age '+bb.crossAge,
+                  sub: bb.crossAge<=cAge+0.01 ? 'Reached — you could stop now' : awayStr(bb.crossAge-cAge) };
+        }
+
+        /* 2 — Is my bridge funded? */
+        var lasts = bb.depletionAge == null || bb.depletionAge >= access;
+        var two;
+        if (!early) {
+          two = { k:'Bridge fund', dot:'warn', vcls:'',
+                  v: gbpC(Math.max(0, bridge.targetPot - bridgeInputs.currentBalance))+' short',
+                  sub:'of the pot that would let you stop before '+access };
+        } else if (!lasts) {
+          var shortYrs = access - bb.depletionAge;
+          two = { k:'Bridge fund', dot:'bad', vcls:'bad', v:'Runs dry at '+bb.depletionAge,
+                  sub: shortYrs+' year'+(shortYrs===1?'':'s')+' short of pension access '+access };
+        } else {
+          two = { k:'Bridge fund', dot:'good', vcls:'good', v:'Funded',
+                  sub:'Covers you to pension access '+access };
+        }
+
+        /* 3 — Is my pension funded? */
+        var three;
+        if (cb.coasting) {
+          three = { k:'Pension', dot:'good', vcls:'good', v:'Funded',
+                    sub:'Self-funding already — more contributions optional' };
+        } else if (cb.reached) {
+          three = { k:'Pension', dot:'good', vcls:'good', v:'Age '+cb.coastAge,
+                    sub:'Stop contributing then — '+cb.yearsUntilCoast+' more year'+(cb.yearsUntilCoast===1?'':'s') };
+        } else {
+          three = { k:'Pension', dot:'warn', vcls:'',
+                    v: gbpC(Math.max(0, coast.targetPot - cb.potAtObj))+' short',
+                    sub: gbpC(cb.potAtObj)+' projected vs '+gbpC(coast.targetPot)+' needed by '+cb.objAge };
+        }
+
+        return (
+          <React.Fragment>
+            <div className="hcards">
+              {[one, two, three].map(function(c,i){ return (
+                <div className="hcard" key={i}>
+                  <div className="hc-k"><span className={'hc-dot '+c.dot}></span>{c.k}</div>
+                  <div className={'hc-v '+c.vcls}>{c.v}</div>
+                  <div className="hc-sub">{c.sub}</div>
+                </div>
+              ); })}
             </div>
-          ); })}</div>;
-        })()}
-        <div className="es-foot">Synthesised from the two planners below · figures in today’s money.</div>
-      </div>
+            <div className="hc-foot">Bridge covers you before pension access {access}; pension takes over after. Today’s money.</div>
+          </React.Fragment>
+        );
+      })()}
 
       {/* ===== THE TWO HEADLINE OPTIONALITY TOOLS (pension first, then optionality) ===== */}
-      <div className="section-title">When can my pension look after itself?</div>
       <CoastPlanner cp={coastInputs} setCp={setCp} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
-      <div className="section-title">When can I walk away from work?</div>
       <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
       {/* ===== OUTPUTS ===== */}
       <div className="outputs-block">
       {/* CHARTS — combined view from the two planners */}
-      <div className="section-title">Combined net worth</div>
       <div className="panel">
         <div className="chart-h"><h2>Combined net worth</h2></div>
         <div className="desc">Pension + accessible ISA/GIA wealth to age 90 — building until you go work-optional (age {combined.retireAge}), then drawn down for retirement income. {realTerms?'Today\u2019s money.':'Future \u00a3 (nominal).'}</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={narrow?200:260}>
-          <AreaChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}}>
+          <AreaChart data={cwData} margin={{top:24,right:12,left:narrow?0:4,bottom:0}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?48:46} tickCount={narrow?4:6} />
             <Tooltip content={<ChartTip/>} />
-            <ReferenceLine x={combined.retireAge} stroke={C.good} strokeDasharray="3 3" label={{value:(narrow?'Optional ':'Work-optional ')+combined.retireAge, position:'insideTopLeft', fill:C.good, fontSize:11}} />
-            <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:(narrow?'Access ':'Pension access ')+combined.pensionAccessAge, position:'insideTopRight', fill:C.axis, fontSize:11}} />
+            <ReferenceLine x={combined.retireAge} stroke={C.good} strokeWidth={1.5} label={{value:'Work optional — age '+combined.retireAge, position:'insideTopLeft', fill:C.good, fontSize:narrow?11:12, fontWeight:700}} />
+            <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:'Pension access '+combined.pensionAccessAge, position:'insideBottomRight', fill:C.axis, fontSize:narrow?10:11}} />
             <Area type="monotone" dataKey="accessible" name="ISA / GIA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
             <Area type="monotone" dataKey="pension" name="Pension" stackId="1" stroke={C.pension} fill={C.pension} fillOpacity={0.5} />
           </AreaChart>
@@ -1704,10 +1775,10 @@ function App() {
         <div className="desc">Money <b>in</b> (contributions, above the line) and <b>out</b> (retirement income drawn, below the line), by pot — to age 90.</div>
         {ResponsiveContainer ? (
         <ResponsiveContainer width="100%" height={narrow?188:240}>
-          <ComposedChart data={cwData} margin={{top:6,right:12,left:4,bottom:0}} stackOffset="sign">
+          <ComposedChart data={cwData} margin={{top:6,right:12,left:narrow?0:4,bottom:0}} stackOffset="sign">
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?26:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={46} />
+            <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?42:46} tickCount={narrow?4:6} />
             <Tooltip content={<ChartTip/>} />
             <ReferenceLine y={0} stroke={C.baseline} />
             <Bar dataKey="pensionIn" name="Into pension" fill={C.pension} maxBarSize={16} stackId="cf" />
@@ -1724,9 +1795,12 @@ function App() {
         </div>
       </div>
 
-      {/* YEAR BY YEAR (combined) */}
-      <div className="section-title">Year-by-year</div>
-      <div className="panel" style={{marginBottom:16}}>
+      {/* YEAR BY YEAR (combined) — collapsed by default; it is a reference table,
+           not part of the headline story, and open it is very long on a phone. */}
+      <div className="panel" style={{marginBottom:16,paddingTop:4,paddingBottom:4}}>
+        <details className="bp-collapse" style={{borderTop:'none'}}>
+        <summary className="bp-sub bp-summary" style={{margin:0}}>Year-by-year · age {combined.startAge}–{combined.series.length?combined.series[combined.series.length-1].age:''}</summary>
+        <div>
         <div className="chart-h" style={{marginBottom:10}}>
           <div className="legend-row" style={{margin:0}}>
             <span><span className="sw" style={{background:C.pension}}></span>Pension</span>
@@ -1758,6 +1832,8 @@ function App() {
             </tbody>
           </table>
         </div>
+        </div>
+        </details>
       </div>
       </div>{/* end outputs-block */}
       </main>{/* end main */}
