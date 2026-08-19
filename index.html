@@ -3548,7 +3548,16 @@ function PwInput({ value, onChange, placeholder, autoComplete, onKeyDown }){
   );
 }
 
-function AuthButton(){
+/* Render a fixed overlay into <body>. The sticky top bar uses backdrop-filter, which makes it a
+   containing block for position:fixed descendants — without this the modal is clipped to the bar. */
+function inBody(node){
+  if (typeof document !== 'undefined' && typeof ReactDOM !== 'undefined' && ReactDOM.createPortal) {
+    return ReactDOM.createPortal(node, document.body);
+  }
+  return node;
+}
+
+function AuthButton(props){
   const Cloud = typeof window !== 'undefined' ? window.OptCloud : null;
   const [user, setUser] = useState(() => (Cloud && Cloud.user) || null);
   const [status, setStatus] = useState(() => (Cloud && Cloud.status) || 'idle');
@@ -3684,10 +3693,10 @@ function AuthButton(){
 
   return (
     <React.Fragment>
-      <button className="btn" onClick={()=>setOpen(true)} title={user ? 'Your account' : 'Sign in to save your projections across devices'}>
+      <button className="btn" onClick={()=>{ if (props && props.onOpen) props.onOpen(); setOpen(true); }} title={user ? 'Your account' : 'Sign in to save your projections across devices'}>
         {btnLabel}
       </button>
-      {open && (
+      {open && inBody(
         <div className="auth-overlay" onClick={close}>
           <div className="auth-modal" onClick={(e)=>e.stopPropagation()}>
             <button className="auth-x" onClick={close} aria-label="Close">×</button>
@@ -4087,7 +4096,7 @@ function App() {
           onClick={()=>setMenuOpen(o=>!o)}>{menuOpen?'✕':'☰'}</button>
         {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
         <div className={'toolbar'+(menuOpen?' open':'')}>
-          <AuthButton />
+          <AuthButton onOpen={()=>setMenuOpen(false)} />
           <button className="btn subtle" onClick={()=>setRealTerms(!realTerms)} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
