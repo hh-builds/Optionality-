@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Future Funded — Know when work becomes optional</title>
-<meta name="description" content="Future Funded shows when your money gives you choices: what you need, whether you're on track, when your pension becomes self-sustaining, and when work becomes financially optional. Private and on-device — no accounts required." />
+<meta name="description" content="Future Funded shows when your money gives you choices: what you need, whether you're on track, when your pension becomes self-sustaining, and when work becomes financially optional. Your figures stay on your device — no account required." />
 <!-- PWA: installable + offline. Files (manifest, sw.js, icons) live at the repo root. -->
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#3e5c99" media="(prefers-color-scheme: light)" />
@@ -171,6 +171,162 @@
     if (u){ setUser(u); if (!Cloud.recovery) syncFromCloud(); }
     Cloud.ready = true; emit('optcloud:ready', true);
   });
+})();
+</script>
+<!-- First-party product analytics. Writes to our own Supabase `events` table —
+     no third party, no ad tech, no cross-site anything. What goes in a row:
+     an anonymous device id, a session id, the event name, whether the device is
+     a phone/tablet/desktop, and (only when signed in) the user id. No URLs, no
+     referrers, no figures — the single numeric prop we ever send is the
+     resulting optionality age, so the medians in the admin can be computed.
+     Every write is insert-only; nothing here can read anything back. -->
+<script>
+(function(){
+  var URL_  = 'https://tvlnfhghextzsmizkuce.supabase.co';
+  var KEY   = 'sb_publishable_5gOqH6o9-cmDFWRTyLWtNA_414o6Wco';
+  var SESSION_GAP_MS = 30 * 60 * 1000;   // 30 min idle ends a session
+  var RETURN_GAP_MS  = 24 * 60 * 60 * 1000;
+
+  // Deliberately NOT under the "optionality." prefix: OptCloud syncs every
+  // optionality.* key to the user's cloud row, which would copy this device's
+  // id onto their other devices and make the device counts meaningless.
+  var K = { did:'ff.did', sid:'ff.sid', seen:'ff.seen', last:'ff.last_visit' };
+
+  var T = { ready:false, enabled:false, track:function(){}, once:function(){}, flush:function(){} };
+  window.OptTrack = T;
+
+  function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function ss(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+  // Global Privacy Control is a real, legally recognised opt-out signal — honour it.
+  if (navigator.globalPrivacyControl === true) return;
+  if (!window.fetch || !window.crypto) return;
+
+  function uuid(){
+    if (crypto.randomUUID) return crypto.randomUUID();
+    var b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function(x){ return ('0'+x.toString(16)).slice(-2); }).join('');
+    return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+  }
+
+  var deviceId = ls(K.did);
+  if (!deviceId){ deviceId = uuid(); ss(K.did, deviceId); }
+
+  // session = uuid + last-touch timestamp, rolled over after 30 idle minutes
+  var sess = null;
+  try { sess = JSON.parse(ls(K.sid) || 'null'); } catch(e){}
+  var freshSession = false;
+  var nowMs = Date.now();
+  if (!sess || !sess.id || (nowMs - (sess.t || 0)) > SESSION_GAP_MS){
+    sess = { id: uuid(), t: nowMs }; freshSession = true;
+  }
+  function touchSession(){ sess.t = Date.now(); ss(K.sid, JSON.stringify(sess)); }
+  touchSession();
+
+  // fired-once bookkeeping. device scope persists; session scope resets with the session.
+  var seen = {};
+  try { seen = JSON.parse(ls(K.seen) || '{}') || {}; } catch(e){}
+  if (freshSession) { seen._s = {}; }
+  if (!seen._s) seen._s = {};
+  function saveSeen(){ ss(K.seen, JSON.stringify(seen)); }
+
+  function deviceKind(){
+    var w = Math.min(window.innerWidth || 1024, window.screen ? (window.screen.width||1024) : 1024);
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    return 'desktop';
+  }
+
+  // identity, kept current by OptCloud's auth events
+  var userId = null, token = null;
+  function refreshIdentity(){
+    var C = window.OptCloud;
+    if (!C || !C.client){ userId = null; token = null; return; }
+    try {
+      C.client.auth.getSession().then(function(res){
+        var s = res && res.data ? res.data.session : null;
+        userId = s && s.user ? s.user.id : null;
+        token  = s ? s.access_token : null;
+      }).catch(function(){});
+    } catch(e){}
+  }
+  window.addEventListener('optcloud:auth', refreshIdentity);
+  window.addEventListener('optcloud:ready', refreshIdentity);
+  refreshIdentity();
+
+  var queue = [], timer = null;
+
+  function post(rows, keepalive){
+    if (!rows.length) return;
+    try {
+      fetch(URL_ + '/rest/v1/events', {
+        method:'POST', keepalive: !!keepalive,
+        headers: {
+          'apikey': KEY,
+          'Authorization': 'Bearer ' + (token || KEY),
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(rows)
+      }).catch(function(){});   // analytics must never break the app
+    } catch(e){}
+  }
+
+  function flush(keepalive){
+    if (timer){ clearTimeout(timer); timer = null; }
+    var rows = queue; queue = [];
+    post(rows, keepalive);
+  }
+
+  function track(name, props){
+    if (!name) return;
+    touchSession();
+    queue.push({
+      device_id: deviceId,
+      session_id: sess.id,
+      user_id: userId,          // null when signed out; RLS rejects anything else
+      name: name,
+      device_kind: deviceKind(),
+      props: props || {}
+    });
+    if (queue.length >= 10) { flush(false); return; }
+    if (!timer) timer = setTimeout(function(){ flush(false); }, 1500);
+  }
+
+  // scope: 'device' (once ever on this browser) | 'session' (once per session)
+  // Device-scope entries store the session that fired them, so callers can tell
+  // "already done, in an earlier visit" from "just done, a moment ago".
+  function once(scope, name, props){
+    var bag = scope === 'device' ? seen : seen._s;
+    if (bag[name]) return false;
+    bag[name] = scope === 'device' ? sess.id : 1; saveSeen();
+    track(name, props);
+    return true;
+  }
+
+  T.track = track;
+  T.once = once;
+  T.flush = function(){ flush(true); };
+  T.hasFired = function(name){ return !!seen[name]; };
+  T.firedThisSession = function(name){ return seen[name] === sess.id; };
+  T.newSession = freshSession;
+  T.enabled = true;
+  T.ready = true;
+
+  // don't lose the tail of a session
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'hidden') flush(true);
+  });
+  window.addEventListener('pagehide', function(){ flush(true); });
+
+  // ---- the entry events, fired here so they don't depend on React mounting ----
+  if (freshSession){
+    track('visit');
+    var last = parseInt(ls(K.last) || '0', 10);
+    if (last && (nowMs - last) > RETURN_GAP_MS) track('return_visit');
+    ss(K.last, String(nowMs));
+  }
 })();
 </script>
 <style>

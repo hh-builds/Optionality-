@@ -16,14 +16,15 @@
   <h1>Privacy Policy</h1>
   <p class="muted">Future Funded · last updated 19 August 2026</p>
 
-  <p><strong>Future Funded is a planning calculator that runs in your browser. By default it keeps
-  everything on your own device. You can optionally create an account, and only then is anything
-  stored on a server.</strong></p>
+  <p><strong>Future Funded is a planning calculator that runs in your browser. The figures you type
+  stay on your own device unless you choose to create an account. Separately, we record a small
+  amount of anonymous usage data — which parts of the tool get used, and where people give up — so
+  we can make it better. That is described in full below.</strong></p>
 
   <h2>The two ways you can use it</h2>
   <ul>
-    <li><strong>Signed out (the default).</strong> Everything you type stays in your browser's local
-    storage. Nothing is sent to us or to anyone else.</li>
+    <li><strong>Signed out (the default).</strong> Every figure you type stays in your browser's local
+    storage. None of your numbers are sent to us or to anyone else.</li>
     <li><strong>Signed in (optional).</strong> If you create an account so your plan follows you
     between devices, your figures are stored on our behalf by Supabase, our hosting provider.</li>
   </ul>
@@ -39,15 +40,46 @@
   connection to a real financial provider. Nothing you enter is verified against anything — the app
   has no idea whether your numbers are real, and it does not need to.</p>
 
-  <h2>What we don't do</h2>
-  <p>No analytics, no advertising, no third-party trackers, no cookies for tracking, and no selling
-  or sharing of your data with anyone. We don't email you except for the sign-in, email-confirmation
-  and password-reset messages you trigger yourself.</p>
+  <h2>Usage data</h2>
+  <p>To know whether the tool is any use, we record a short log of <em>what happened</em>, never
+  <em>what you typed</em>. Each entry contains:</p>
+  <ul>
+    <li>A <strong>random device identifier</strong> stored in your browser. It is generated on this
+    site, means nothing anywhere else, and is not linked to your name, email or IP address unless you
+    are signed in.</li>
+    <li>A <strong>session identifier</strong>, which changes after 30 minutes of inactivity.</li>
+    <li>The <strong>name of the thing that happened</strong> — for example "opened advanced
+    assumptions", "changed target income", "completed a plan". The full list is fixed in advance and
+    enforced by the database.</li>
+    <li>Whether you are on a <strong>phone, tablet or desktop</strong>. Not your exact device, browser
+    or screen size.</li>
+    <li>Your <strong>account id</strong>, only if you are signed in.</li>
+  </ul>
+  <p>The only number ever recorded is <strong>the optionality age the tool worked out for you</strong>,
+  so we can report a typical figure across everyone. Your balances, contributions and target income
+  are <em>never</em> sent as usage data.</p>
+  <p>We do not record the pages you came from, the pages you go to, your IP address, or anything that
+  would let us follow you to another website.</p>
+  <p><strong>Turning it off.</strong> If your browser sends a Global Privacy Control signal, nothing is
+  recorded at all — no identifier is created and no entries are written. Clearing your browser storage
+  also resets the identifier, at which point you look like a brand-new visitor.</p>
+  <p><strong>Aggregate only.</strong> The internal dashboard we look at reports totals, medians and
+  conversion rates. It deliberately cannot show one person's balances or income — those figures are
+  aggregated inside the database and only summary numbers ever leave it, and summaries are withheld
+  entirely until enough people have saved a plan for a median to be meaningless about any individual.</p>
+  <p>Our lawful basis for this is legitimate interests — understanding and improving a tool we offer.
+  You can object to it at any time by asking whoever shared this tool with you.</p>
+
+  <h2>What we still don't do</h2>
+  <p>No advertising, no third-party analytics or tracking services, no cookies used for tracking, no
+  profiling, and no selling or sharing of your data with anyone. The usage data above goes to our own
+  database and nowhere else. We don't email you except for the sign-in, email-confirmation and
+  password-reset messages you trigger yourself.</p>
 
   <h2>Who processes data for us</h2>
   <ul>
-    <li><strong>Supabase</strong> — authentication and storage of your account and saved plan, and
-    delivery of sign-in and password-reset emails.</li>
+    <li><strong>Supabase</strong> — authentication, storage of your account, your saved plan and the
+    usage data above, and delivery of sign-in and password-reset emails.</li>
     <li><strong>GitHub Pages</strong> — serves this website. Like any web host, its servers see the
     usual request information (including your IP address) needed to deliver a page.</li>
     <li><strong>cdnjs and jsDelivr</strong> — public content networks that serve the charting and
@@ -56,8 +88,9 @@
   </ul>
 
   <h2>How long it's kept</h2>
-  <p>Signed out: for as long as you leave it in your browser — clear it with your browser's storage
-  controls or the app's own reset. Signed in: until it's deleted. Account deletion isn't yet
+  <p>Usage data is kept for up to 400 days and then deleted. Your plan, signed out: for as long as you
+  leave it in your browser — clear it with your browser's storage controls or the app's own reset.
+  Signed in: until it's deleted. Account deletion isn't yet
   self-service, so ask whoever shared this tool with you and your account and saved plan will be
   removed.</p>
 
@@ -85,6 +118,8 @@
 
   <h2>About this policy</h2>
   <p>Future Funded is a personal project shared privately, not a commercial service. If you'd rather
-  not have anything stored at all, simply don't create an account — the app works fully signed out.</p>
+  not have your figures stored at all, simply don't create an account — the app works fully signed out.
+  If you'd rather not be counted in the usage data either, turn on Global Privacy Control in your
+  browser, or ask and we'll remove your entries.</p>
 </body>
 </html>

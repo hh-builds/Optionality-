@@ -5,7 +5,7 @@
      offline. This deliberately avoids the "stale app on refresh" trap.
    - Static assets (icons, manifest) are CACHE-FIRST.
    Bump CACHE_VERSION whenever the cached shell/assets must be force-refreshed. */
-const CACHE_VERSION = 'ff-v2';
+const CACHE_VERSION = 'ff-v3';
 const CORE = [
   './',
   './index.html',
@@ -41,8 +41,23 @@ self.addEventListener('fetch', function (event) {
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // let cross-origin (CDN) pass through
 
-  var isShell = req.mode === 'navigate' ||
-    url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+  // ONLY the app itself is the shell. Treating every navigation as the shell
+  // meant that opening privacy.html (and now admin.html) overwrote the cached
+  // ./index.html with that page, so an offline launch of the app served the
+  // wrong document entirely.
+  var isShell = url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+
+  // other same-origin pages: network-first, cached under their own key
+  if (!isShell && req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req).then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE_VERSION).then(function (c) { c.put(req, copy); });
+        return res;
+      }).catch(function () { return caches.match(req); })
+    );
+    return;
+  }
 
   if (isShell) {
     // network-first: fresh deploy wins; cache is the offline fallback

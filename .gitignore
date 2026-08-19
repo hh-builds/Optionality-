@@ -11,3 +11,5 @@ vendor/
 !og-image.png
 test-local.html
 .DS_Store
+_preview.html
+_admin_preview.html

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Future Funded — Know when work becomes optional</title>
-<meta name="description" content="Future Funded shows when your money gives you choices: what you need, whether you're on track, when your pension becomes self-sustaining, and when work becomes financially optional. Private and on-device — no accounts required." />
+<meta name="description" content="Future Funded shows when your money gives you choices: what you need, whether you're on track, when your pension becomes self-sustaining, and when work becomes financially optional. Your figures stay on your device — no account required." />
 <!-- PWA: installable + offline. Files (manifest, sw.js, icons) live at the repo root. -->
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#3e5c99" media="(prefers-color-scheme: light)" />
@@ -171,6 +171,162 @@
     if (u){ setUser(u); if (!Cloud.recovery) syncFromCloud(); }
     Cloud.ready = true; emit('optcloud:ready', true);
   });
+})();
+</script>
+<!-- First-party product analytics. Writes to our own Supabase `events` table —
+     no third party, no ad tech, no cross-site anything. What goes in a row:
+     an anonymous device id, a session id, the event name, whether the device is
+     a phone/tablet/desktop, and (only when signed in) the user id. No URLs, no
+     referrers, no figures — the single numeric prop we ever send is the
+     resulting optionality age, so the medians in the admin can be computed.
+     Every write is insert-only; nothing here can read anything back. -->
+<script>
+(function(){
+  var URL_  = 'https://tvlnfhghextzsmizkuce.supabase.co';
+  var KEY   = 'sb_publishable_5gOqH6o9-cmDFWRTyLWtNA_414o6Wco';
+  var SESSION_GAP_MS = 30 * 60 * 1000;   // 30 min idle ends a session
+  var RETURN_GAP_MS  = 24 * 60 * 60 * 1000;
+
+  // Deliberately NOT under the "optionality." prefix: OptCloud syncs every
+  // optionality.* key to the user's cloud row, which would copy this device's
+  // id onto their other devices and make the device counts meaningless.
+  var K = { did:'ff.did', sid:'ff.sid', seen:'ff.seen', last:'ff.last_visit' };
+
+  var T = { ready:false, enabled:false, track:function(){}, once:function(){}, flush:function(){} };
+  window.OptTrack = T;
+
+  function ls(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function ss(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+  // Global Privacy Control is a real, legally recognised opt-out signal — honour it.
+  if (navigator.globalPrivacyControl === true) return;
+  if (!window.fetch || !window.crypto) return;
+
+  function uuid(){
+    if (crypto.randomUUID) return crypto.randomUUID();
+    var b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function(x){ return ('0'+x.toString(16)).slice(-2); }).join('');
+    return h.slice(0,8)+'-'+h.slice(8,12)+'-'+h.slice(12,16)+'-'+h.slice(16,20)+'-'+h.slice(20);
+  }
+
+  var deviceId = ls(K.did);
+  if (!deviceId){ deviceId = uuid(); ss(K.did, deviceId); }
+
+  // session = uuid + last-touch timestamp, rolled over after 30 idle minutes
+  var sess = null;
+  try { sess = JSON.parse(ls(K.sid) || 'null'); } catch(e){}
+  var freshSession = false;
+  var nowMs = Date.now();
+  if (!sess || !sess.id || (nowMs - (sess.t || 0)) > SESSION_GAP_MS){
+    sess = { id: uuid(), t: nowMs }; freshSession = true;
+  }
+  function touchSession(){ sess.t = Date.now(); ss(K.sid, JSON.stringify(sess)); }
+  touchSession();
+
+  // fired-once bookkeeping. device scope persists; session scope resets with the session.
+  var seen = {};
+  try { seen = JSON.parse(ls(K.seen) || '{}') || {}; } catch(e){}
+  if (freshSession) { seen._s = {}; }
+  if (!seen._s) seen._s = {};
+  function saveSeen(){ ss(K.seen, JSON.stringify(seen)); }
+
+  function deviceKind(){
+    var w = Math.min(window.innerWidth || 1024, window.screen ? (window.screen.width||1024) : 1024);
+    if (w < 768) return 'mobile';
+    if (w < 1024) return 'tablet';
+    return 'desktop';
+  }
+
+  // identity, kept current by OptCloud's auth events
+  var userId = null, token = null;
+  function refreshIdentity(){
+    var C = window.OptCloud;
+    if (!C || !C.client){ userId = null; token = null; return; }
+    try {
+      C.client.auth.getSession().then(function(res){
+        var s = res && res.data ? res.data.session : null;
+        userId = s && s.user ? s.user.id : null;
+        token  = s ? s.access_token : null;
+      }).catch(function(){});
+    } catch(e){}
+  }
+  window.addEventListener('optcloud:auth', refreshIdentity);
+  window.addEventListener('optcloud:ready', refreshIdentity);
+  refreshIdentity();
+
+  var queue = [], timer = null;
+
+  function post(rows, keepalive){
+    if (!rows.length) return;
+    try {
+      fetch(URL_ + '/rest/v1/events', {
+        method:'POST', keepalive: !!keepalive,
+        headers: {
+          'apikey': KEY,
+          'Authorization': 'Bearer ' + (token || KEY),
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(rows)
+      }).catch(function(){});   // analytics must never break the app
+    } catch(e){}
+  }
+
+  function flush(keepalive){
+    if (timer){ clearTimeout(timer); timer = null; }
+    var rows = queue; queue = [];
+    post(rows, keepalive);
+  }
+
+  function track(name, props){
+    if (!name) return;
+    touchSession();
+    queue.push({
+      device_id: deviceId,
+      session_id: sess.id,
+      user_id: userId,          // null when signed out; RLS rejects anything else
+      name: name,
+      device_kind: deviceKind(),
+      props: props || {}
+    });
+    if (queue.length >= 10) { flush(false); return; }
+    if (!timer) timer = setTimeout(function(){ flush(false); }, 1500);
+  }
+
+  // scope: 'device' (once ever on this browser) | 'session' (once per session)
+  // Device-scope entries store the session that fired them, so callers can tell
+  // "already done, in an earlier visit" from "just done, a moment ago".
+  function once(scope, name, props){
+    var bag = scope === 'device' ? seen : seen._s;
+    if (bag[name]) return false;
+    bag[name] = scope === 'device' ? sess.id : 1; saveSeen();
+    track(name, props);
+    return true;
+  }
+
+  T.track = track;
+  T.once = once;
+  T.flush = function(){ flush(true); };
+  T.hasFired = function(name){ return !!seen[name]; };
+  T.firedThisSession = function(name){ return seen[name] === sess.id; };
+  T.newSession = freshSession;
+  T.enabled = true;
+  T.ready = true;
+
+  // don't lose the tail of a session
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'hidden') flush(true);
+  });
+  window.addEventListener('pagehide', function(){ flush(true); });
+
+  // ---- the entry events, fired here so they don't depend on React mounting ----
+  if (freshSession){
+    track('visit');
+    var last = parseInt(ls(K.last) || '0', 10);
+    if (last && (nowMs - last) > RETURN_GAP_MS) track('return_visit');
+    ss(K.last, String(nowMs));
+  }
 })();
 </script>
 <style>
@@ -2512,6 +2668,16 @@ const R = window.Recharts || {};
 const { ResponsiveContainer, LineChart, Line, AreaChart, Area, ComposedChart, Bar,
         XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, Cell } = R;
 
+/* ---------- analytics: never throws, no-ops when tracking is off ---------- */
+const TRK = {
+  ev:  (n, p) => { try { window.OptTrack && window.OptTrack.track(n, p); } catch(e){} },
+  once:(scope, n, p) => { try { window.OptTrack && window.OptTrack.once(scope, n, p); } catch(e){} },
+  fired:(n) => { try { return !!(window.OptTrack && window.OptTrack.hasFired(n)); } catch(e){ return false; } },
+  firedEarlier:(n) => { try { return !!(window.OptTrack && window.OptTrack.hasFired(n) && !window.OptTrack.firedThisSession(n)); } catch(e){ return false; } },
+  /* fires when a <details> is opened, not when it's closed again */
+  open:(n) => (e) => { try { if (e.target.open) TRK.once('session', n); } catch(err){} }
+};
+
 /* ---------- formatting helpers ---------- */
 const gbp = (x, dp) => {
   if (x == null || isNaN(x)) return '—';
@@ -2710,8 +2876,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
-            <button className={realTerms?'on':''} onClick={()=>setRealTerms(true)}>Today’s money</button>
-            <button className={!realTerms?'on':''} onClick={()=>setRealTerms(false)}>Nominal</button>
+            <button className={realTerms?'on':''} onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(true);}}>Today’s money</button>
+            <button className={!realTerms?'on':''} onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(false);}}>Nominal</button>
           </div>
         </div>
       </div>
@@ -2843,7 +3009,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-note"><b>From/To are inclusive</b> and periods <b>stack</b> where they overlap — a one-off lump sum is just a single-year period. A £0 period stops contributions.</div>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
       <div>
       <div className="bp-assump" style={{marginTop:4}}>
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
@@ -2989,7 +3155,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         }
         return (
         <React.Fragment>
-          <details className="bp-collapse bp-stress-collapse">
+          <details className="bp-collapse bp-stress-collapse" onToggle={TRK.open('view_projection')}>
           <summary className="bp-sub bp-summary"><span>{(function(){
             if(!(sim.reached && hasBridge && confPct!=null)) return 'Sequence risk · can bad early markets break the bridge?';
             let t = 'Sequence risk · '+confPct+'% confidence at '+ageLabel;
@@ -3118,7 +3284,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
 
       {/* 5) YEAR-BY-YEAR TABLE */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {bp.currentAge}–{bp.pensionAccessAge}</summary>
+      <details className="bp-collapse" onToggle={TRK.open('view_projection')}><summary className="bp-sub bp-summary">Year-by-year · age {bp.currentAge}–{bp.pensionAccessAge}</summary>
       <div className="tablewrap cards">
         <table>
           <thead><tr>
@@ -3222,8 +3388,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         </div>
         <div className="bp-terms">
           <div className="bp-seg" role="group" aria-label="value basis">
-            <button className={realTerms?'on':''} onClick={()=>setRealTerms(true)}>Today’s money</button>
-            <button className={!realTerms?'on':''} onClick={()=>setRealTerms(false)}>Nominal</button>
+            <button className={realTerms?'on':''} onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(true);}}>Today’s money</button>
+            <button className={!realTerms?'on':''} onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(false);}}>Nominal</button>
           </div>
         </div>
       </div>
@@ -3333,7 +3499,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-note"><b>From/To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Employee plus employer. Shown as entered, not inflation-adjusted.</div>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
       <div>
       <div className="bp-assump" style={{marginTop:4}}>
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
@@ -3438,7 +3604,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         }
         return (
         <React.Fragment>
-          <details className="bp-collapse bp-stress-collapse">
+          <details className="bp-collapse bp-stress-collapse" onToggle={TRK.open('view_projection')}>
           <summary className="bp-sub bp-summary"><span>{(function(){
             if(!(hasDraw && confPct!=null)) return 'Sequence risk · can bad early markets drain the pension?';
             let t = 'Sequence risk · '+confPct+'% confidence retiring at '+ageLabel;
@@ -3566,7 +3732,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       })()}
 
       {/* YEAR-BY-YEAR */}
-      <details className="bp-collapse"><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.rows.length?base.rows[base.rows.length-1].age:base.objAge}</summary>
+      <details className="bp-collapse" onToggle={TRK.open('view_projection')}><summary className="bp-sub bp-summary">Year-by-year · age {cp.currentAge}–{base.rows.length?base.rows[base.rows.length-1].age:base.objAge}</summary>
       <div className="tablewrap cards">
         <table>
           <thead><tr><th>Age</th><th>Projected pension</th><th>Coast balance required</th><th>Surplus / shortfall</th><th>Annual contribution</th><th>Withdrawal</th><th>Market growth</th><th>Status</th></tr></thead>
@@ -3680,8 +3846,8 @@ function AuthButton(props){
         if (signup){
           const { data, error } = await Cloud.signUpWithPassword(email, pw);
           if (error) setMsg({type:'err', text:error.message});
-          else if (data && data.session){ setMsg({type:'ok', text:'Account created — you’re in!'}); setTimeout(close, 900); }
-          else setMsg({type:'ok', text:'Account created — check your email to confirm, then sign in.'});
+          else if (data && data.session){ TRK.once('device','register'); setMsg({type:'ok', text:'Account created — you’re in!'}); setTimeout(close, 900); }
+          else { TRK.once('device','register'); setMsg({type:'ok', text:'Account created — check your email to confirm, then sign in.'}); }
         } else {
           const { error } = await Cloud.signInWithPassword(email, pw);
           if (error){
@@ -3692,7 +3858,7 @@ function AuthButton(props){
               t = 'Check your inbox and confirm your email first, then sign in.';
             setMsg({type:'err', text:t});
           }
-          else { setMsg({type:'ok', text:'Signed in!'}); setTimeout(close, 700); }
+          else { TRK.once('session','sign_in'); setMsg({type:'ok', text:'Signed in!'}); setTimeout(close, 700); }
         }
       }
     } catch(e){ setMsg({type:'err', text:String((e && e.message) || e)}); }
@@ -3941,7 +4107,31 @@ function App() {
     return b;
   });
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
-  const setBp = (patch) => setBridgeInputs(prev => Object.assign({}, prev, patch));
+  // ---- product analytics -------------------------------------------------
+  // Every planner edit funnels through setBp/setCp, so one hook here covers
+  // both planners and every field without sprinkling calls through the JSX.
+  const touched = useRef({ bridge:false, coast:false });
+  const dirty = useRef(false);
+  const notePatch = (which, patch) => {
+    const keys = Object.keys(patch || {});
+    if (!keys.length) return;
+    const core = which === 'bridge'
+      ? ['currentAge','currentBalance','phases','targetIncome']
+      : ['currentAge','currentPension','phases','targetIncome','targetPot'];
+    if (keys.some(k => core.indexOf(k) >= 0)) {
+      touched.current[which] = true;
+      dirty.current = true;
+      TRK.once('device','finances_entered');
+    }
+    if (keys.indexOf('phases') >= 0)       TRK.once('session','edit_savings');
+    if (keys.indexOf('targetIncome') >= 0) TRK.once('session','edit_target_income');
+    if (keys.indexOf('targetAge') >= 0)    TRK.once('session','edit_target_age');
+    if (keys.indexOf('scenarios') >= 0)    TRK.once('session','scenario_toggle');
+    if (keys.indexOf('growth') >= 0 || keys.indexOf('inflation') >= 0)
+      TRK.once('session','edit_return_inflation');
+  };
+
+  const setBp = (patch) => { notePatch('bridge', patch); setBridgeInputs(prev => Object.assign({}, prev, patch)); };
   const bridge = useMemo(() => Engine.bridgePlan(bridgeInputs), [bridgeInputs]);
 
   // Pension Coast Planner — independent inputs, seeded from its worked example
@@ -3987,9 +4177,30 @@ function App() {
     return c;
   });
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
-  const setCp = (patch) => setCoastInputs(prev => Object.assign({}, prev, patch));
+  const setCp = (patch) => { notePatch('coast', patch); setCoastInputs(prev => Object.assign({}, prev, patch)); };
   const coast = useMemo(() => Engine.coastPlan(coastInputs), [coastInputs]);
   const combined = useMemo(() => Engine.combinedPlan(bridgeInputs, coastInputs), [bridgeInputs, coastInputs]);
+
+  // Fire the funnel events AFTER the model has recomputed, so the optionality
+  // age we report is the one the user is actually looking at.
+  useEffect(() => {
+    if (!dirty.current) return;
+    dirty.current = false;
+    const age = bridge.base && bridge.base.crossAge != null ? bridge.base.crossAge : null;
+    const props = age != null ? { optionality_age: age } : {};
+    // "returned and updated an existing plan" means a LATER visit — not the
+    // edit that completed the plan thirty seconds ago.
+    if (TRK.firedEarlier('plan_completed')) TRK.once('session','plan_updated', props);
+    else if (!TRK.fired('plan_completed') && touched.current.bridge && touched.current.coast)
+      TRK.once('device','plan_completed', props);
+  }, [bridgeInputs, coastInputs]);
+
+  // "Used different assumptions by pot" — the pension and the accessible pot
+  // no longer share a return / inflation view.
+  useEffect(() => {
+    if (bridgeInputs.growth !== coastInputs.growth || bridgeInputs.inflation !== coastInputs.inflation)
+      TRK.once('session','per_pot_assumptions');
+  }, [bridgeInputs.growth, bridgeInputs.inflation, coastInputs.growth, coastInputs.inflation]);
   const cwData = combined.series.map(function(r){
     var nf = realTerms ? 1 : Math.pow(1 + combined.infl, r.age - combined.startAge);
     return { age:r.age, pension:r.pension*nf, accessible:r.accessible*nf, netWorth:r.netWorth*nf,
@@ -4158,11 +4369,11 @@ function App() {
         {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
         <div className={'toolbar'+(menuOpen?' open':'')}>
           <AuthButton onOpen={()=>setMenuOpen(false)} />
-          <button className="btn subtle" onClick={()=>setRealTerms(!realTerms)} title={realTerms
+          <button className="btn subtle" onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(!realTerms);}} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
-          <button className="btn" onClick={()=>setDark(!dark)}>{dark?'☀ Light':'☾ Dark'}</button>
-          <button className="btn" onClick={()=>{exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>
+          <button className="btn" onClick={()=>{TRK.once('session','theme_toggle'); setDark(!dark);}}>{dark?'☀ Light':'☾ Dark'}</button>
+          <button className="btn" onClick={()=>{TRK.ev('export_csv'); exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>
           <button className="btn" onClick={()=>{window.print(); setMenuOpen(false);}}>⎙ Print</button>
           <button className="btn" onClick={()=>{reset(); setMenuOpen(false);}}>↺ Reset</button>
         </div>
@@ -4305,7 +4516,7 @@ function App() {
       {/* YEAR BY YEAR (combined) — collapsed by default; it is a reference table,
            not part of the headline story, and open it is very long on a phone. */}
       <div className="panel" style={{marginBottom:16,paddingTop:4,paddingBottom:4}}>
-        <details className="bp-collapse" style={{borderTop:'none'}}>
+        <details className="bp-collapse" style={{borderTop:'none'}} onToggle={TRK.open('view_projection')}>
         <summary className="bp-sub bp-summary" style={{margin:0}}>Year-by-year · age {combined.startAge}–{combined.series.length?combined.series[combined.series.length-1].age:''}</summary>
         <div>
         <div className="chart-h" style={{marginBottom:10}}>

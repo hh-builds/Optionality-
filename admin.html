@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Future Funded — Admin</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#3e5c99" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --surface-1:#ffffff; --surface-2:#f7f6f2; --page:#f4f3ef;
+  --text-primary:#191a1e; --text-secondary:#585a60; --muted:#8d8e93;
+  --grid:#ebeae4; --baseline:#d8d7cf; --border:rgba(25,26,30,0.09);
+  --accent:#3e5c99; --accent-soft:rgba(62,92,153,0.09);
+  --good:#2b8a55; --good-text:#1f7a45; --warning:#c1861f; --critical:#c8463f;
+  --shadow:0 1px 2px rgba(25,26,30,0.04);
+  --radius:14px;
+  --fs-display:34px; --fs-result:21px; --fs-h:16px; --fs-body:14px;
+  --fs-label:12.5px; --fs-help:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface-1:#17181b; --surface-2:#1e2024; --page:#0e0f11;
+    --text-primary:#f3f3f4; --text-secondary:#c0c1c6; --muted:#87888d;
+    --grid:#26282c; --baseline:#34363b; --border:rgba(255,255,255,0.09);
+    --accent:#8098d6; --accent-soft:rgba(128,152,214,0.16);
+    --good:#3fa168; --good-text:#5cbd85; --warning:#e0a83a; --critical:#e0645c;
+    --shadow:0 1px 2px rgba(0,0,0,0.35);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text-primary);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:var(--fs-body);line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:16px 14px 80px}
+@media (min-width:721px){ .wrap{padding:18px 22px 80px} }
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-0.015em}
+.tnum{font-variant-numeric:tabular-nums}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:11px 0;border-bottom:1px solid var(--border);margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:11px}
+.ff-mark{width:28px;height:28px;border-radius:8px;background:#3e5c99;color:#fff;
+  display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px}
+.brand h1{font-size:17px}
+.brand .tag{font-size:var(--fs-help);color:var(--muted);font-weight:600;
+  border:1px solid var(--border);border-radius:999px;padding:2px 9px;margin-left:4px}
+.who{font-size:var(--fs-help);color:var(--muted);display:flex;align-items:center;gap:10px}
+
+.btn{background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
+  padding:9px 13px;border-radius:9px;font-size:var(--fs-label);cursor:pointer;font-weight:600;
+  font-family:inherit;min-height:40px}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.subtle{background:none;border-color:transparent;color:var(--muted);min-height:auto;padding:4px 6px}
+.btn.subtle:hover{color:var(--text-primary)}
+
+/* segmented controls */
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;
+  background:var(--surface-2);flex-wrap:wrap}
+.seg button{background:none;border:none;padding:9px 13px;font-size:var(--fs-label);cursor:pointer;
+  color:var(--text-secondary);font-family:inherit;font-weight:600;min-height:40px;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button.on{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.controls .lbl{font-size:var(--fs-label);color:var(--muted);font-weight:600}
+@media (max-width:560px){ .controls .seg{width:100%} .controls .seg button{flex:1 1 0} }
+
+/* sign-in */
+.gate{max-width:380px;margin:8vh auto 0;background:var(--surface-1);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:24px 22px}
+.gate h2{font-size:var(--fs-result);margin-bottom:6px}
+.gate p{font-size:var(--fs-help);color:var(--text-secondary);margin:0 0 16px;line-height:1.5}
+.gate input{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface-2);color:var(--text-primary);font-size:16px;margin-bottom:10px;font-family:inherit}
+.gate input:focus{outline:none;border-color:var(--accent)}
+.gate .btn{width:100%;justify-content:center;margin-top:4px}
+.msg{font-size:var(--fs-help);border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.45}
+.msg.err{background:rgba(200,70,63,.12);color:var(--critical)}
+.msg.ok{background:var(--accent-soft);color:var(--accent)}
+
+/* sections */
+.sec{margin:0 0 26px}
+.sec-h{font-size:var(--fs-h);font-weight:650;color:var(--text-primary);margin:0 2px 12px;
+  display:flex;align-items:center;gap:12px}
+.sec-h::after{content:"";flex:1;height:1px;background:var(--border)}
+.sec-h .hint{font-size:var(--fs-help);color:var(--muted);font-weight:500}
+
+/* metric tiles */
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+@media (min-width:641px){ .tiles{grid-template-columns:repeat(3,1fr)} }
+@media (min-width:961px){ .tiles{grid-template-columns:repeat(6,1fr)} }
+.tile{background:var(--surface-1);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 15px}
+.tile .k{font-size:var(--fs-help);color:var(--muted);font-weight:600;line-height:1.3}
+.tile .v{font-size:var(--fs-result);font-weight:650;margin-top:6px;letter-spacing:-0.02em;
+  font-variant-numeric:tabular-nums}
+.tile .s{font-size:var(--fs-help);color:var(--muted);margin-top:3px}
+
+.card{background:var(--surface-1);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
+
+/* funnel */
+.fn{display:flex;flex-direction:column;gap:2px}
+.fn-row{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:baseline;
+  padding:12px 0;border-bottom:1px solid var(--border)}
+.fn-row:last-child{border-bottom:none}
+.fn-name{font-size:var(--fs-body);font-weight:600}
+.fn-num{font-size:var(--fs-h);font-weight:650;font-variant-numeric:tabular-nums;text-align:right}
+.fn-bar{display:block;grid-column:1/3;height:8px;border-radius:5px;background:var(--grid);overflow:hidden;margin-top:2px}
+.fn-bar i{display:block;height:100%;background:var(--accent);border-radius:5px}
+.fn-meta{grid-column:1/3;font-size:var(--fs-help);color:var(--muted)}
+.fn-drop{color:var(--critical);font-weight:600}
+
+/* tables */
+.tw{overflow-x:auto;border-radius:10px;background:var(--surface-1);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--fs-label)}
+th,td{padding:10px 12px;text-align:right;white-space:nowrap}
+th{background:var(--surface-2);color:var(--muted);font-weight:600;font-size:var(--fs-help);
+  border-bottom:1px solid var(--border);position:sticky;top:0}
+th:first-child,td:first-child{text-align:left}
+td{border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+th.s{cursor:pointer;user-select:none}
+th.s:hover{color:var(--accent)}
+th.s .ar{opacity:.55;font-size:10px}
+.pill{display:inline-block;font-size:11px;font-weight:650;padding:2px 8px;border-radius:999px;
+  background:var(--surface-2);color:var(--text-secondary)}
+.pill.active{background:rgba(43,138,85,.14);color:var(--good-text)}
+.pill.idle{background:rgba(193,134,31,.16);color:var(--warning)}
+.pill.dormant{background:var(--surface-2);color:var(--muted)}
+.pill.unconfirmed{background:rgba(200,70,63,.12);color:var(--critical)}
+.pill.never{background:var(--surface-2);color:var(--muted)}
+.yes{color:var(--good-text);font-weight:650}
+.no{color:var(--muted)}
+
+/* feature usage bars */
+.feat{display:flex;flex-direction:column}
+.feat-row{display:grid;grid-template-columns:1fr 64px 52px;gap:12px;align-items:center;
+  padding:11px 0;border-bottom:1px solid var(--border);font-size:var(--fs-label)}
+.feat-row:last-child{border-bottom:none}
+.feat-name{min-width:0}
+.feat-name b{display:block;font-weight:600;color:var(--text-primary);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feat-track{display:block;height:5px;background:var(--grid);border-radius:4px;margin-top:5px;overflow:hidden}
+.feat-track i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.feat-n,.feat-p{text-align:right;font-variant-numeric:tabular-nums;font-weight:650}
+.feat-p{color:var(--muted);font-weight:600}
+.feat-row.zero .feat-name b,.feat-row.zero .feat-n{color:var(--muted);font-weight:500}
+@media (max-width:560px){
+  /* let the feature names wrap rather than truncate — the label is the point */
+  .feat-name b{white-space:normal;overflow:visible;line-height:1.35}
+  .sec-h{flex-wrap:wrap}
+  .sec-h::after{order:3;flex-basis:100%}
+  .sec-h .hint{flex:1 1 100%;order:2}
+}
+
+/* search / filter */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters input,.filters select{padding:9px 11px;border:1px solid var(--border);border-radius:9px;
+  background:var(--surface-1);color:var(--text-primary);font-size:16px;font-family:inherit;min-height:42px}
+.filters input{flex:1 1 190px;min-width:0}
+.filters input:focus,.filters select:focus{outline:none;border-color:var(--accent)}
+.pager{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:12px;
+  font-size:var(--fs-help);color:var(--muted)}
+
+.spark{display:block;width:100%;height:52px}
+.note{font-size:var(--fs-help);color:var(--muted);line-height:1.55;margin-top:10px;max-width:760px}
+.empty{font-size:var(--fs-help);color:var(--muted);padding:14px 2px}
+.err{background:rgba(200,70,63,.10);color:var(--critical);border-radius:10px;padding:12px 14px;
+  font-size:var(--fs-help);margin-bottom:16px;line-height:1.5}
+.hidden{display:none!important}
+.loading{opacity:.45;transition:opacity .15s}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="ff-mark">FF</span><h1>Future Funded</h1><span class="tag">Admin</span>
+    </div>
+    <div class="who" id="who"></div>
+  </div>
+
+  <!-- ============ SIGN IN ============ -->
+  <div id="gate" class="gate hidden">
+    <h2>Admin sign-in</h2>
+    <p>Sign in with the account on the admin allowlist. Everything on this page is
+       aggregate — no individual's figures are shown or fetched.</p>
+    <div id="gateMsg"></div>
+    <input id="email" type="email" placeholder="Email" autocomplete="username" />
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" />
+    <button class="btn primary" id="signin">Sign in</button>
+    <button class="btn subtle" id="magic" style="width:100%;margin-top:10px">Email me a sign-in link instead</button>
+  </div>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div id="app" class="hidden">
+    <div id="err" class="err hidden"></div>
+
+    <div class="controls">
+      <span class="lbl">Period</span>
+      <div class="seg" id="periodSeg">
+        <button data-p="7d">7 days</button>
+        <button data-p="30d" class="on">30 days</button>
+        <button data-p="all">All time</button>
+      </div>
+      <span class="lbl">Device</span>
+      <div class="seg" id="kindSeg">
+        <button data-k="all" class="on">All</button>
+        <button data-k="mobile">Mobile</button>
+        <button data-k="tablet">Tablet</button>
+        <button data-k="desktop">Desktop</button>
+      </div>
+      <button class="btn" id="refresh">Refresh</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Users <span class="hint">all time unless stated</span></div>
+      <div class="tiles" id="userTiles"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Engagement</div>
+      <div class="tiles" id="engTiles"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Funnel <span class="hint" id="funnelHint"></span></div>
+      <div class="card"><div class="fn" id="funnel"></div>
+        <div class="note" id="funnelNote"></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Feature usage <span class="hint">% of devices that entered finances in this period</span></div>
+      <div class="card"><div class="feat" id="feat"></div></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">The model <span class="hint">medians across saved plans</span></div>
+      <div class="tiles" id="modelTiles"></div>
+      <div class="note" id="modelNote"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Trend <span class="hint">daily</span></div>
+      <div class="card" id="trendCard"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Users</div>
+      <div class="filters">
+        <input id="search" type="search" placeholder="Search email or name" />
+        <select id="filter">
+          <option value="all">Everyone</option>
+          <option value="new">New (last 7 days)</option>
+          <option value="active">Active (last 7 days)</option>
+          <option value="recent">Recently active (24h)</option>
+          <option value="inactive">Inactive (30+ days)</option>
+          <option value="incomplete">Incomplete setup</option>
+          <option value="unconfirmed">Unconfirmed email</option>
+        </select>
+      </div>
+      <div class="tw"><table>
+        <thead><tr>
+          <th class="s" data-sort="email">User</th>
+          <th class="s" data-sort="created">Created</th>
+          <th class="s" data-sort="last_active">Last active</th>
+          <th class="s" data-sort="sessions">Sessions</th>
+          <th>Plan</th>
+          <th class="s" data-sort="updated">Last update</th>
+          <th>Device</th>
+          <th>Status</th>
+        </tr></thead>
+        <tbody id="userRows"></tbody>
+      </table></div>
+      <div class="pager">
+        <span id="pageInfo"></span>
+        <span><button class="btn" id="prev">Previous</button>
+              <button class="btn" id="next">Next</button></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var URL_ = 'https://tvlnfhghextzsmizkuce.supabase.co';
+  var KEY  = 'sb_publishable_5gOqH6o9-cmDFWRTyLWtNA_414o6Wco';
+  var supa = window.supabase && window.supabase.createClient
+    ? window.supabase.createClient(URL_, KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true } })
+    : null;
+
+  var $ = function(id){ return document.getElementById(id); };
+  var state = { p:'30d', kind:'all', search:'', filter:'all', sort:'last_active', dir:'desc', page:0, per:25 };
+  var PAGE_TOTAL = 0;
+
+  // ---------- formatting ----------
+  function n(x){ return x == null ? '—' : Number(x).toLocaleString('en-GB'); }
+  function pct(x){ return x == null ? '—' : Number(x).toFixed(1) + '%'; }
+  function gbp(x){
+    if (x == null) return '—';
+    var a = Math.abs(x);
+    if (a >= 1e6) return '£' + (x/1e6).toFixed(2).replace(/\.00$/,'') + 'M';
+    if (a >= 1e3) return '£' + Math.round(x/1e3) + 'k';
+    return '£' + Math.round(x);
+  }
+  function ago(ts){
+    if (!ts) return '—';
+    var d = new Date(ts), s = (Date.now() - d.getTime())/1000;
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    if (s < 86400*30) return Math.floor(s/86400) + 'd ago';
+    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'2-digit' });
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function showErr(m){ var e = $('err'); e.textContent = m; e.classList.remove('hidden'); }
+  function clearErr(){ $('err').classList.add('hidden'); }
+
+  // ---------- gate ----------
+  function gateMsg(type, text){
+    $('gateMsg').innerHTML = text ? '<div class="msg ' + type + '">' + esc(text) + '</div>' : '';
+  }
+
+  async function boot(){
+    if (!supa){ document.body.innerHTML = '<div class="wrap"><div class="err">Could not load the Supabase library.</div></div>'; return; }
+    var res = await supa.auth.getSession();
+    var session = res.data ? res.data.session : null;
+    if (!session){ $('gate').classList.remove('hidden'); return; }
+    var admin = await supa.rpc('is_admin');
+    if (admin.error || !admin.data){
+      $('gate').classList.remove('hidden');
+      gateMsg('err', 'Signed in as ' + session.user.email + ', but that account is not on the admin allowlist.');
+      $('who').innerHTML = '<button class="btn subtle" id="out2">Sign out</button>';
+      $('out2').onclick = signOut;
+      return;
+    }
+    $('gate').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    $('who').innerHTML = esc(session.user.email) + ' <button class="btn subtle" id="out">Sign out</button>';
+    $('out').onclick = signOut;
+    loadAll();
+    loadUsers();
+  }
+
+  async function signOut(){ await supa.auth.signOut(); location.reload(); }
+
+  $('signin').onclick = async function(){
+    gateMsg('', '');
+    var r = await supa.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pw').value });
+    if (r.error) return gateMsg('err', r.error.message);
+    location.reload();
+  };
+  $('magic').onclick = async function(){
+    gateMsg('', '');
+    var e = $('email').value.trim();
+    if (!e) return gateMsg('err', 'Enter your email first.');
+    var r = await supa.auth.signInWithOtp({ email: e, options:{ emailRedirectTo: location.href } });
+    gateMsg(r.error ? 'err' : 'ok', r.error ? r.error.message : 'Check your email for the sign-in link.');
+  };
+  $('pw').addEventListener('keydown', function(e){ if (e.key === 'Enter') $('signin').click(); });
+
+  // ---------- rendering ----------
+  function tile(k, v, s){
+    return '<div class="tile"><div class="k">' + esc(k) + '</div><div class="v tnum">' + v + '</div>'
+         + (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>';
+  }
+
+  function renderOverview(o){
+    var u = o.users, e = o.engagement;
+    $('userTiles').innerHTML =
+      tile('Registered', n(u.total)) +
+      tile('New · 7 days', n(u.new_7d)) +
+      tile('New · 30 days', n(u.new_30d)) +
+      tile('Active · 7 days', n(u.active_7d)) +
+      tile('Active · 30 days', n(u.active_30d)) +
+      tile('Unconfirmed', n(u.unconfirmed), 'never confirmed email');
+    $('engTiles').innerHTML =
+      tile('Plans started', n(e.plans_created), 'devices that entered figures') +
+      tile('Plans completed', n(e.plans_completed), 'both pots filled in') +
+      tile('Returning users', n(e.returning_users), 'more than one session') +
+      tile('Sessions / user', e.avg_sessions_per_user == null ? '—' : Number(e.avg_sessions_per_user).toFixed(1)) +
+      tile('Visitors · 30 days', n(e.visitors_30d), 'unique devices') +
+      tile('Sessions · 30 days', n(e.sessions_30d));
+  }
+
+  function renderFunnel(rows){
+    var top = rows.length ? rows[0].count : 0;
+    $('funnel').innerHTML = rows.map(function(r, i){
+      var w = top > 0 ? (100 * r.count / top) : 0;
+      var meta;
+      if (i === 0) meta = 'unique devices';
+      else {
+        var drop = r.pct_of_prev == null ? null : (100 - r.pct_of_prev);
+        meta = pct(r.pct_of_prev) + ' of previous · ' + pct(r.pct_of_top) + ' of all visitors'
+             + (drop != null && drop > 0 ? ' · <span class="fn-drop">' + drop.toFixed(1) + '% dropped</span>' : '');
+      }
+      return '<div class="fn-row">'
+           +   '<span class="fn-name">' + esc(r.stage) + '</span>'
+           +   '<span class="fn-num">' + n(r.count) + '</span>'
+           +   '<span class="fn-bar"><i style="width:' + w.toFixed(1) + '%"></i></span>'
+           +   '<span class="fn-meta">' + meta + '</span>'
+           + '</div>';
+    }).join('');
+    $('funnelNote').innerHTML = 'Each stage counts unique <b>devices</b> that reached it '
+      + '<i>and</i> every stage above it, so signed-out visitors are included and the numbers only fall. '
+      + 'Registration sits after "completed plan" because in this product signing up is what people do '
+      + '<i>once</i> they have something worth keeping — not a gate on the way in.';
+  }
+
+  function renderFeatures(rows){
+    if (!rows.length){ $('feat').innerHTML = '<div class="empty">No events in this period yet.</div>'; return; }
+    var max = Math.max.apply(null, rows.map(function(r){ return r.devices || 0; })) || 1;
+    $('feat').innerHTML = rows.map(function(r){
+      var w = 100 * (r.devices || 0) / max;
+      return '<div class="feat-row' + (r.devices ? '' : ' zero') + '">'
+           +   '<span class="feat-name"><b>' + esc(r.label) + '</b>'
+           +     '<span class="feat-track"><i style="width:' + w.toFixed(1) + '%"></i></span></span>'
+           +   '<span class="feat-n">' + n(r.devices) + '</span>'
+           +   '<span class="feat-p">' + pct(r.pct_of_active) + '</span>'
+           + '</div>';
+    }).join('');
+  }
+
+  function renderModel(m, oa){
+    if (m.suppressed){
+      $('modelTiles').innerHTML = '';
+      $('modelNote').textContent = 'Suppressed — only ' + m.n + ' saved plan(s). Medians appear once at least 5 people have saved one, so a "median" can never describe one identifiable person.';
+      return;
+    }
+    $('modelTiles').innerHTML =
+      tile('Median optionality age', oa && oa.median != null ? Number(oa.median).toFixed(1) : '—',
+           oa && oa.n ? 'from ' + oa.n + ' devices' : 'needs 5+') +
+      tile('Median target income', gbp(m.median_target_income), 'per year, today’s money') +
+      tile('Median ISA / GIA', gbp(m.median_isa_gia)) +
+      tile('Median pension', gbp(m.median_pension)) +
+      tile('Median current age', m.median_current_age == null ? '—' : Number(m.median_current_age).toFixed(1)) +
+      tile('Median target age', m.median_target_age == null ? '—' : Number(m.median_target_age).toFixed(1));
+    $('modelNote').textContent = 'Across ' + m.n + ' saved plans. Computed inside the database and returned only as medians — '
+      + 'no individual figure is ever sent to this page.';
+  }
+
+  function renderTrend(rows){
+    if (!rows || rows.length < 2){ $('trendCard').innerHTML = '<div class="empty">Not enough days of data yet.</div>'; return; }
+    var series = [
+      { k:'visitors',    label:'Visitors',   color:'var(--accent)' },
+      { k:'new_users',   label:'New users',  color:'var(--good)' },
+      { k:'completions', label:'Completions',color:'var(--warning)' }
+    ];
+    var W = 600, H = 52;
+    var html = series.map(function(s){
+      var vals = rows.map(function(r){ return Number(r[s.k]) || 0; });
+      var max = Math.max.apply(null, vals) || 1;
+      var step = vals.length > 1 ? W / (vals.length - 1) : W;
+      var pts = vals.map(function(v, i){ return (i*step).toFixed(1) + ',' + (H - (v/max)*(H-6) - 3).toFixed(1); }).join(' ');
+      var total = vals.reduce(function(a,b){ return a+b; }, 0);
+      return '<div style="margin-bottom:14px">'
+           + '<div style="display:flex;justify-content:space-between;font-size:var(--fs-label);font-weight:600">'
+           +   '<span>' + s.label + '</span><span class="tnum" style="color:var(--muted)">' + n(total) + ' total · peak ' + n(max) + '</span></div>'
+           + '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">'
+           +   '<polyline fill="none" stroke="' + s.color + '" stroke-width="2" vector-effect="non-scaling-stroke" points="' + pts + '"/>'
+           + '</svg></div>';
+    }).join('');
+    var first = rows[0].day, last = rows[rows.length-1].day;
+    $('trendCard').innerHTML = html
+      + '<div class="note" style="margin-top:0">' + esc(first) + ' → ' + esc(last) + '</div>';
+  }
+
+  function renderUsers(rows){
+    if (!rows.length){ $('userRows').innerHTML = '<tr><td colspan="8" class="empty">No users match.</td></tr>';
+      PAGE_TOTAL = 0; updatePager(); return; }
+    PAGE_TOTAL = Number(rows[0].total_count) || rows.length;
+    $('userRows').innerHTML = rows.map(function(r){
+      var who = esc(r.email) + (r.display_name ? '<div style="color:var(--muted);font-size:11px">' + esc(r.display_name) + '</div>' : '');
+      var statusClass = r.status === 'never used' ? 'never' : r.status;
+      return '<tr>'
+        + '<td>' + who + '</td>'
+        + '<td>' + ago(r.created_at) + '</td>'
+        + '<td>' + ago(r.last_active) + '</td>'
+        + '<td>' + n(r.sessions) + '</td>'
+        + '<td>' + (r.plan_complete ? '<span class="yes">Complete</span>' : '<span class="no">Incomplete</span>') + '</td>'
+        + '<td>' + ago(r.plan_updated) + '</td>'
+        + '<td>' + esc(r.device_kinds || '—') + '</td>'
+        + '<td><span class="pill ' + statusClass + '">' + esc(r.status) + '</span></td>'
+        + '</tr>';
+    }).join('');
+    updatePager();
+  }
+
+  function updatePager(){
+    var from = PAGE_TOTAL ? state.page * state.per + 1 : 0;
+    var to = Math.min(PAGE_TOTAL, (state.page + 1) * state.per);
+    $('pageInfo').textContent = PAGE_TOTAL ? (from + '–' + to + ' of ' + PAGE_TOTAL) : 'No users';
+    $('prev').disabled = state.page === 0;
+    $('next').disabled = to >= PAGE_TOTAL;
+  }
+
+  // ---------- loading ----------
+  var busy = false;
+  async function loadAll(){
+    if (busy) return; busy = true; clearErr();
+    $('app').classList.add('loading');
+    try {
+      var out = await Promise.all([
+        supa.rpc('admin_overview'),
+        supa.rpc('admin_funnel',   { p: state.p, kind: state.kind }),
+        supa.rpc('admin_features', { p: state.p, kind: state.kind }),
+        supa.rpc('admin_model_medians'),
+        supa.rpc('admin_median_optionality_age'),
+        supa.rpc('admin_trend',    { p: state.p })
+      ]);
+      var bad = out.filter(function(r){ return r.error; });
+      if (bad.length) throw new Error(bad.map(function(b){ return b.error.message; }).join(' · '));
+      renderOverview(out[0].data);
+      renderFunnel(out[1].data || []);
+      renderFeatures(out[2].data || []);
+      renderModel(out[3].data || {}, out[4].data || {});
+      renderTrend(out[5].data || []);
+      $('funnelHint').textContent = ({'7d':'last 7 days','30d':'last 30 days','all':'all time'})[state.p]
+        + (state.kind === 'all' ? '' : ' · ' + state.kind);
+    } catch (e) {
+      showErr('Could not load the dashboard: ' + e.message
+        + '. If this says the function does not exist, run supabase/analytics.sql in the SQL editor first.');
+    }
+    $('app').classList.remove('loading');
+    busy = false;
+  }
+
+  var userTimer = null;
+  async function loadUsers(){
+    clearErr();
+    var r = await supa.rpc('admin_users', {
+      search: state.search, filter: state.filter, sort: state.sort,
+      dir: state.dir, lim: state.per, off: state.page * state.per
+    });
+    if (r.error) return showErr('Could not load users: ' + r.error.message);
+    renderUsers(r.data || []);
+  }
+
+  // ---------- controls ----------
+  function segment(id, key, after){
+    $(id).addEventListener('click', function(e){
+      var b = e.target.closest('button'); if (!b) return;
+      [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      state[key] = b.dataset.p || b.dataset.k;
+      after();
+    });
+  }
+  segment('periodSeg', 'p', loadAll);
+  segment('kindSeg', 'kind', loadAll);
+  $('refresh').onclick = function(){ loadAll(); loadUsers(); };
+
+  $('search').addEventListener('input', function(){
+    state.search = this.value.trim(); state.page = 0;
+    clearTimeout(userTimer); userTimer = setTimeout(loadUsers, 280);
+  });
+  $('filter').addEventListener('change', function(){ state.filter = this.value; state.page = 0; loadUsers(); });
+  $('prev').onclick = function(){ if (state.page > 0){ state.page--; loadUsers(); } };
+  $('next').onclick = function(){ state.page++; loadUsers(); };
+
+  [].forEach.call(document.querySelectorAll('th.s'), function(th){
+    th.addEventListener('click', function(){
+      var s = th.dataset.sort;
+      if (state.sort === s) state.dir = state.dir === 'desc' ? 'asc' : 'desc';
+      else { state.sort = s; state.dir = 'desc'; }
+      [].forEach.call(document.querySelectorAll('th.s .ar'), function(a){ a.remove(); });
+      var ar = document.createElement('span');
+      ar.className = 'ar'; ar.textContent = state.dir === 'desc' ? ' ▼' : ' ▲';
+      th.appendChild(ar);
+      state.page = 0; loadUsers();
+    });
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>
