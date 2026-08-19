@@ -333,9 +333,26 @@ th.s .ar{opacity:.55;font-size:10px}
     var session = res.data ? res.data.session : null;
     if (!session){ $('gate').classList.remove('hidden'); return; }
     var admin = await supa.rpc('is_admin');
-    if (admin.error || !admin.data){
+    // A failed call and a genuine "not an admin" are completely different
+    // problems, so never report them with the same message.
+    if (admin.error){
       $('gate').classList.remove('hidden');
-      gateMsg('err', 'Signed in as ' + session.user.email + ', but that account is not on the admin allowlist.');
+      var hint = /schema cache|does not exist|PGRST202/i.test(admin.error.message || '')
+        ? ' Looks like the database functions are not visible yet — run supabase/analytics.sql, then run: notify pgrst, \'reload schema\';'
+        : /permission denied/i.test(admin.error.message || '')
+          ? ' The function exists but this role cannot execute it — re-run the grants block at the end of analytics.sql.'
+          : '';
+      gateMsg('err', 'Signed in as ' + session.user.email + ', but the admin check could not run: '
+        + (admin.error.message || 'unknown error') + '.' + hint);
+      $('who').innerHTML = '<button class="btn subtle" id="out2">Sign out</button>';
+      $('out2').onclick = signOut;
+      return;
+    }
+    if (!admin.data){
+      $('gate').classList.remove('hidden');
+      gateMsg('err', 'Signed in as ' + session.user.email + ' (id ' + session.user.id + '), but there is no row '
+        + 'for that account in public.admins. Run the bootstrap insert at the bottom of analytics.sql with '
+        + 'exactly this email, then reload.');
       $('who').innerHTML = '<button class="btn subtle" id="out2">Sign out</button>';
       $('out2').onclick = signOut;
       return;
