@@ -46,6 +46,113 @@ const awayStr = (yrs) => {
   return parts.join(' ') + ' away';
 };
 
+/* ---------- install as an app ----------
+   Chromium fires beforeinstallprompt (captured in the head before React mounts);
+   iOS Safari never does, and Chrome's own banner is heuristic and often silent —
+   which is why this is an explicit menu item with written steps as the fallback. */
+function useInstall() {
+  const read = () => {
+    if (typeof window === 'undefined') return { standalone:false, canPrompt:false, platform:'other' };
+    const ua = navigator.userAgent || '';
+    const iOS = /iPad|iPhone|iPod/.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                       || navigator.standalone === true
+                       || !!(window.__ffInstall && window.__ffInstall.installed);
+    return {
+      standalone: standalone,
+      canPrompt: !!(window.__ffInstall && window.__ffInstall.deferred),
+      platform: iOS ? 'ios' : (/Android/.test(ua) ? 'android' : 'desktop')
+    };
+  };
+  const [st, setSt] = useState(read);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sync = () => setSt(read());
+    window.addEventListener('ff:installable', sync);
+    window.addEventListener('ff:installed', sync);
+    return () => {
+      window.removeEventListener('ff:installable', sync);
+      window.removeEventListener('ff:installed', sync);
+    };
+  }, []);
+  // returns true if the browser's own install dialog was shown
+  const promptInstall = async () => {
+    const d = window.__ffInstall && window.__ffInstall.deferred;
+    if (!d) return false;
+    try {
+      d.prompt();
+      await d.userChoice;
+      window.__ffInstall.deferred = null;
+      setSt(read());
+      return true;
+    } catch (e) { return false; }
+  };
+  return { ...st, promptInstall };
+}
+
+function InstallHelp({ platform, onClose }) {
+  const steps = platform === 'ios'
+    ? <ol className="inst-steps">
+        <li>Open this page in <b>Safari</b> (this doesn’t work from inside another app’s browser).</li>
+        <li>Tap the <b>Share</b> button <span className="inst-key">↑</span> — the square with an arrow, at the bottom of the screen.</li>
+        <li>Scroll down the list and tap <b>Add to Home Screen</b>.</li>
+        <li>Tap <b>Add</b>. Future Funded will appear as an icon like any other app.</li>
+      </ol>
+    : platform === 'android'
+    ? <ol className="inst-steps">
+        <li>Tap the <span className="inst-key">⋮</span> menu in the top-right of Chrome.</li>
+        <li>Choose <b>Install app</b>, or <b>Add to Home screen</b> if you don’t see it.</li>
+        <li>Confirm, and it will appear alongside your other apps.</li>
+      </ol>
+    : <ol className="inst-steps">
+        <li>Look for the <b>install icon</b> at the right-hand end of the address bar — a small screen with a downward arrow.</li>
+        <li>If it isn’t there, open the browser menu <span className="inst-key">⋮</span> and choose <b>Install Future Funded</b> or <b>Apps › Install this site</b>.</li>
+        <li>Chrome and Edge support this. Firefox and Safari on a Mac do not.</li>
+      </ol>;
+  return inBody(
+    <div className="auth-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Install Future Funded">
+        <button className="auth-x" onClick={onClose} aria-label="Close">×</button>
+        <h3 className="auth-title">Add it to your home screen</h3>
+        <p className="auth-sub">It runs full-screen without the browser bars, works offline, and keeps
+           your figures exactly as they are — nothing is downloaded from an app store.</p>
+        {steps}
+        <p className="inst-note">Your browser decides when to offer this automatically, and often
+           stays quiet — on an iPhone it never asks at all. The steps above always work.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- is this account on the admin allowlist? ----------
+   Drives the Admin link in the menu. is_admin() is SECURITY DEFINER and
+   returns a plain boolean, so a non-admin simply gets false — the link is a
+   convenience, not the security boundary (admin.html re-checks server-side). */
+function useIsAdmin() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const check = () => {
+      const C = (typeof window !== 'undefined') ? window.OptCloud : null;
+      if (!C || !C.client || !C.getUser || !C.getUser()) { if (alive) setIsAdmin(false); return; }
+      try {
+        C.client.rpc('is_admin')
+          .then(r => { if (alive) setIsAdmin(!r.error && r.data === true); })
+          .catch(() => { if (alive) setIsAdmin(false); });
+      } catch (e) { if (alive) setIsAdmin(false); }
+    };
+    check();
+    if (typeof window === 'undefined') return;
+    window.addEventListener('optcloud:auth', check);
+    window.addEventListener('optcloud:ready', check);
+    return () => { alive = false;
+      window.removeEventListener('optcloud:auth', check);
+      window.removeEventListener('optcloud:ready', check); };
+  }, []);
+  return isAdmin;
+}
+
 /* ---------- theme-aware chart colours ---------- */
 function useColors() {
   const read = () => {
@@ -1347,6 +1454,9 @@ function AuthButton(props){
 function App() {
   const C = useColors();
   const narrow = useIsNarrow();
+  const isAdmin = useIsAdmin();
+  const install = useInstall();
+  const [installHelp, setInstallHelp] = useState(false);
   const [inputs, setInputs] = useState(() => {
     let base = JSON.parse(JSON.stringify(Engine.DEFAULTS));
     try { const s = localStorage.getItem('optionality.inputs');
@@ -1706,9 +1816,15 @@ function App() {
         {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
         <div className={'toolbar'+(menuOpen?' open':'')}>
           <AuthButton onOpen={()=>setMenuOpen(false)} />
+          {isAdmin && <a className="btn" href="admin.html" onClick={()=>setMenuOpen(false)}>⚙ Admin</a>}
           <button className="btn subtle" onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(!realTerms);}} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
+          {!install.standalone && <button className="btn" onClick={async ()=>{
+            const shown = await install.promptInstall();
+            setMenuOpen(false);
+            if (!shown) setInstallHelp(true);
+          }}>⤓ Install app</button>}
           <button className="btn" onClick={()=>{TRK.once('session','theme_toggle'); setDark(!dark);}}>{dark?'☀ Light':'☾ Dark'}</button>
           <button className="btn" onClick={()=>{TRK.ev('export_csv'); exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>
           <button className="btn" onClick={()=>{window.print(); setMenuOpen(false);}}>⎙ Print</button>
@@ -1895,6 +2011,8 @@ function App() {
 
 
       </div>{/* end layout */}
+
+      {installHelp && <InstallHelp platform={install.platform} onClose={()=>setInstallHelp(false)} />}
 
       {/* ===== FOOTER ===== */}
       <footer className="site-foot">

@@ -36,6 +36,24 @@
     });
   }
 </script>
+<!-- PWA install. Chromium fires beforeinstallprompt long before React has mounted,
+     and only once, so it has to be captured here or the chance is lost. iOS Safari
+     never fires it at all — there the app offers written Add to Home Screen steps. -->
+<script>
+(function(){
+  window.__ffInstall = { deferred: null, installed: false };
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    window.__ffInstall.deferred = e;
+    try { window.dispatchEvent(new CustomEvent('ff:installable')); } catch(err){}
+  });
+  window.addEventListener('appinstalled', function(){
+    window.__ffInstall.deferred = null;
+    window.__ffInstall.installed = true;
+    try { window.dispatchEvent(new CustomEvent('ff:installed')); } catch(err){}
+  });
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
@@ -463,11 +481,15 @@ button{font-family:inherit}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .btn.primary:hover{opacity:.9;color:#fff}
+/* the Admin menu item is a real link, so it needs the button's box explicitly */
+a.btn{text-decoration:none;display:inline-flex;align-items:center;gap:7px}
 .btn.subtle{background:transparent;border-color:transparent;color:var(--muted);padding:6px 9px;font-size:12px;font-weight:600}
 .btn.subtle:hover{border-color:var(--border);color:var(--text-primary)}
 /* ---- accounts / auth ---- */
 .auth-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
-.auth-modal{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lift);width:100%;max-width:380px;padding:22px 20px;position:relative}
+.auth-modal{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-lift);width:100%;max-width:380px;padding:22px 20px;position:relative;
+  /* on a short phone these panels can outgrow the viewport — scroll rather than clip */
+  max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .auth-x{position:absolute;top:8px;right:11px;background:none;border:none;color:var(--muted);font-size:23px;line-height:1;cursor:pointer;padding:2px 6px}
 .auth-x:hover{color:var(--text-primary)}
 .auth-title{font-size:17px;margin:0 0 6px}
@@ -489,6 +511,14 @@ button{font-family:inherit}
 .acc-row .btn{white-space:nowrap}
 .acc-signout{display:flex;width:100%;justify-content:center;margin-top:6px}
 .acc-divider{height:1px;background:var(--border);margin:4px 0 14px}
+/* ---- install-as-an-app instructions ---- */
+.inst-steps{margin:0;padding-left:20px;font-size:14px;line-height:1.65;color:var(--text-secondary)}
+.inst-steps li{margin-bottom:7px}
+.inst-steps b{color:var(--text-primary);font-weight:650}
+.inst-key{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;
+  padding:0 5px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);
+  color:var(--text-primary);font-size:13px;font-weight:650;line-height:1;vertical-align:-5px}
+.inst-note{font-size:12px;color:var(--muted);line-height:1.55;margin:12px 0 0}
 /* password field with a Show/Hide reveal toggle */
 .pw-wrap{position:relative;display:block}
 .pw-wrap .auth-input{padding-right:64px}
@@ -2709,6 +2739,113 @@ const awayStr = (yrs) => {
   return parts.join(' ') + ' away';
 };
 
+/* ---------- install as an app ----------
+   Chromium fires beforeinstallprompt (captured in the head before React mounts);
+   iOS Safari never does, and Chrome's own banner is heuristic and often silent —
+   which is why this is an explicit menu item with written steps as the fallback. */
+function useInstall() {
+  const read = () => {
+    if (typeof window === 'undefined') return { standalone:false, canPrompt:false, platform:'other' };
+    const ua = navigator.userAgent || '';
+    const iOS = /iPad|iPhone|iPod/.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                       || navigator.standalone === true
+                       || !!(window.__ffInstall && window.__ffInstall.installed);
+    return {
+      standalone: standalone,
+      canPrompt: !!(window.__ffInstall && window.__ffInstall.deferred),
+      platform: iOS ? 'ios' : (/Android/.test(ua) ? 'android' : 'desktop')
+    };
+  };
+  const [st, setSt] = useState(read);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sync = () => setSt(read());
+    window.addEventListener('ff:installable', sync);
+    window.addEventListener('ff:installed', sync);
+    return () => {
+      window.removeEventListener('ff:installable', sync);
+      window.removeEventListener('ff:installed', sync);
+    };
+  }, []);
+  // returns true if the browser's own install dialog was shown
+  const promptInstall = async () => {
+    const d = window.__ffInstall && window.__ffInstall.deferred;
+    if (!d) return false;
+    try {
+      d.prompt();
+      await d.userChoice;
+      window.__ffInstall.deferred = null;
+      setSt(read());
+      return true;
+    } catch (e) { return false; }
+  };
+  return { ...st, promptInstall };
+}
+
+function InstallHelp({ platform, onClose }) {
+  const steps = platform === 'ios'
+    ? <ol className="inst-steps">
+        <li>Open this page in <b>Safari</b> (this doesn’t work from inside another app’s browser).</li>
+        <li>Tap the <b>Share</b> button <span className="inst-key">↑</span> — the square with an arrow, at the bottom of the screen.</li>
+        <li>Scroll down the list and tap <b>Add to Home Screen</b>.</li>
+        <li>Tap <b>Add</b>. Future Funded will appear as an icon like any other app.</li>
+      </ol>
+    : platform === 'android'
+    ? <ol className="inst-steps">
+        <li>Tap the <span className="inst-key">⋮</span> menu in the top-right of Chrome.</li>
+        <li>Choose <b>Install app</b>, or <b>Add to Home screen</b> if you don’t see it.</li>
+        <li>Confirm, and it will appear alongside your other apps.</li>
+      </ol>
+    : <ol className="inst-steps">
+        <li>Look for the <b>install icon</b> at the right-hand end of the address bar — a small screen with a downward arrow.</li>
+        <li>If it isn’t there, open the browser menu <span className="inst-key">⋮</span> and choose <b>Install Future Funded</b> or <b>Apps › Install this site</b>.</li>
+        <li>Chrome and Edge support this. Firefox and Safari on a Mac do not.</li>
+      </ol>;
+  return inBody(
+    <div className="auth-overlay" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Install Future Funded">
+        <button className="auth-x" onClick={onClose} aria-label="Close">×</button>
+        <h3 className="auth-title">Add it to your home screen</h3>
+        <p className="auth-sub">It runs full-screen without the browser bars, works offline, and keeps
+           your figures exactly as they are — nothing is downloaded from an app store.</p>
+        {steps}
+        <p className="inst-note">Your browser decides when to offer this automatically, and often
+           stays quiet — on an iPhone it never asks at all. The steps above always work.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- is this account on the admin allowlist? ----------
+   Drives the Admin link in the menu. is_admin() is SECURITY DEFINER and
+   returns a plain boolean, so a non-admin simply gets false — the link is a
+   convenience, not the security boundary (admin.html re-checks server-side). */
+function useIsAdmin() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const check = () => {
+      const C = (typeof window !== 'undefined') ? window.OptCloud : null;
+      if (!C || !C.client || !C.getUser || !C.getUser()) { if (alive) setIsAdmin(false); return; }
+      try {
+        C.client.rpc('is_admin')
+          .then(r => { if (alive) setIsAdmin(!r.error && r.data === true); })
+          .catch(() => { if (alive) setIsAdmin(false); });
+      } catch (e) { if (alive) setIsAdmin(false); }
+    };
+    check();
+    if (typeof window === 'undefined') return;
+    window.addEventListener('optcloud:auth', check);
+    window.addEventListener('optcloud:ready', check);
+    return () => { alive = false;
+      window.removeEventListener('optcloud:auth', check);
+      window.removeEventListener('optcloud:ready', check); };
+  }, []);
+  return isAdmin;
+}
+
 /* ---------- theme-aware chart colours ---------- */
 function useColors() {
   const read = () => {
@@ -4010,6 +4147,9 @@ function AuthButton(props){
 function App() {
   const C = useColors();
   const narrow = useIsNarrow();
+  const isAdmin = useIsAdmin();
+  const install = useInstall();
+  const [installHelp, setInstallHelp] = useState(false);
   const [inputs, setInputs] = useState(() => {
     let base = JSON.parse(JSON.stringify(Engine.DEFAULTS));
     try { const s = localStorage.getItem('optionality.inputs');
@@ -4369,9 +4509,15 @@ function App() {
         {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}
         <div className={'toolbar'+(menuOpen?' open':'')}>
           <AuthButton onOpen={()=>setMenuOpen(false)} />
+          {isAdmin && <a className="btn" href="admin.html" onClick={()=>setMenuOpen(false)}>⚙ Admin</a>}
           <button className="btn subtle" onClick={()=>{TRK.once('session','units_toggle'); setRealTerms(!realTerms);}} title={realTerms
             ? 'All figures are in today’s money (real terms) — what they’re worth at today’s prices. Click to show future pounds (nominal), which look bigger because of inflation.'
             : 'All figures are in future pounds (nominal) — inflated to the year they happen. Click to show today’s money (real terms).'}>ⓘ {realTerms?'Today’s money':'Future £'}</button>
+          {!install.standalone && <button className="btn" onClick={async ()=>{
+            const shown = await install.promptInstall();
+            setMenuOpen(false);
+            if (!shown) setInstallHelp(true);
+          }}>⤓ Install app</button>}
           <button className="btn" onClick={()=>{TRK.once('session','theme_toggle'); setDark(!dark);}}>{dark?'☀ Light':'☾ Dark'}</button>
           <button className="btn" onClick={()=>{TRK.ev('export_csv'); exportCsv(); setMenuOpen(false);}}>⬇ CSV</button>
           <button className="btn" onClick={()=>{window.print(); setMenuOpen(false);}}>⎙ Print</button>
@@ -4558,6 +4704,8 @@ function App() {
 
 
       </div>{/* end layout */}
+
+      {installHelp && <InstallHelp platform={install.platform} onClose={()=>setInstallHelp(false)} />}
 
       {/* ===== FOOTER ===== */}
       <footer className="site-foot">
