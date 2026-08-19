@@ -21,10 +21,13 @@ const gbp = (x, dp) => {
   return new Intl.NumberFormat('en-GB', { style:'currency', currency:'GBP',
     minimumFractionDigits: dp||0, maximumFractionDigits: dp||0 }).format(x);
 };
+/* The one compact currency format, used for every figure on the page —
+   cards, planners, tables and chart axes — so a pot never reads as £1.22M in
+   one place and £1.2M in another. */
 const gbpC = (x) => {
   if (x == null || isNaN(x)) return '—';
   const a = Math.abs(x);
-  if (a >= 1e6) return '£' + (x/1e6).toFixed(2).replace(/\.00$/,'') + 'M';
+  if (a >= 1e6) return '£' + (x/1e6).toFixed(1).replace(/\.0$/,'') + 'M';
   if (a >= 1e3) return '£' + Math.round(x/1e3) + 'k';
   return '£' + Math.round(x);
 };
@@ -45,6 +48,54 @@ const awayStr = (yrs) => {
   if (mo) parts.push(mo + ' month' + (mo === 1 ? '' : 's'));
   return parts.join(' ') + ' away';
 };
+
+/* ---------- inline explanation ----------
+   Item 5: where the UI already says it, say nothing; where the FINANCE is
+   genuinely complicated, keep the explanation but stop it occupying the
+   screen permanently. */
+function Learn({ label, children }) {
+  return (
+    <details className="learn">
+      <summary>{label || 'How this works'}</summary>
+      <div>{children}</div>
+    </details>
+  );
+}
+
+/* ---------- headline card ----------
+   One component so the three cards cannot drift apart. Flashes briefly when
+   its answer changes, so an edit to an assumption is visibly connected to the
+   result rather than something you have to go looking for. */
+function HCard({ k, dot, v, sub, prompt, jumpTo }) {
+  const [flash, setFlash] = useState(false);
+  const prev = useRef(v);
+  useEffect(() => {
+    if (prev.current === v) return;
+    prev.current = v;
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 900);
+    return () => clearTimeout(t);
+  }, [v]);
+  // Tapping a card jumps to the planner behind it. This is the answer to
+  // "does mobile need a sticky nav": it removes the same scrolling friction
+  // without permanently spending 56px of every screen on a toolbar.
+  const jump = () => {
+    if (!jumpTo || typeof document === 'undefined') return;
+    const el = document.getElementById(jumpTo);
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  };
+  return (
+    <div className={'hcard' + (flash ? ' changed' : '') + (jumpTo ? ' tappable' : '')}
+      onClick={jumpTo ? jump : undefined}
+      onKeyDown={jumpTo ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); } }) : undefined}
+      role={jumpTo ? 'button' : undefined} tabIndex={jumpTo ? 0 : undefined}
+      aria-label={jumpTo ? k + ': ' + (prompt || v) + '. Show the detail.' : undefined}>
+      <div className={'hc-k ' + (dot || '')}><span className={'hc-dot ' + (dot || '')}></span>{k}</div>
+      <div className={'hc-v' + (prompt ? ' prompt' : '')}>{prompt || v}</div>
+      {!prompt && sub ? <div className="hc-sub">{sub}</div> : null}
+    </div>
+  );
+}
 
 /* ---------- install as an app ----------
    Chromium fires beforeinstallprompt (captured in the head before React mounts);
@@ -195,21 +246,43 @@ function useIsNarrow(px) {
    Keeps a local text buffer and selects-all on focus, so typing a new
    number always REPLACES the old one (no stray leading zero) while the
    dashboard still recalculates live on every keystroke. */
-function NumInput({ value, onChange, step, min, className, style, title, ariaLabel }) {
-  const [txt, setTxt] = useState(value == null ? '' : String(value));
+function NumInput({ value, onChange, step, min, className, style, title, ariaLabel, group }) {
+  // `group` = thousands separators. £90,000 vs £90000 is the difference between
+  // reading a balance and counting its digits, and it is the single most-scanned
+  // thing on the page. Separators mean a text input (type=number can't show
+  // them), so the raw value is restored on focus and reformatted on blur.
+  const fmt = (v) => (v == null || isNaN(v)) ? '' : (group ? Number(v).toLocaleString('en-GB') : String(v));
+  const parse = (raw) => parseFloat(String(raw).replace(/[^0-9.eE+-]/g, ''));
+  const [txt, setTxt] = useState(() => fmt(value));
   const focused = useRef(false);
-  useEffect(() => { if (!focused.current) setTxt(value == null ? '' : String(value)); }, [value]);
+  useEffect(() => { if (!focused.current) setTxt(fmt(value)); }, [value, group]);
   const handle = (raw) => {
     setTxt(raw);
     if (raw === '' || raw === '-' || raw === '.') { onChange(0); return; }
-    const n = parseFloat(raw);
+    const n = parse(raw);
     if (!isNaN(n)) onChange(n);
   };
   return (
-    <input type="number" className={className} style={style} step={step || 'any'} min={min}
-      title={title} aria-label={ariaLabel} value={txt} inputMode="decimal"
-      onFocus={e => { focused.current = true; e.target.select(); }}
-      onBlur={() => { focused.current = false; let n = parseFloat(txt); if (isNaN(n)) n = 0; if (min != null) n = Math.max(min, n); setTxt(String(n)); onChange(n); }}
+    <input type={group ? 'text' : 'number'} className={className} style={style}
+      step={group ? undefined : (step || 'any')} min={group ? undefined : min}
+      title={title} aria-label={ariaLabel} value={txt}
+      inputMode={group ? 'numeric' : 'decimal'}
+      autoComplete="off"
+      onFocus={e => {
+        focused.current = true;
+        if (group) setTxt(value == null ? '' : String(value));
+        const el = e.target;
+        // select AFTER the unformatted value lands, or the selection is dropped
+        requestAnimationFrame(() => { try { el.select(); } catch (err) {} });
+      }}
+      onBlur={() => {
+        focused.current = false;
+        let n = parse(txt);
+        if (isNaN(n)) n = 0;
+        if (min != null) n = Math.max(min, n);
+        setTxt(fmt(n));
+        onChange(n);
+      }}
       onChange={e => handle(e.target.value)} />
   );
 }
@@ -243,7 +316,7 @@ function BpNum({ value, onChange, step, min, money, pct, suffix }) {
   return (
     <div className={'bp-inwrap'+(money?' money':'')+(pct?' pct':'')}>
       {money && <span className="pfx">£</span>}
-      <NumInput value={value} onChange={onChange} step={step} min={min!=null?min:0} />
+      <NumInput value={value} onChange={onChange} step={step} min={min!=null?min:0} group={!!money} />
       {pct && <span className="sfx">%</span>}
       {suffix && !pct && <span className="sfx">{suffix}</span>}
     </div>
@@ -279,6 +352,10 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
   const reached = base.reached;
   const targetPot = plan.targetPot;
+  const notReady = (bp.currentAge < 16 || bp.currentAge > 100) ? 'Add your age below'
+    : !((bp.currentBalance||0) > 0 || (bp.phases||[]).some(p => (p.annual||0) > 0)) ? 'Add your ISA or GIA savings below'
+    : !((bp.targetIncome||0) > 0) ? 'Add the income you want each year'
+    : null;
   // keep the crossover annotation inside the plot: flip sides past the midpoint
   const crossLabelPos = (function(){
     const rs = base.rows; if (!rs || !rs.length || base.crossAge==null) return 'insideTopLeft';
@@ -328,7 +405,11 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* 1) RESULT — answer → evidence → help */}
+      {/* 1) RESULT — answer → evidence → help.
+             Guarded: with a zeroed target or balance the model will happily
+             report "work-optional at 0", which is worse than saying nothing. */}
+      {notReady ? <div className="bp-result"><div className="bp-answer waiting">{notReady}</div></div> : (
+      <React.Fragment>
       <div className="bp-result">
         <div className={'bp-answer '+(reached?'reached':'missed')}>{reached
           ? 'Work-optional at '+base.crossAge
@@ -375,6 +456,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
+      </React.Fragment>)}
 
       {/* result tiles */}
       <div className="bp-results">
@@ -392,8 +474,8 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           <LineChart data={data} margin={{top:28,right:14,left:narrow?0:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?48:52} tickCount={narrow?4:6} />
-            <Tooltip content={<ChartTip/>} />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?52:52} tickCount={narrow?4:6} />
+            <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
             {reached && <ReferenceLine x={base.crossAge} stroke={C.good} strokeWidth={1.5}
               label={{ value:(narrow?'Optionality — age ':'Optionality reached — age ')+base.crossAge, position:crossLabelPos, fill:C.good, fontSize:narrow?11:12, fontWeight:700 }} />}
             {reached && base.crossBalance!=null && <ReferenceDot x={base.crossAge} y={base.crossBalance*bf(base.crossAge)} r={5} fill={C.good} stroke="none" isFront={true} />}
@@ -420,7 +502,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-assump">
         <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} step="0.1" onChange={v=>setBp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
-        <div className="bp-fld"><label>Income you want each year</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /><div className="bp-hint">In today’s money</div></div>
+        <div className="bp-fld"><label>Income you want each year</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Target optionality age</label>
           <BpNum value={bp.targetAge!=null?bp.targetAge:''} onChange={v=>setBp({targetAge: v>0?Math.round(v):null})} />
           <div className="bp-hint">{(function(){
@@ -452,7 +534,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         })}
         <button className="add-link" onClick={addPhase}>+ Add another period</button>
       </div>
-      <div className="bp-note"><b>From/To are inclusive</b> and periods <b>stack</b> where they overlap — a one-off lump sum is just a single-year period. A £0 period stops contributions.</div>
+      <Learn label="How periods work"><b>From and To are inclusive</b>, and periods <b>stack</b> where they overlap. A one-off lump sum is a single-year period; a £0 period stops contributions.</Learn>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
       <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
@@ -462,7 +544,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((bp.inflation||0)*100).toFixed(2)} step="0.1" onChange={v=>setBp({inflation:(v||0)/100})} /></div>
         <div className="bp-fld"><label>Pension access age</label><BpNum value={bp.pensionAccessAge} onChange={v=>setBp({pensionAccessAge:Math.round(v)})} /></div>
       </div>
-      <div className="bp-note">Growth is a <b>nominal</b> return; inflation is netted off to the real return that drives the projection. Withdrawals rise with inflation; contributions stay as entered.</div>
+      <Learn label="Nominal vs real">Growth is a <b>nominal</b> return; inflation is netted off to the real return that drives the projection. Withdrawals rise with inflation; contributions stay as entered.</Learn>
 
       {/* MODEL / FRAMING — drives which fields show below */}
       <div className="bp-sub">How your target works</div>
@@ -510,7 +592,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           </div>
         </div>}
       </div>
-      <div className="bp-note" style={{marginTop:8,marginBottom:14}}>{bp.drawdownFromOptionality
+      <div className="bp-note" style={{marginTop:8,marginBottom:10}}>{bp.drawdownFromOptionality
         ? <span>From optionality (age {base.crossAge!=null?base.crossAge:'—'}) the chart {bp.keepContributingAfterOptionality?<span>keeps your contributions running <b>and</b> </span>:null}draws <b>{gbpC(bp.targetIncome)}/yr</b>{bp.stopDrawAtAccess?<span> until pension access {bp.pensionAccessAge}, then stops — your pension takes over, so the pot can recover afterwards.</span>:<span> right through to age {bp.lifeExpectancy||90}, to stress-test the accessible pot on its own.</span>} {(!bp.stopDrawAtAccess && base.depletionAge) ? <span>On these figures it <b style={{color:'var(--critical)'}}>empties at age {base.depletionAge}</b>.</span> : null}</span>
         : <span>Pure accumulation: contributions keep running and nothing is withdrawn, so you can watch the pot reach the target and keep going.</span>}</div>
 
@@ -552,9 +634,9 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
           );
         })}
       </div>
-      <div className="bp-note" style={{marginTop:12}}><b>{realTerms ? 'Today’s money' : 'Future £ (nominal)'}.</b> {realTerms
-        ? 'Every figure is shown at today’s prices, with inflation stripped out.'
-        : 'Actual future pounds, including inflation — so they look bigger than their worth today.'} The toggle only relabels the units; it never changes the plan.</div>
+      <Learn label={realTerms ? 'Showing today’s money' : 'Showing future £'}>{realTerms
+        ? 'Every figure is at today’s prices, with inflation stripped out.'
+        : 'Actual future pounds, including inflation — so they look bigger than their worth today.'} The toggle only relabels the units; it never changes the plan.</Learn>
       </div>
       </details>
 
@@ -661,7 +743,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
                     <CartesianGrid stroke={C.grid} vertical={false} />
                     <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
                     <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
-                    <Tooltip content={<ChartTip/>} />
+                    <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
                     {(bp.minResidual||0)>0 && <ReferenceLine y={(bp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
                     <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
                     <Line type="monotone" dataKey="normal" name="Normal" stroke={C.pension} strokeWidth={2.4} dot={false} />
@@ -703,7 +785,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
                     <CartesianGrid stroke={C.grid} vertical={false} />
                     <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
                     <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
-                    <Tooltip content={<ChartTip/>} />
+                    <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
                     {(bp.minResidual||0)>0 && <ReferenceLine y={(bp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
                     <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
                     <Line type="monotone" dataKey="p90" name="90th pct" stroke={C.isa} strokeWidth={1.8} dot={false} strokeDasharray="5 4" />
@@ -799,6 +881,10 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
   const rowClass = (r) => { if (r.drawing) return r.projected>1?'bp-green':'bp-below'; const ratio = r.required>0 ? r.projected/r.required : 2; return ratio>=1?'bp-green':ratio>=0.9?'bp-amber':'bp-below'; };
   const rowStat = (r) => { if (r.drawing) return r.projected>1?['green','Drawing']:['below','Depleted']; const ratio = r.required>0 ? r.projected/r.required : 2; return ratio>=1?['green','Above']:ratio>=0.9?['amber','Close']:['below','Below']; };
 
+  const cpNotReady = (cp.currentAge < 16 || cp.currentAge > 100) ? 'Add your age below'
+    : !((cp.currentPension||0) > 0 || (cp.phases||[]).some(p => (p.annual||0) > 0)) ? 'Add your pension below'
+    : !((cp.goalMode === 'pot' ? cp.targetPot : cp.targetIncome) > 0) ? 'Add the income you want in retirement'
+    : null;
   const coastLabelPos = (function(){
     const rs = base.rows; if (!rs || !rs.length || base.coastAge==null) return 'insideTopLeft';
     const a0 = rs[0].age, a1 = rs[rs.length-1].age;
@@ -820,7 +906,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       onClick={()=> toggleable ? updScen(name,{enabled:!scEnabled[name]}) : null}
       title={toggleable ? 'Show / hide this scenario on the chart' : 'The primary scenario — drives the headline'}>
       {label}
-      <span className="cage">{res.coastAge!=null ? 'coast '+res.coastAge : 'no coast by '+res.objAge}</span>
+      <span className="cage">{res.coastAge!=null ? res.coastAge : 'not by '+res.objAge}</span>
     </button>
     );
   };
@@ -841,6 +927,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       </div>
 
       {/* 1) RESULT — answer → evidence → help (the dominant answer first) */}
+      {cpNotReady ? <div className="bp-result"><div className="bp-answer waiting">{cpNotReady}</div></div> : (
+      <React.Fragment>
       <div className="bp-result">
         <div className={'bp-answer '+(base.reached?'reached':'missed')}>{
           base.coasting ? 'Coasting now'
@@ -869,6 +957,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
+      </React.Fragment>)}
 
       {/* status tiles */}
       <div className="bp-results">
@@ -886,8 +975,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           <LineChart data={data} margin={{top:28,right:14,left:narrow?0:8,bottom:2}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} padding={{left:4,right:8}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?42:52} tickCount={narrow?4:6} />
-            <Tooltip content={<ChartTip/>} />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?52:52} tickCount={narrow?4:6} />
+            <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
             {base.reached && !base.coasting && <ReferenceLine x={base.coastAge} stroke={C.good} strokeWidth={1.5}
               label={{ value:'Pension self-funding — age '+base.coastAge, position:coastLabelPos, fill:C.good, fontSize:narrow?11:12, fontWeight:700 }} />}
             {base.reached && !base.coasting && base.coastBalance!=null && <ReferenceDot x={base.coastAge} y={base.coastBalance*bf(base.coastAge)} r={5} fill={C.good} stroke="none" isFront={true} />}
@@ -906,7 +995,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
           {scEnabled.optimistic && <span><span className="sw" style={{background:C.isa}}></span>Optimistic</span>}
           <span className="terms-tag">{realTerms?'today’s money':'future £ (nominal)'}</span>
         </div>
-        <div className="bp-note" style={{marginTop:6}}>From your retirement/target age ({base.objAge}) contributions stop and the pension pays out <b>{gbpC(base.drawIncome)}/yr</b>{cp.goalMode==='income' && cp.statePensionAmount>0 ? <span> (dropping to {gbpC(Math.max(0, base.drawIncome-(cp.statePensionAmount||0)))}/yr once the State Pension starts at {cp.statePensionAge})</span> : null}, shown in the Withdrawal column below. {base.coastDepletionAge ? <span>On these assumptions the pot <b style={{color:'var(--critical)'}}>runs out at age {base.coastDepletionAge}</b>.</span> : <span>Growth still outpaces withdrawals here, so the pot keeps rising to age {base.rows.length?base.rows[base.rows.length-1].age:70} — a sustainable drawdown.</span>}</div>
+        <div className="bp-note" style={{marginTop:6}}>From {base.objAge} the pension pays out <b>{gbpC(base.drawIncome)}/yr</b>. {base.coastDepletionAge ? <span>On these assumptions it <b style={{color:'var(--critical)'}}>runs out at age {base.coastDepletionAge}</b>.</span> : <span>Growth still outpaces withdrawals, so the pot keeps rising to {base.rows.length?base.rows[base.rows.length-1].age:70}.</span>}</div>
+      {cp.goalMode==='income' && cp.statePensionAmount>0 && <Learn label="Once the State Pension starts">Your pension draw drops to {gbpC(Math.max(0, base.drawIncome-(cp.statePensionAmount||0)))}/yr from age {cp.statePensionAge}, because the State Pension covers the rest. The Withdrawal column in the year-by-year table shows the full draw until then.</Learn>}
       </div>
 
       {base.coasting && <div className="bp-note" style={{marginTop:12}}>
@@ -918,9 +1008,9 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setCp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>Pension balance today</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
         {cp.goalMode==='pot'
-          ? <div className="bp-fld"><label>Target pension pot</label><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /><div className="bp-hint">In today’s money</div></div>
-          : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">In today’s money, State Pension included</div></div>}
-        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /><div className="bp-hint">57 is the earliest from 2028</div></div>
+          ? <div className="bp-fld"><label>Target pension pot</label><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
+          : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">State Pension included</div></div>}
+        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
       </div>
 
       {/* CONTRIBUTION PHASES */}
@@ -942,7 +1032,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         })}
         <button className="add-link" onClick={addPhase}>+ Add another period</button>
       </div>
-      <div className="bp-note"><b>From/To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Employee plus employer. Shown as entered, not inflation-adjusted.</div>
+      <Learn label="How periods work"><b>From and To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Enter employee plus employer. Shown as entered, not inflation-adjusted.</Learn>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
       <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
@@ -951,7 +1041,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
         <div className="bp-fld"><label>Inflation</label><BpNum pct value={+(cp.inflation*100).toFixed(2)} step="0.1" onChange={v=>setCp({inflation:(v||0)/100})} /></div>
       </div>
-      <div className="bp-note">Required coast balance = target ÷ (1+real growth)^(years to {base.objAge}) — the pot that would reach your target with <b>no more contributions</b>.</div>
+      <Learn label="How the coast balance is worked out">Required coast balance = target ÷ (1 + real growth)<sup>years to {base.objAge}</sup> — the pot that would reach your target with <b>no more contributions</b>.</Learn>
 
       {/* OBJECTIVE */}
       <div className="bp-sub">How your target works</div>
@@ -1004,9 +1094,9 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
         })}
       </div>
       <div className="bp-note">Scenarios differ by market assumptions <b>and</b> the safe withdrawal rate (return / inflation / draw): <b>Optimistic</b> 9% / 2% / 4.0% · <b>Base</b> {(cp.growth*100).toFixed(0)}% / {(cp.inflation*100).toFixed(1)}% / {(cp.withdrawalRate*100).toFixed(1)}% · <b>Conservative</b> 5% / 3% / 3.0%.</div>
-      <div className="bp-note" style={{marginTop:10}}><b>{realTerms ? 'Today’s money' : 'Future £ (nominal)'}.</b> {realTerms
-        ? 'Every figure is shown at today’s prices, with inflation stripped out.'
-        : 'Actual future pounds, including inflation — so they look bigger than their worth today.'} The toggle only relabels the units; it never changes the plan.</div>
+      <Learn label={realTerms ? 'Showing today’s money' : 'Showing future £'}>{realTerms
+        ? 'Every figure is at today’s prices, with inflation stripped out.'
+        : 'Actual future pounds, including inflation — so they look bigger than their worth today.'} The toggle only relabels the units; it never changes the plan.</Learn>
       </div>
       </details>
 
@@ -1110,7 +1200,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
                     <CartesianGrid stroke={C.grid} vertical={false} />
                     <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
                     <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
-                    <Tooltip content={<ChartTip/>} />
+                    <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
                     {(cp.minResidual||0)>0 && <ReferenceLine y={(cp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
                     <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
                     <Line type="monotone" dataKey="normal" name="Normal" stroke={C.pension} strokeWidth={2.4} dot={false} />
@@ -1152,7 +1242,7 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
                     <CartesianGrid stroke={C.grid} vertical={false} />
                     <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?22:6} interval="preserveStartEnd" />
                     <YAxis stroke={C.axis} tick={{fontSize:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={52} />
-                    <Tooltip content={<ChartTip/>} />
+                    <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
                     {(cp.minResidual||0)>0 && <ReferenceLine y={(cp.minResidual||0)*accessNf} stroke={C.axis} strokeDasharray="4 3" label={{value:'Buffer', position:'insideTopLeft', fill:C.axis, fontSize:10}} />}
                     <ReferenceLine y={0} stroke={C.red} strokeOpacity={0.55} />
                     <Line type="monotone" dataKey="p90" name="90th pct" stroke={C.isa} strokeWidth={1.8} dot={false} strokeDasharray="5 4" />
@@ -1837,85 +1927,93 @@ function App() {
 
       {/* ===== STRAPLINE — one line; the three cards below are the hero ===== */}
       <section className="hero">
-        <h2>Know when work becomes optional — and whether your bridge and pension are funded.</h2>
+        <h2>Know when work becomes optional.</h2>
       </section>
 
       <div className="layout">
       <main className="main">
 
       {/* ===== THE THREE HEADLINE CARDS — this is the hero =====
-           One question each, answered by a number: when can I stop needing to
-           work · is my bridge funded · is my pension funded. Copy stays minimal
-           on purpose; the detail lives in the planners below. */}
+           One question each, answered by a number. If the inputs a card needs
+           are missing, it asks for them instead of computing nonsense: with a
+           zeroed target income the model happily reports "work-optional now". */}
       {(function(){
         var cb = coast.base, bb = bridge.base;
         var cAge = bridgeInputs.currentAge, access = bridgeInputs.pensionAccessAge;
 
+        var ageOk    = cAge >= 16 && cAge <= 100;
+        var wantsInc = (bridgeInputs.targetIncome || 0) > 0;
+        var hasAcc   = (bridgeInputs.currentBalance || 0) > 0
+                       || (bridgeInputs.phases || []).some(function(p){ return (p.annual||0) > 0; });
+        var hasPen   = (coastInputs.currentPension || 0) > 0
+                       || (coastInputs.phases || []).some(function(p){ return (p.annual||0) > 0; });
+        var pensionTarget = coastInputs.goalMode === 'pot'
+                            ? (coastInputs.targetPot || 0) > 0
+                            : (coastInputs.targetIncome || 0) > 0;
+
+        var needAge = !ageOk ? 'Add your age to calculate this' : null;
+        var accPrompt = needAge || (!wantsInc ? 'Add the income you want each year'
+                                  : !hasAcc  ? 'Add your ISA or GIA savings' : null);
+        var bridgePrompt = needAge || (!hasAcc ? 'Add your ISA or GIA savings'
+                                     : !wantsInc ? 'Add the income you want each year' : null);
+        var penPrompt = needAge || (!hasPen ? 'Add your pension to calculate this'
+                                  : !pensionTarget ? 'Add the income you want in retirement' : null);
+
         /* Reaching optionality only AT pension access is not an early exit — it is just
            the pension unlocking. Treat that as "no bridge", not as a green result. */
-        var early = bb.crossAge != null && bb.crossAge < access;
+        var early = !accPrompt && bb.crossAge != null && bb.crossAge < access;
 
         /* 1 — When can I stop needing to work? */
         var one;
-        if (bb.crossAge == null) {
-          one = { k:'Work optional', dot:'warn', vcls:'', v:'Not yet',
-                  sub:'Not reachable before pension access '+access+' on this plan' };
-        } else if (!early) {
-          one = { k:'Work optional', dot:'warn', vcls:'', v:'Age '+bb.crossAge,
-                  sub:'Only when your pension unlocks — no earlier' };
-        } else {
-          one = { k:'Work optional', dot:'good', vcls:'good', v:'Age '+bb.crossAge,
-                  sub: bb.crossAge<=cAge+0.01 ? 'Reached — you could stop now' : awayStr(bb.crossAge-cAge) };
-        }
+        if (accPrompt)          one = { k:'Work optional', dot:'', prompt:accPrompt };
+        else if (bb.crossAge == null)
+          one = { k:'Work optional', dot:'warn', v:'Not yet', sub:'Not reachable before pension access ' + access };
+        else if (!early)
+          one = { k:'Work optional', dot:'warn', v:'Age ' + bb.crossAge, sub:'Only when your pension unlocks' };
+        else
+          one = { k:'Work optional', dot:'good', v:'Age ' + bb.crossAge,
+                  sub: bb.crossAge <= cAge + 0.01 ? 'You could stop now' : awayStr(bb.crossAge - cAge) };
 
         /* 2 — Is my bridge funded? */
         var lasts = bb.depletionAge == null || bb.depletionAge >= access;
         var two;
-        if (!early) {
-          two = { k:'Bridge fund', dot:'warn', vcls:'',
-                  v: gbpC(Math.max(0, bridge.targetPot - bridgeInputs.currentBalance))+' short',
-                  sub:'of the pot that would let you stop before '+access };
-        } else if (!lasts) {
-          var shortYrs = access - bb.depletionAge;
-          two = { k:'Bridge fund', dot:'bad', vcls:'bad', v:'Runs dry at '+bb.depletionAge,
-                  sub: shortYrs+' year'+(shortYrs===1?'':'s')+' short of pension access '+access };
-        } else {
-          two = { k:'Bridge fund', dot:'good', vcls:'good', v:'Funded',
-                  sub:'Covers you to pension access '+access };
-        }
+        if (bridgePrompt) two = { k:'Bridge fund', dot:'', prompt:bridgePrompt };
+        else if (!early) two = { k:'Bridge fund', dot:'warn',
+                                 v: gbpC(Math.max(0, bridge.targetPot - bridgeInputs.currentBalance)) + ' short',
+                                 sub:'of the pot that lets you stop before ' + access };
+        else if (!lasts) two = { k:'Bridge fund', dot:'bad', v:'Runs dry at ' + bb.depletionAge,
+                                 sub:(access - bb.depletionAge) + ' year' + ((access - bb.depletionAge) === 1 ? '' : 's')
+                                     + ' short of pension access ' + access };
+        else             two = { k:'Bridge fund', dot:'good', v:'Funded',
+                                 sub:'Covers you to pension access ' + access };
 
         /* 3 — Is my pension funded? */
         var three;
-        if (cb.coasting) {
-          three = { k:'Pension', dot:'good', vcls:'good', v:'Funded',
-                    sub:'Self-funding already — more contributions optional' };
-        } else if (cb.reached) {
-          three = { k:'Pension', dot:'good', vcls:'good', v:'Age '+cb.coastAge,
-                    sub:'Stop contributing then — '+cb.yearsUntilCoast+' more year'+(cb.yearsUntilCoast===1?'':'s') };
-        } else {
-          three = { k:'Pension', dot:'warn', vcls:'',
-                    v: gbpC(Math.max(0, coast.targetPot - cb.potAtObj))+' short',
-                    sub: gbpC(cb.potAtObj)+' projected vs '+gbpC(coast.targetPot)+' needed by '+cb.objAge };
-        }
+        if (penPrompt)        three = { k:'Pension', dot:'', prompt:penPrompt };
+        else if (cb.coasting) three = { k:'Pension', dot:'good', v:'Funded',
+                                        sub:'No more contributions needed' };
+        else if (cb.reached)  three = { k:'Pension', dot:'good', v:'Age ' + cb.coastAge,
+                                        sub:'Stop contributing then — ' + cb.yearsUntilCoast
+                                            + ' more year' + (cb.yearsUntilCoast === 1 ? '' : 's') };
+        else                  three = { k:'Pension', dot:'warn',
+                                        v: gbpC(Math.max(0, coast.targetPot - cb.potAtObj)) + ' short',
+                                        sub:'Projected ' + gbpC(cb.potAtObj) + ' by ' + cb.objAge };
 
         return (
           <React.Fragment>
             <div className="hcards">
-              {[one, two, three].map(function(c,i){ return (
-                <div className="hcard" key={i}>
-                  <div className="hc-k"><span className={'hc-dot '+c.dot}></span>{c.k}</div>
-                  <div className={'hc-v '+c.vcls}>{c.v}</div>
-                  <div className="hc-sub">{c.sub}</div>
-                </div>
-              ); })}
+              {[one, two, three].map(function(c,i){
+                return <HCard key={i} {...c} jumpTo={i === 2 ? 'planner-pension' : 'planner-bridge'} />;
+              })}
             </div>
             <div className="hc-foot">Bridge covers you before pension access {access}; pension takes over after. Today’s money.</div>
           </React.Fragment>
         );
       })()}
 
-      {/* ===== THE TWO HEADLINE OPTIONALITY TOOLS (pension first, then optionality) ===== */}
+      <div id="planner-pension"></div>
       <CoastPlanner cp={coastInputs} setCp={setCp} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      <div id="planner-bridge"></div>
       <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
       {/* ===== OUTPUTS ===== */}
@@ -1929,8 +2027,8 @@ function App() {
           <AreaChart data={cwData} margin={{top:24,right:12,left:narrow?0:4,bottom:0}}>
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?48:46} tickCount={narrow?4:6} />
-            <Tooltip content={<ChartTip/>} />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?52:46} tickCount={narrow?4:6} />
+            <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
             <ReferenceLine x={combined.retireAge} stroke={C.good} strokeWidth={1.5} label={{value:'Work optional — age '+combined.retireAge, position:'insideTopLeft', fill:C.good, fontSize:narrow?11:12, fontWeight:700}} />
             <ReferenceLine x={combined.pensionAccessAge} stroke={C.axis} strokeDasharray="3 3" label={{value:'Pension access '+combined.pensionAccessAge, position:'insideBottomRight', fill:C.axis, fontSize:narrow?10:11}} />
             <Area type="monotone" dataKey="accessible" name="ISA / GIA" stackId="1" stroke={C.isa} fill={C.isa} fillOpacity={0.5} />
@@ -1952,8 +2050,8 @@ function App() {
           <ComposedChart data={cwData} margin={{top:6,right:12,left:narrow?0:4,bottom:0}} stackOffset="sign">
             <CartesianGrid stroke={C.grid} vertical={false} />
             <XAxis dataKey="age" stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={{stroke:C.baseline}} minTickGap={narrow?30:8} interval="preserveStartEnd" />
-            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?42:46} tickCount={narrow?4:6} />
-            <Tooltip content={<ChartTip/>} />
+            <YAxis stroke={C.axis} tick={{fontSize:narrow?10:11,fill:C.axis}} tickLine={false} axisLine={false} tickFormatter={gbpC} width={narrow?52:46} tickCount={narrow?4:6} />
+            <Tooltip content={<ChartTip/>} trigger={narrow?'click':'hover'} />
             <ReferenceLine y={0} stroke={C.baseline} />
             <Bar dataKey="pensionIn" name="Into pension" fill={C.pension} maxBarSize={16} stackId="cf" />
             <Bar dataKey="accessibleIn" name="Into ISA/GIA" fill={C.isa} maxBarSize={16} stackId="cf" />
