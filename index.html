@@ -2993,10 +2993,15 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
     var pay = o.payment;
     var balA = o.balance, balB = o.balance;     // A = overpay, B = invest
     var invA = 0, invB = 0, contribA = 0, contribB = 0;
-    var intA = 0, intB = 0, extra = 0, capped = 0;
+    var intA = 0, intB = 0, extra = 0, capped = 0, spareCommitted = 0, freedA = 0, freedB = 0;
     var allowance = Infinity;
     var payoffA = null, payoffB = null;
-    var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB }];
+    // gainA / gainB = what the spare cash has EARNED so far on each path:
+    // interest avoided (plus growth on anything the allowance turned away) vs
+    // investment growth. Both start at zero, and gainB − gainA is exactly the
+    // net-wealth gap — cash conservation guarantees it.
+    var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB,
+                  gainA: 0, gainB: 0 }];
     for (var m = 0; m < months; m++) {
       var rate = (o.rateChangeMonth != null && m >= o.rateChangeMonth) ? o.rateChangeTo : o.rate;
       var i = rate / 12;
@@ -3007,7 +3012,12 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
         pay = mtgPmt(balB, i, Math.max(1, o.termMonths - m));
       // penalty-free allowance resets every 12 months, on the balance then owed
       if (m % 12 === 0) allowance = (o.limitPct > 0) ? o.limitPct * balA : Infinity;
-      var spare = o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0);
+      // Both paths commit the SAME spare cash, and they stop at the same moment:
+      // once the overpaid mortgage is gone there is nothing left to overpay, so
+      // the investing path stops paying in there too. Otherwise the two columns
+      // show different amounts of committed cash and stop being comparable.
+      var spare = (payoffA == null) ? (o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0)) : 0;
+      spareCommitted += spare;
 
       var acA = balA * i, acB = balB * i;
       balA += acA; balB += acB; intA += acA; intB += acB;
@@ -3020,6 +3030,12 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
       var op = Math.min(want, allowance);
       balA -= op; allowance -= op; extra += op; capped += (want - op);
 
+      // The freed contractual payment still has to be accounted for: once the
+      // overpaid mortgage is gone, path A no longer owes it while path B is
+      // still handing it to the lender (which builds equity). Investing it on A
+      // is what keeps the two paths spending identical cash — it is shown as its
+      // own line, not folded into "spare cash committed".
+      freedA += (pay - payA); freedB += (pay - payB);
       var intoA = (spare - op) + (pay - payA);   // cap overflow + the freed payment
       var intoB = spare + (pay - payB);
       invA = invA * (1 + rMonthly) + intoA; contribA += intoA;
@@ -3028,12 +3044,14 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
       if (balA <= 0.005) { balA = 0; if (payoffA == null) payoffA = m + 1; }
       if (balB <= 0.005) { balB = 0; if (payoffB == null) payoffB = m + 1; }
       rows.push({ m: m + 1, balA: balA, balB: balB, invA: invA, invB: invB,
-                  netA: invA - balA, netB: invB - balB });
+                  netA: invA - balA, netB: invB - balB,
+                  gainA: (intB - intA) + (invA - contribA), gainB: invB - contribB });
       if (o.stopWhenClear && balA === 0 && balB === 0) break;
     }
     return { rows: rows, balA: balA, balB: balB, invA: invA, invB: invB,
              contribA: contribA, contribB: contribB, intA: intA, intB: intB,
-             extra: extra, capped: capped, payoffA: payoffA, payoffB: payoffB };
+             extra: extra, capped: capped, payoffA: payoffA, payoffB: payoffB,
+             spareCommitted: spareCommitted, freedA: freedA, freedB: freedB };
   }
 
   function mortgageHorizonYears(mp) {
@@ -3150,14 +3168,16 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
     var series = [];
     for (var y = 0; y * 12 < run.rows.length; y++) {
       var r0 = run.rows[y * 12];
-      series.push({ year: y, overpay: round2(r0.netA), invest: round2(r0.netB),
+      series.push({ year: y, saved: round2(r0.gainA), growth: round2(r0.gainB),
+                    overpay: round2(r0.netA), invest: round2(r0.netB),
                     debtOverpay: round2(r0.balA), debtInvest: round2(r0.balB) });
     }
     var lastRow = run.rows[run.rows.length - 1];
     if (series.length === 0 || series[series.length - 1].year * 12 !== lastRow.m) {
-      series.push({ year: Math.round((lastRow.m / 12) * 100) / 100, overpay: round2(lastRow.netA),
-                    invest: round2(lastRow.netB), debtOverpay: round2(lastRow.balA),
-                    debtInvest: round2(lastRow.balB) });
+      series.push({ year: Math.round((lastRow.m / 12) * 100) / 100,
+                    saved: round2(lastRow.gainA), growth: round2(lastRow.gainB),
+                    overpay: round2(lastRow.netA), invest: round2(lastRow.netB),
+                    debtOverpay: round2(lastRow.balA), debtInvest: round2(lastRow.balB) });
     }
 
     return {
@@ -3168,16 +3188,21 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
       paymentTooLow: o.paymentTooLow,
       spareAnnualTotal: round2(o.spareMonthly * 12 + o.spareAnnual),
       guaranteedReturn: o.rate,
+      spareCommitted: round2(run.spareCommitted),
+      spareStopMonth: (run.payoffA != null && run.payoffA < H) ? run.payoffA : null,
       overpay: {
         balance: round2(run.balA), interest: round2(run.intA), extra: round2(run.extra),
         investments: round2(run.invA), contributions: round2(run.contribA),
+        freedInvested: round2(run.freedA),
         net: round2(lastRow.netA), capped: round2(run.capped)
       },
       invest: {
         balance: round2(run.balB), interest: round2(run.intB),
         investments: round2(run.invB), contributions: round2(run.contribB),
+        freedInvested: round2(run.freedB),
         growthAmount: round2(run.invB - run.contribB), net: round2(lastRow.netB)
       },
+      overpayGain: round2(lastRow.gainA), investGain: round2(lastRow.gainB),
       diff: round2(diff),
       winner: diff > 0 ? 'invest' : (diff < 0 ? 'overpay' : 'tie'),
       crossover: crossM, crossings: crossings, firstLeader: firstLeader,
@@ -4828,7 +4853,7 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
       <div className="bp-topline">
         <div>
           <h3 className="bp-title">Mortgage or invest?</h3>
-          <div className="mo-strap">Same spare cash, two uses — compared as net wealth (investments minus what you still owe).</div>
+          <div className="mo-strap">Same spare cash, two uses — what it saves you in mortgage interest against what it might earn you invested.</div>
         </div>
         <button className="btn subtle mo-hide" onClick={onClose}>✕ Close</button>
       </div>
@@ -4883,11 +4908,13 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
         <Learn label="How this is worked out">
           <b>Monthly, in cash (nominal) terms</b> — a mortgage is a cash debt, so the whole comparison runs in
           pounds of the day; the headline also shows the gap in today’s money. Both paths get the <b>same</b> cash
-          each month: your payment plus the spare. Overpaying <b>shortens the term</b> rather than cutting the
-          payment, and once the overpaid mortgage is gone the freed-up payment is invested — otherwise overpaying
-          would look worse simply because its money left the comparison. Spare cash above the annual allowance is
-          invested instead. Break-even is solved on the full model, so the allowance, the timing and that
-          reinvestment are all in it — it isn’t your mortgage rate parroted back.
+          each month: your payment plus the spare, and they <b>stop paying in at the same moment</b> — when the
+          overpaid mortgage clears there is nothing left to overpay, so the investing path stops too. Overpaying
+          <b> shortens the term</b> rather than cutting the payment. After that point the freed-up payment is
+          invested on the overpaying side, because the investing side is still handing the same money to its
+          lender, which builds equity — it is shown as its own line rather than as spare cash. Spare cash above the
+          annual allowance is invested instead of being lost. Break-even is solved on the full model, so the
+          allowance, the timing and that reinvestment are all in it — it isn’t your mortgage rate parroted back.
         </Learn>
         <div className="assumptions" style={{ marginTop: 10 }}>
           <b>What this doesn’t model.</b> Early repayment charges — check your lender’s before overpaying a
@@ -4933,7 +4960,12 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
             effect of mortgage interest compounding monthly. You’re assuming {pc(plan.growth)}.</div>
         </div>
 
-        {/* ---- 5) THE CHART — net wealth, so the two paths are comparable ---- */}
+        {/* ---- 5) THE CHART — the two gains, both starting at zero.
+             It used to plot net wealth, which starts at minus the mortgage:
+             an axis running from −£200k made the £3k that the decision is
+             actually worth invisible. The GAP between these two lines is the
+             same number the headline gives — cash conservation makes
+             (growth − interest saved) identical to the net-wealth gap. */}
         <div className="bp-chart">
           {ResponsiveContainer ? (
           <ResponsiveContainer width="100%" height={narrow ? 230 : 290}>
@@ -4945,23 +4977,21 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
               <YAxis stroke={C.axis} tick={{ fontSize: narrow ? 10 : 11, fill: C.axis }} tickLine={false}
                 axisLine={false} tickFormatter={gbpC} width={narrow ? 54 : 56} tickCount={narrow ? 4 : 6} />
               <Tooltip content={<ChartTip lbl="Year" />} trigger={narrow ? 'click' : 'hover'} />
-              <ReferenceLine y={0} stroke={C.baseline} strokeWidth={1.5}
-                label={{ value: 'Debt cleared', position: 'insideBottomLeft', fill: C.axis, fontSize: narrow ? 10 : 11 }} />
               {plan.crossover && <ReferenceLine x={Math.round((plan.crossover.month / 12) * 10) / 10} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
                 label={{ value: (plan.crossover.winner === 'invest' ? 'Investing ahead' : 'Overpaying ahead') + ' — year ' + Math.round(plan.crossover.month / 12),
                          position: 'insideTopLeft', fill: C.good, fontSize: narrow ? 10 : 11, fontWeight: 700 }} />}
-              <Line type="monotone" dataKey="overpay" name="Overpay the mortgage" stroke={C.pension} strokeWidth={2.6} dot={false} />
-              <Line type="monotone" dataKey="invest" name="Invest the spare cash" stroke={C.isa} strokeWidth={2.6} dot={false} />
+              <Line type="monotone" dataKey="saved" name="Interest saved by overpaying" stroke={C.pension} strokeWidth={2.6} dot={false} />
+              <Line type="monotone" dataKey="growth" name="Investment growth" stroke={C.isa} strokeWidth={2.6} dot={false} />
             </LineChart>
           </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
           <div className="legend-row" style={{ marginBottom: 2 }}>
-            <span><span className="sw" style={{ background: C.pension }}></span>Overpay the mortgage</span>
-            <span><span className="sw" style={{ background: C.isa }}></span>Invest the spare cash</span>
-            <span className="terms-tag">net wealth · cash terms</span>
+            <span><span className="sw" style={{ background: C.pension }}></span>Interest saved by overpaying</span>
+            <span><span className="sw" style={{ background: C.isa }}></span>Investment growth</span>
+            <span className="terms-tag">running total · cash terms</span>
           </div>
-          <div className="bp-note" style={{ marginTop: 2 }}>Net wealth is investments <b>minus</b> the mortgage still
-            owed, so the two paths are directly comparable — an investment balance set against "interest saved"
-            is not. Both lines start at minus your {gbpC(mp.balance)} mortgage.
+          <div className="bp-note" style={{ marginTop: 2 }}>Both start at zero and show what your spare cash has
+            earned you by that year — interest you no longer pay on one path, growth on the other. <b>The gap
+            between the lines is the answer</b>: it is exactly the {gbp(round100(plan.diff))} in the headline.
             {plan.crossover ? ' They cross in year ' + Math.round(plan.crossover.month / 12) + ': '
               + (plan.crossover.winner === 'invest'
                   ? 'investing pulls ahead from there.'
@@ -4992,8 +5022,7 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
              chart compare. */}
         {(function () {
           var sideGrowth = Math.max(0, plan.overpay.investments - plan.overpay.contributions);
-          var overpayGain = plan.interestSaved + sideGrowth;
-          var investGain = plan.invest.growthAmount;
+          var overpayGain = plan.overpayGain, investGain = plan.investGain;
           var reconciles = Math.abs((investGain - overpayGain) - plan.diff) < 50;
           return (
         <React.Fragment>
@@ -5002,8 +5031,9 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           <div className="mo-col">
             <h4><span className="cd" style={{ background: C.pension }}></span>Overpay the mortgage</h4>
             <div className="net">{gbp(round100(overpayGain))} <span className="nl">{sideGrowth > 0 ? 'interest saved + growth' : 'interest saved'}</span></div>
-            <MoRow k="Extra payments made" v={gbpC(plan.overpay.extra)} />
-            {sideGrowth > 0 && <MoRow k="Growth on the rest (above the allowance, or once the mortgage is gone)" v={gbpC(sideGrowth)} />}
+            <MoRow k="Spare cash committed" v={gbpC(plan.spareCommitted)} />
+            {plan.spareCommitted - plan.overpay.extra > 1 && <MoRow k="Of that, overpaid (the rest was above the allowance)" v={gbpC(plan.overpay.extra)} />}
+            {plan.overpay.freedInvested > 0 && <MoRow k="Freed-up payments invested once it was cleared" v={gbpC(plan.overpay.freedInvested)} />}
             <MoRow k="Mortgage still owed" v={gbpC(plan.overpay.balance)} />
             <MoRow k="Net position" v={sgn(plan.overpay.net)} />
             <MoRow k="Effective return" v={pc(plan.guaranteedReturn) + ' guaranteed'} strong />
@@ -5011,15 +5041,19 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           <div className="mo-col">
             <h4><span className="cd" style={{ background: C.isa }}></span>Invest the spare cash</h4>
             <div className="net">{gbp(round100(investGain))} <span className="nl">investment growth</span></div>
-            <MoRow k="Total contributions" v={gbpC(plan.invest.contributions)} />
+            <MoRow k="Spare cash committed" v={gbpC(plan.spareCommitted)} />
+            {plan.invest.freedInvested > 0 && <MoRow k="Freed-up payments invested once it was cleared" v={gbpC(plan.invest.freedInvested)} />}
             <MoRow k="Investment value" v={gbpC(plan.invest.investments)} />
             <MoRow k="Mortgage still owed" v={gbpC(plan.invest.balance)} />
             <MoRow k="Net position" v={sgn(plan.invest.net)} />
             <MoRow k={'Assumed return'} v={pc(plan.growth) + ' — not guaranteed'} strong />
           </div>
         </div>
-        <div className="mo-key">The same {gbp(plan.spareAnnualTotal)} a year saved you <b>{gbp(round100(overpayGain))}</b> of
-          interest on one path and earned you <b>{gbp(round100(investGain))}</b> of growth on the other{reconciles
+        <div className="mo-key">Both paths commit the <b>same {gbp(plan.spareCommitted)}</b>{plan.spareStopMonth
+            ? <span> — paying in stops on both sides in year {Math.max(1, Math.round(plan.spareStopMonth / 12))}, when the
+              overpaid mortgage is cleared and there is nothing left to overpay</span>
+            : <span></span>}. It saved <b>{gbp(round100(overpayGain))}</b> of interest on one path and earned
+          {' '}<b>{gbp(round100(investGain))}</b> of growth on the other{reconciles
             ? <span> — a difference of <b>{gbp(round100(plan.diff))}</b>, which is the figure at the top</span>
             : <span></span>}. Net position is what you'd be worth if you settled up today: investments minus the
           mortgage still owed. It's negative on both paths while a mortgage remains, which is why the comparison

@@ -374,11 +374,28 @@ massert(mr.series.length === 11 && mr.series[10].year === 10, 'one chart point a
 })();
 
 // once the overpaid mortgage is gone, the freed payment is invested (or overpaying
-// would look bad purely because its money vanished from the comparison)
+// would look bad purely because its money vanished from the comparison) — and
+// BOTH paths stop committing spare cash at that same moment
 (function(){
   const long = Engine.mortgagePlan(MP({ spare:1000, spareFreq:'monthly', horizonMode:'custom', horizonYears:25 }));
   massert(long.payoffMonthsOverpay < long.months, 'the overpaid mortgage clears inside this horizon');
   massert(long.overpay.investments > 0 && long.overpay.balance === 0, 'after payoff the overpay path holds investments, not debt');
+  massert(long.spareStopMonth === long.payoffMonthsOverpay, 'paying in stops when the overpaid mortgage clears');
+  massert(Math.abs(long.spareCommitted - 1000*long.payoffMonthsOverpay) < 1, 'spare committed = the monthly amount up to that month');
+  massert(long.overpay.freedInvested > 0, 'the freed payment is invested on the overpaying path');
+})();
+
+// the two paths always commit the SAME spare cash, and the two gains always
+// reconcile with the headline gap (cash conservation)
+(function(){
+  [{}, {horizonMode:'term'}, {spare:1500,spareFreq:'monthly',horizonMode:'term'},
+   {spare:500,spareFreq:'monthly',horizonMode:'5'}, {rate:0.08,horizonMode:'term'},
+   {rateChangeTo:0.07,rateChangeAfterYears:3,horizonMode:'term'}].forEach(function(patch,i){
+    const r = Engine.mortgagePlan(MP(patch));
+    massert(Math.abs((r.investGain - r.overpayGain) - r.diff) < 0.05, 'case '+i+': growth − interest saved = the net-wealth gap');
+    massert(Math.abs(r.overpay.extra + r.overpay.capped + (r.spareCommitted - r.overpay.extra - r.overpay.capped)) - r.spareCommitted < 0.05, 'case '+i+': spare cash is fully accounted for');
+    massert(r.series[0].saved === 0 && r.series[0].growth === 0, 'case '+i+': both chart lines start at zero');
+  });
 })();
 
 // a future rate rise makes overpaying more valuable -> a higher break-even

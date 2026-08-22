@@ -1820,10 +1820,15 @@
     var pay = o.payment;
     var balA = o.balance, balB = o.balance;     // A = overpay, B = invest
     var invA = 0, invB = 0, contribA = 0, contribB = 0;
-    var intA = 0, intB = 0, extra = 0, capped = 0;
+    var intA = 0, intB = 0, extra = 0, capped = 0, spareCommitted = 0, freedA = 0, freedB = 0;
     var allowance = Infinity;
     var payoffA = null, payoffB = null;
-    var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB }];
+    // gainA / gainB = what the spare cash has EARNED so far on each path:
+    // interest avoided (plus growth on anything the allowance turned away) vs
+    // investment growth. Both start at zero, and gainB − gainA is exactly the
+    // net-wealth gap — cash conservation guarantees it.
+    var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB,
+                  gainA: 0, gainB: 0 }];
     for (var m = 0; m < months; m++) {
       var rate = (o.rateChangeMonth != null && m >= o.rateChangeMonth) ? o.rateChangeTo : o.rate;
       var i = rate / 12;
@@ -1834,7 +1839,12 @@
         pay = mtgPmt(balB, i, Math.max(1, o.termMonths - m));
       // penalty-free allowance resets every 12 months, on the balance then owed
       if (m % 12 === 0) allowance = (o.limitPct > 0) ? o.limitPct * balA : Infinity;
-      var spare = o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0);
+      // Both paths commit the SAME spare cash, and they stop at the same moment:
+      // once the overpaid mortgage is gone there is nothing left to overpay, so
+      // the investing path stops paying in there too. Otherwise the two columns
+      // show different amounts of committed cash and stop being comparable.
+      var spare = (payoffA == null) ? (o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0)) : 0;
+      spareCommitted += spare;
 
       var acA = balA * i, acB = balB * i;
       balA += acA; balB += acB; intA += acA; intB += acB;
@@ -1847,6 +1857,12 @@
       var op = Math.min(want, allowance);
       balA -= op; allowance -= op; extra += op; capped += (want - op);
 
+      // The freed contractual payment still has to be accounted for: once the
+      // overpaid mortgage is gone, path A no longer owes it while path B is
+      // still handing it to the lender (which builds equity). Investing it on A
+      // is what keeps the two paths spending identical cash — it is shown as its
+      // own line, not folded into "spare cash committed".
+      freedA += (pay - payA); freedB += (pay - payB);
       var intoA = (spare - op) + (pay - payA);   // cap overflow + the freed payment
       var intoB = spare + (pay - payB);
       invA = invA * (1 + rMonthly) + intoA; contribA += intoA;
@@ -1855,12 +1871,14 @@
       if (balA <= 0.005) { balA = 0; if (payoffA == null) payoffA = m + 1; }
       if (balB <= 0.005) { balB = 0; if (payoffB == null) payoffB = m + 1; }
       rows.push({ m: m + 1, balA: balA, balB: balB, invA: invA, invB: invB,
-                  netA: invA - balA, netB: invB - balB });
+                  netA: invA - balA, netB: invB - balB,
+                  gainA: (intB - intA) + (invA - contribA), gainB: invB - contribB });
       if (o.stopWhenClear && balA === 0 && balB === 0) break;
     }
     return { rows: rows, balA: balA, balB: balB, invA: invA, invB: invB,
              contribA: contribA, contribB: contribB, intA: intA, intB: intB,
-             extra: extra, capped: capped, payoffA: payoffA, payoffB: payoffB };
+             extra: extra, capped: capped, payoffA: payoffA, payoffB: payoffB,
+             spareCommitted: spareCommitted, freedA: freedA, freedB: freedB };
   }
 
   function mortgageHorizonYears(mp) {
@@ -1977,14 +1995,16 @@
     var series = [];
     for (var y = 0; y * 12 < run.rows.length; y++) {
       var r0 = run.rows[y * 12];
-      series.push({ year: y, overpay: round2(r0.netA), invest: round2(r0.netB),
+      series.push({ year: y, saved: round2(r0.gainA), growth: round2(r0.gainB),
+                    overpay: round2(r0.netA), invest: round2(r0.netB),
                     debtOverpay: round2(r0.balA), debtInvest: round2(r0.balB) });
     }
     var lastRow = run.rows[run.rows.length - 1];
     if (series.length === 0 || series[series.length - 1].year * 12 !== lastRow.m) {
-      series.push({ year: Math.round((lastRow.m / 12) * 100) / 100, overpay: round2(lastRow.netA),
-                    invest: round2(lastRow.netB), debtOverpay: round2(lastRow.balA),
-                    debtInvest: round2(lastRow.balB) });
+      series.push({ year: Math.round((lastRow.m / 12) * 100) / 100,
+                    saved: round2(lastRow.gainA), growth: round2(lastRow.gainB),
+                    overpay: round2(lastRow.netA), invest: round2(lastRow.netB),
+                    debtOverpay: round2(lastRow.balA), debtInvest: round2(lastRow.balB) });
     }
 
     return {
@@ -1995,16 +2015,21 @@
       paymentTooLow: o.paymentTooLow,
       spareAnnualTotal: round2(o.spareMonthly * 12 + o.spareAnnual),
       guaranteedReturn: o.rate,
+      spareCommitted: round2(run.spareCommitted),
+      spareStopMonth: (run.payoffA != null && run.payoffA < H) ? run.payoffA : null,
       overpay: {
         balance: round2(run.balA), interest: round2(run.intA), extra: round2(run.extra),
         investments: round2(run.invA), contributions: round2(run.contribA),
+        freedInvested: round2(run.freedA),
         net: round2(lastRow.netA), capped: round2(run.capped)
       },
       invest: {
         balance: round2(run.balB), interest: round2(run.intB),
         investments: round2(run.invB), contributions: round2(run.contribB),
+        freedInvested: round2(run.freedB),
         growthAmount: round2(run.invB - run.contribB), net: round2(lastRow.netB)
       },
+      overpayGain: round2(lastRow.gainA), investGain: round2(lastRow.gainB),
       diff: round2(diff),
       winner: diff > 0 ? 'invest' : (diff < 0 ? 'overpay' : 'tie'),
       crossover: crossM, crossings: crossings, firstLeader: firstLeader,
