@@ -1053,8 +1053,102 @@
     };
   }
 
+  /* =====================================================================
+     FIRST USE — a plan nobody has filled in yet
+     ---------------------------------------------------------------------
+     The app used to ship a worked example: age 35, £50,000 in an ISA,
+     £90,000 of pension, £43,000 a year wanted. A first-time visitor was
+     therefore given a confident, precise answer about somebody who does not
+     exist — and, worse, every "we still need this from you" state in the UI
+     was unreachable, because no field was ever empty.
+
+     So the personal figures now start EMPTY, and empty means null rather
+     than zero. £0 saved is a real and quite common answer; it has to be
+     tellable apart from "hasn't told us yet". The assumptions (return,
+     inflation, access age, withdrawal rate, State Pension) keep their
+     shipped values — those are Future Funded's opinion, not the user's, and
+     asking a newcomer for them would defeat the point.
+
+     Nothing downstream of here ever sees a null. A single blank field would
+     spread NaN through an entire projection and the charts would come out
+     silently empty, so every public entry point fills its input first. Fill
+     substitutes NEUTRAL values — zero money, a mid-career age — and never
+     the old worked example, so that if an unfinished figure ever does leak
+     into view it reads as £0 rather than as a stranger's balance.
+
+     Whether a part-filled plan's answer may be SHOWN is a separate question,
+     and a UI one: bridgeMissing() / coastMissing() answer it.
+     ===================================================================== */
+  var NEUTRAL_AGE = 40;
+
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function ageSane(v) { return isNum(v) && v >= 16 && v <= 100; }
+
+  function blankFrom(defs, personal) {
+    var b = JSON.parse(JSON.stringify(defs)), i;
+    for (i = 0; i < personal.length; i++) b[personal[i]] = null;
+    b.phases = [{ fromAge: null, toAge: null, annual: null }];
+    return b;
+  }
+  function bridgeBlank() { return blankFrom(BRIDGE_DEFAULTS, ['currentAge','currentBalance','targetIncome']); }
+  function coastBlank()  { return blankFrom(COAST_DEFAULTS,  ['currentAge','currentPension','targetIncome']); }
+
+  // A period with no ages on it runs from now to the end of the plan. That is
+  // exactly what a plain "£X a year" means before anyone opens the by-age view,
+  // and it is why the simple field and the phase editor are the same data.
+  function fillPhases(phases, age, end) {
+    var ph = (phases && phases.length) ? phases : [{}];
+    return ph.map(function (p) {
+      p = p || {};
+      return { fromAge: isNum(p.fromAge) ? p.fromAge : age,
+               toAge:   isNum(p.toAge)   ? p.toAge   : Math.max(age, end),
+               annual:  isNum(p.annual)  ? p.annual  : 0 };
+    });
+  }
+
+  function fillPlanWith(p, defs, money, endKey) {
+    // Object.assign copies an explicit null straight over the default, which is
+    // the point — the neutral goes back in below, not the worked example.
+    var out = Object.assign({}, defs, p || {}), i;
+    if (!isNum(out.currentAge) || out.currentAge < 1 || out.currentAge > 120) out.currentAge = NEUTRAL_AGE;
+    for (i = 0; i < money.length; i++) if (!isNum(out[money[i]])) out[money[i]] = 0;
+    out.phases = fillPhases(p && p.phases, out.currentAge,
+                            isNum(out[endKey]) ? out[endKey] : out.currentAge);
+    return out;
+  }
+  function fillBridge(bp) { return fillPlanWith(bp, BRIDGE_DEFAULTS, ['currentBalance','targetIncome'], 'pensionAccessAge'); }
+  function fillCoast(cp)  { return fillPlanWith(cp, COAST_DEFAULTS,  ['currentPension','targetIncome','targetPot'], 'retirementAge'); }
+
+  /* What each planner is still waiting for, in the order it asks for it.
+     Note what is NOT required to be positive: a £0 balance and a £0
+     contribution are both legitimate answers, and demanding a number above
+     zero would force somebody just starting out to type a lie. Only the
+     income target must be positive — with a zero target the model reports
+     "work-optional now", which is the single most misleading thing the app
+     could say. */
+  function bridgeMissing(bp) {
+    bp = bp || {}; var out = [];
+    if (!ageSane(bp.currentAge))                              out.push('age');
+    if (!isNum(bp.currentBalance))                            out.push('balance');
+    if (!(isNum(bp.targetIncome) && bp.targetIncome > 0))     out.push('income');
+    if (!(bp.phases || []).some(function (p) { return p && isNum(p.annual); })) out.push('contrib');
+    return out;
+  }
+  function coastMissing(cp) {
+    cp = cp || {}; var out = [];
+    var goal = cp.goalMode === 'pot' ? cp.targetPot : cp.targetIncome;
+    if (!ageSane(cp.currentAge))                              out.push('age');
+    if (!isNum(cp.currentPension))                            out.push('pension');
+    if (!(isNum(goal) && goal > 0))                           out.push('income');
+    if (!(cp.phases || []).some(function (p) { return p && isNum(p.annual); })) out.push('contrib');
+    return out;
+  }
+  function bridgeReady(bp) { return bridgeMissing(bp).length === 0; }
+  function coastReady(cp)  { return coastMissing(cp).length === 0; }
+
   // Full bridge plan: Base (top-level assumptions) + the two side scenarios.
   function bridgePlan(bp) {
+    bp = fillBridge(bp);
     var base = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
     var sc = bp.scenarios || {};
     var cons = sc.conservative || BRIDGE_DEFAULTS.scenarios.conservative;
@@ -1141,6 +1235,7 @@
   // runs each stress scenario. `minResidual` is the buffer (today's money) the
   // user wants left when the pension unlocks (defaults to bp.minResidual or 0).
   function bridgeStressTest(bp, minResidual) {
+    bp = fillBridge(bp);
     var basePlan = bridgeProject(bp, { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 });
     var startAge = basePlan.crossAge;
     var accessAge = bp.pensionAccessAge;
@@ -1319,6 +1414,7 @@
 
   // Full Phase-2 simulation for the bridge planner.
   function bridgeSimulate(bp, o) {
+    bp = fillBridge(bp);
     o = o || {};
     var opts = { trials: o.trials || 2000, blockLen: o.blockLen || 5, seed: (o.seed || 1234567) >>> 0 };
     var confidence = o.confidence != null ? o.confidence : (bp.confidence != null ? bp.confidence : 0.90);
@@ -1546,6 +1642,7 @@
   }
 
   function coastPlan(cp) {
+    cp = fillCoast(cp);
     var baseSc = { growth: cp.growth, withdrawalRate: cp.withdrawalRate, retirementAge: cp.retirementAge };
     var sc = cp.scenarios || {};
     var cons = Object.assign({}, COAST_DEFAULTS.scenarios.conservative, sc.conservative);
@@ -1614,6 +1711,7 @@
   }
   // Phase-1 deterministic stress overlays for the pension drawdown.
   function coastStressTest(cp, minResidual) {
+    cp = fillCoast(cp);
     var retAge = coastRetireAge(cp);
     var lifeExp = Math.round(cp.lifeExpectancy || 90);
     var minR = minResidual != null ? minResidual : (cp.minResidual || 0);
@@ -1688,6 +1786,7 @@
   }
   // Full Phase-2 pension-drawdown simulation (bridge-compatible fields).
   function coastSimulate(cp, o) {
+    cp = fillCoast(cp);
     o = o || {};
     var opts = { trials: o.trials || 2000, blockLen: o.blockLen || 5, seed: (o.seed || 1234567) >>> 0 };
     var confidence = o.confidence != null ? o.confidence : (cp.confidence != null ? cp.confidence : 0.90);
@@ -1714,6 +1813,7 @@
   // the years until pension access, then the pension takes over. Values are REAL
   // (today's money); nominal returns are netted off inflation.
   function combinedPlan(bp, cp) {
+    bp = fillBridge(bp); cp = fillCoast(cp);
     var inflB = bp.inflation || 0, inflC = cp.inflation || 0;
     var gB = (1 + bp.growth) / (1 + inflB) - 1;   // real return, accessible (ISA/GIA)
     var gC = (1 + cp.growth) / (1 + inflC) - 1;   // real return, pension
@@ -2065,6 +2165,15 @@
   var Engine = {
     DEFAULTS: DEFAULTS,
     BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
+    // first use
+    bridgeBlank: bridgeBlank,
+    coastBlank: coastBlank,
+    fillBridge: fillBridge,
+    fillCoast: fillCoast,
+    bridgeMissing: bridgeMissing,
+    coastMissing: coastMissing,
+    bridgeReady: bridgeReady,
+    coastReady: coastReady,
     bridgePlan: bridgePlan,
     bridgeProject: bridgeProject,
     bridgeStressTest: bridgeStressTest,

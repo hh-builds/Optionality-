@@ -4,6 +4,14 @@
 --  Run this ONCE in Supabase → SQL Editor, after analytics.sql and
 --  002-install-tracking.sql. Safe to re-run.
 --
+--  ⚠️ RE-RUNNING THIS ON TOP OF 011 REGRESSES plan_state(). The version
+--  below decides a pot is "filled in" purely by comparing it with the
+--  shipped defaults — right until the app began starting people off with
+--  EMPTY figures, because an empty plan differs from the defaults too. Left
+--  like that, every untouched plan reads as filled in and the headline
+--  averages fill up with blanks. If you re-run this file for any reason,
+--  run 011-empty-plans.sql again after it.
+--
 --  What it adds
 --    1. Where people are, from the browser's own timezone — no IP, no
 --       third-party geolocation service, nothing new leaves the browser

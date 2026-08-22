@@ -35,6 +35,12 @@ const gbpC = (x) => {
   return '£' + Math.round(x);
 };
 const ageStr = (a) => a == null ? '—' : a.toFixed(1);
+/* A personal figure that hasn't been entered yet is null, and null is NOT
+   zero — see Engine's first-use notes. `num` is how the UI reads one where it
+   needs an actual number to work with (a phase's default end age, a chart
+   bound) without turning "not said yet" into "£0". */
+const num = (v, fallback) => (typeof v === 'number' && isFinite(v)) ? v : fallback;
+const isSet = (v) => typeof v === 'number' && isFinite(v);
 const monthsStr = (m) => {
   const s = Math.round(Math.abs(m)); const y = Math.floor(s/12); const mo = s%12;
   if (y === 0) return mo + ' month' + (mo===1?'':'s');
@@ -69,7 +75,7 @@ function Learn({ label, children }) {
    One component so the three cards cannot drift apart. Flashes briefly when
    its answer changes, so an edit to an assumption is visibly connected to the
    result rather than something you have to go looking for. */
-function HCard({ k, dot, v, sub, prompt, jumpTo }) {
+function HCard({ k, dot, v, sub, prompt, ask, waiting, jumpTo }) {
   const [flash, setFlash] = useState(false);
   const prev = useRef(v);
   useEffect(() => {
@@ -88,14 +94,15 @@ function HCard({ k, dot, v, sub, prompt, jumpTo }) {
     if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
   };
   return (
-    <div className={'hcard' + (flash ? ' changed' : '') + (jumpTo ? ' tappable' : '')}
+    <div className={'hcard' + (flash ? ' changed' : '') + (jumpTo ? ' tappable' : '') + (waiting ? ' waiting' : '')}
       onClick={jumpTo ? jump : undefined}
       onKeyDown={jumpTo ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); } }) : undefined}
       role={jumpTo ? 'button' : undefined} tabIndex={jumpTo ? 0 : undefined}
       aria-label={jumpTo ? k + ': ' + (prompt || v) + '. Show the detail.' : undefined}>
       <div className={'hc-k ' + (dot || '')}><span className={'hc-dot ' + (dot || '')}></span>{k}</div>
       <div className={'hc-v' + (prompt ? ' prompt' : '')}>{prompt || v}</div>
-      {!prompt && sub ? <div className="hc-sub">{sub}</div> : null}
+      {sub ? <div className="hc-sub">{sub}</div> : null}
+      {ask ? <div className="hc-ask">{ask}</div> : null}
     </div>
   );
 }
@@ -249,7 +256,14 @@ function useIsNarrow(px) {
    Keeps a local text buffer and selects-all on focus, so typing a new
    number always REPLACES the old one (no stray leading zero) while the
    dashboard still recalculates live on every keystroke. */
-function NumInput({ value, onChange, step, min, className, style, title, ariaLabel, group }) {
+function NumInput({ value, onChange, step, min, className, style, title, ariaLabel, group, nullable, placeholder }) {
+  // `nullable` = an empty box means "hasn't said yet", not "zero". That
+  // distinction is the whole first-use model: £0 saved is a real answer plenty
+  // of people have, and it must not look the same as a field nobody has got to
+  // yet. Without this flag the box coerces blank to 0 on the way in and again
+  // on blur, which would mark an untouched plan as filled in the moment it
+  // rendered — and the empty state would be unreachable.
+  //
   // `group` = thousands separators. £90,000 vs £90000 is the difference between
   // reading a balance and counting its digits, and it is the single most-scanned
   // thing on the page. Separators mean a text input (type=number can't show
@@ -261,14 +275,19 @@ function NumInput({ value, onChange, step, min, className, style, title, ariaLab
   useEffect(() => { if (!focused.current) setTxt(fmt(value)); }, [value, group]);
   const handle = (raw) => {
     setTxt(raw);
-    if (raw === '' || raw === '-' || raw === '.') { onChange(0); return; }
+    // A nullable box that has been emptied says nothing to the model until it
+    // is left. Clearing a figure marks the plan incomplete, which sends that
+    // planner back to its setup card — and doing that on the keystroke that
+    // empties the box would tear the field out from under the cursor of
+    // someone who was only select-all-retyping a number. Blur decides.
+    if (raw === '' || raw === '-' || raw === '.') { if (!nullable) onChange(0); return; }
     const n = parse(raw);
     if (!isNaN(n)) onChange(n);
   };
   return (
     <input type={group ? 'text' : 'number'} className={className} style={style}
       step={group ? undefined : (step || 'any')} min={group ? undefined : min}
-      title={title} aria-label={ariaLabel} value={txt}
+      title={title} aria-label={ariaLabel} value={txt} placeholder={placeholder}
       inputMode={group ? 'numeric' : 'decimal'}
       autoComplete="off"
       onFocus={e => {
@@ -280,8 +299,9 @@ function NumInput({ value, onChange, step, min, className, style, title, ariaLab
       }}
       onBlur={() => {
         focused.current = false;
+        if (nullable && String(txt).trim() === '') { setTxt(''); onChange(null); return; }
         let n = parse(txt);
-        if (isNaN(n)) n = 0;
+        if (isNaN(n)) { if (nullable) { setTxt(''); onChange(null); return; } n = 0; }
         if (min != null) n = Math.max(min, n);
         setTxt(fmt(n));
         onChange(n);
@@ -308,32 +328,102 @@ function ChartTip({ active, payload, label, fmt, lbl }) {
 
 /* =============================================================
    ISA / GIA BRIDGE PLANNER  ("Accessible Wealth")
-   Self-contained module: its own inputs (seeded from the worked
-   example), its own year-by-year projection, scenarios and bridge
-   framing. Answers: "When does my accessible wealth give me full
-   optionality?"  All engine figures are REAL (today's money); the
-   nominal view just re-inflates for display, so the crossover age
-   never moves.
+   Self-contained module: its own inputs, its own year-by-year
+   projection, scenarios and bridge framing. Answers: "When does my
+   accessible wealth give me full optionality?"  All engine figures
+   are REAL (today's money); the nominal view just re-inflates for
+   display, so the crossover age never moves.
+
+   Three things are kept apart on purpose, and the layout is built
+   around the separation:
+     1. what YOU tell us      — Your numbers, and the setup card
+     2. what WE assume        — Advanced assumptions, pre-loaded
+     3. what we TELL you      — the answer, the chart, the tables
+   A first-time visitor should only have to deal with 1 and 3.
    ============================================================= */
-function BpNum({ value, onChange, step, min, money, pct, suffix }) {
+
+/* ---------- setup-card field ----------
+   Bigger label, bigger box, hint underneath. The hint is where "£0 is a
+   perfectly good answer" gets said, because the alternative is people
+   typing a number they don't have. */
+function SuField({ label, hint, children }) {
   return (
-    <div className={'bp-inwrap'+(money?' money':'')+(pct?' pct':'')}>
+    <div className="su-fld">
+      <label>{label}</label>
+      {children}
+      {hint ? <div className="su-hint">{hint}</div> : null}
+    </div>
+  );
+}
+
+/* The reveal. There is nothing to submit — the model recalculates on every
+   keystroke — but the button gives the moment a shape, and it is the one
+   place the app says "right, here's your answer". Disabled until the last
+   question is answered, with a count of what's left rather than a list of
+   complaints against individual fields. */
+function SuCta({ left, label, onGo }) {
+  return (
+    <div className="su-cta">
+      <button className="su-go" disabled={left > 0} onClick={onGo}>{label}</button>
+      {left > 0 ? <div className="su-left">{left} more to fill in</div> : null}
+    </div>
+  );
+}
+
+/* "Using Future Funded's standard assumptions — Adjust".
+   Point 2 of the separation above, said out loud exactly once per planner so
+   nobody has to wonder whose 7% it is. */
+function AssumptionLine({ onAdjust, children }) {
+  return (
+    <div className="assump-line">
+      <span>{children}</span>
+      <button onClick={onAdjust}>Adjust</button>
+    </div>
+  );
+}
+function BpNum({ value, onChange, step, min, money, pct, suffix, nullable, placeholder, big }) {
+  // `.unset` fades the £ so an empty money field reads as a question rather
+  // than as "£ nothing". It is deliberately NOT an error style — the user has
+  // done nothing wrong by not having answered yet.
+  return (
+    <div className={'bp-inwrap'+(money?' money':'')+(pct?' pct':'')+(big?' big':'')
+      +(nullable && value == null ? ' unset' : '')}>
       {money && <span className="pfx">£</span>}
-      <NumInput value={value} onChange={onChange} step={step} min={min!=null?min:0} group={!!money} />
+      <NumInput value={value} onChange={onChange} step={step} min={min!=null?min:0} group={!!money}
+        nullable={nullable} placeholder={placeholder} />
       {pct && <span className="sfx">%</span>}
       {suffix && !pct && <span className="sfx">{suffix}</span>}
     </div>
   );
 }
 
-function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
+function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
+  /* ---- is this plan set up yet? ----
+     Engine.bridgeMissing is the single source of truth, shared with the
+     headline cards above, so a card can never say "add your savings" while
+     the planner below is showing a confident answer. */
+  const missing = Engine.bridgeMissing(bp);
+  const ready = missing.length === 0;
+  // Already complete when the component mounted => a returning user, so go
+  // straight to the answer. Filling the last box in this session earns the
+  // reveal button instead.
+  const [revealed, setRevealed] = useState(ready);
+  // And if a required figure is later cleared, the reveal is withdrawn along
+  // with it — otherwise typing the first digit of its replacement would make
+  // the plan momentarily "complete" again and snap the form away mid-keystroke.
+  useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
+  const showSetup = !(ready && revealed);
+  const advRef = useRef(null);
+  const openAdvanced = () => { const el = advRef.current; if (!el) return;
+    el.open = true; el.scrollIntoView({ behavior:'smooth', block:'start' }); };
   // sequence-risk layers (memoised — the Monte Carlo is ~50ms, don't rerun on theme/units toggles)
   const stress = useMemo(() => Engine.bridgeStressTest(bp, bp.minResidual||0), [bp]);
   const sim = useMemo(() => Engine.bridgeSimulate(bp), [bp]);
   // display factor: engine is REAL; nominal view re-inflates by (1+infl)^t
-  const bf = (age) => realTerms ? 1 : Math.pow(1 + (bp.inflation||0), (age||bp.currentAge) - bp.currentAge);
+  const bf = (age) => { const a0 = num(bp.currentAge, 0);
+    return realTerms ? 1 : Math.pow(1 + (bp.inflation||0), (age||a0) - a0); };
   const m = (v, age) => gbpC(v * bf(age));
 
   const scEnabled = { base: !(bp.scenarios&&bp.scenarios.base&&bp.scenarios.base.enabled===false),
@@ -349,16 +439,37 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
   const updScen = (key, patch) => setBp({ scenarios: Object.assign({}, bp.scenarios, { [key]: Object.assign({}, (bp.scenarios||{})[key], patch) }) });
   const updPhase = (i, patch) => setBp({ phases: bp.phases.map((p,idx)=> idx===i ? Object.assign({},p,patch) : p) });
-  const addPhase = () => { const last = bp.phases[bp.phases.length-1]; const from = last ? (last.toAge||bp.currentAge)+1 : bp.currentAge;
-    setBp({ phases: bp.phases.concat([{ fromAge:from, toAge:Math.max(from, bp.pensionAccessAge), annual:0 }]) }); };
+  const addPhase = () => { const last = bp.phases[bp.phases.length-1];
+    // every one of these can still be blank on a plan that isn't set up yet
+    const start = num(bp.currentAge, 30);
+    const from = last && num(last.toAge, null) != null ? last.toAge + 1 : start;
+    setBp({ phases: bp.phases.concat([{ fromAge:from, toAge:Math.max(from, num(bp.pensionAccessAge, 57)), annual:0 }]) }); };
   const delPhase = (i) => { if (bp.phases.length<=1) return; setBp({ phases: bp.phases.filter((_,idx)=>idx!==i) }); };
+
+  /* ---- contributions: one number, with the by-age editor one level down ----
+     Almost everybody saves roughly the same amount every year until they
+     stop, and asking them for From age / To age / Amount before they have
+     told us anything is three questions where one would do. So the plain
+     "£ a year" field IS the single-period case of the phase editor — the
+     same data, not a parallel setting. Nothing is removed: open "Plan
+     contributions by age" and the full editor is there, and once there is
+     more than one period the simple field steps aside rather than lying
+     about a total. */
+  const onePhase = bp.phases.length === 1;
+  const flatAnnual = onePhase ? bp.phases[0].annual : null;
+  const setFlatAnnual = (v) => setBp({ phases: [Object.assign({}, bp.phases[0], { annual: v })] });
+  // A period with no ages on it means "from now until the pension unlocks" —
+  // which is what the engine assumes too. Materialise that the moment somebody
+  // opens the by-age editor, so they are never shown empty age boxes.
+  const materialisePhases = () => {
+    if (!bp.phases.some(p => !isSet(p.fromAge) || !isSet(p.toAge))) return;
+    const a = num(bp.currentAge, 30), end = Math.max(a, num(bp.pensionAccessAge, 57));
+    setBp({ phases: bp.phases.map(p => Object.assign({}, p,
+      { fromAge: num(p.fromAge, a), toAge: num(p.toAge, end) })) });
+  };
 
   const reached = base.reached;
   const targetPot = plan.targetPot;
-  const notReady = (bp.currentAge < 16 || bp.currentAge > 100) ? 'Add your age in the pension planner above'
-    : !((bp.currentBalance||0) > 0 || (bp.phases||[]).some(p => (p.annual||0) > 0)) ? 'Add your ISA or GIA savings below'
-    : !((bp.targetIncome||0) > 0) ? 'Add the income you want each year'
-    : null;
   // keep the crossover annotation inside the plot: flip sides past the midpoint
   const crossLabelPos = (function(){
     const rs = base.rows; if (!rs || !rs.length || base.crossAge==null) return 'insideTopLeft';
@@ -408,11 +519,48 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* 1) RESULT — answer → evidence → help.
-             Guarded: with a zeroed target or balance the model will happily
-             report "work-optional at 0", which is worse than saying nothing. */}
-      {notReady ? <div className="bp-result"><div className="bp-answer waiting">{notReady}</div></div> : (
+      {/* 0) FIRST USE — the setup card.
+             It stands in the same place the answer will, because it IS the
+             answer's precondition, and it goes away for good once the four
+             questions are answered. An empty chart ringed with warnings is
+             the thing this replaces. */}
+      {showSetup ? (
+      <div className="setup">
+        <div className="su-lead">Four numbers and we can tell you when work becomes optional.</div>
+        <div className="su-sub">This is about the money you can reach <i>before</i> your pension unlocks
+          at {num(bp.pensionAccessAge, 57)} — ISAs, general investment accounts, savings. Your pension is the
+          planner above.</div>
+        <div className="su-grid">
+          <SuField label="Your age" hint="Used by both planners.">
+            <BpNum big nullable value={bp.currentAge} step="1" placeholder="38"
+              onChange={v=>setAge(v)} />
+          </SuField>
+          <SuField label="ISA / GIA today"
+            hint="Everything you could get at before pension access. £0 is a perfectly good answer.">
+            <BpNum big money nullable value={bp.currentBalance} step={1000} placeholder="0"
+              onChange={v=>setBp({currentBalance:v})} />
+          </SuField>
+          <SuField label="Income you want each year"
+            hint="In today’s money, for the years before your pension starts.">
+            <BpNum big money nullable value={bp.targetIncome} step={1000} placeholder="30,000"
+              onChange={v=>setBp({targetIncome:v})} />
+          </SuField>
+          <SuField label="What you save each year"
+            hint="Into ISAs and investment accounts, not your pension. £0 if you’re not adding anything right now.">
+            <BpNum big money nullable value={flatAnnual} step={1000} placeholder="0"
+              onChange={setFlatAnnual} />
+          </SuField>
+        </div>
+        <SuCta left={missing.length} label="See when work becomes optional"
+          onGo={()=>setRevealed(true)} />
+        <div className="su-fine">Returns, inflation and pension access age are already set to Future Funded’s
+          standard assumptions — you don’t need to touch them, but every one of them is editable under
+          <b> Advanced assumptions</b> once you’re in.</div>
+      </div>
+      ) : (
       <React.Fragment>
+
+      {/* 1) RESULT — answer → evidence → help. */}
       <div className="bp-result">
         <div className={'bp-answer '+(reached?'reached':'missed')}>{reached
           ? 'Work-optional at '+base.crossAge
@@ -459,7 +607,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
-      </React.Fragment>)}
 
       {/* result tiles */}
       <div className="bp-results">
@@ -499,37 +646,71 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* 3) YOUR NUMBERS — the few inputs most people can answer straight away.
-             Everything more technical lives under Advanced assumptions below. */}
+      {/* 3) YOUR NUMBERS — what YOU told us, folded down to one line.
+             Once the answer exists, the inputs are reference material rather
+             than the main event, so they read as a summary you can open. The
+             fields inside are the same ones the setup card asked for, so
+             there is only ever one place each figure lives. */}
       <div className="bp-sub">Your numbers</div>
-      <div className="bp-assump">
-        <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
-        <div className="bp-fld"><label>Income you want each year</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
+      <div className="yn-line">
+        <span className="yn-i">Age <b>{isSet(bp.currentAge) ? ageStr(bp.currentAge) : '—'}</b></span>
+        <span className="yn-i">ISA / GIA <b>{isSet(bp.currentBalance) ? gbpC(bp.currentBalance) : '—'}</b></span>
+        <span className="yn-i">Income wanted <b>{isSet(bp.targetIncome) ? gbpC(bp.targetIncome)+'/yr' : '—'}</b></span>
+        <span className="yn-i">Saving <b>{onePhase ? (isSet(flatAnnual) ? gbpC(flatAnnual)+'/yr' : '—')
+          : bp.phases.length+' periods'}</b></span>
       </div>
+      <details className="bp-collapse">
+        <summary className="bp-sub bp-summary">Edit your numbers</summary>
+        <div>
+        <div className="bp-assump" style={{marginTop:4}}>
+          <div className="bp-fld"><label>Current age</label><BpNum nullable value={bp.currentAge} step="0.1" onChange={v=>setAge(v)} />
+            <div className="bp-hint">Used by both planners.</div></div>
+          <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money nullable value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
+          <div className="bp-fld"><label>Income you want each year</label><BpNum money nullable value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
+          {onePhase && <div className="bp-fld"><label>What you save each year</label>
+            <BpNum money nullable value={flatAnnual} step={1000} onChange={setFlatAnnual} />
+            <div className="bp-hint">Into ISAs and investment accounts, not your pension.</div></div>}
+        </div>
 
-      {/* 4) CONTRIBUTION PHASES */}
-      <div className="bp-sub">What you save each year</div>
-      <div className="bp-phases">
-        {bp.phases.map((p,i)=>{
-          const yrs = (p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
-          return (
-          <React.Fragment key={i}>
-          <div className="bp-phase">
-            <div className="bp-pf"><label>From age</label><BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} /></div>
-            <div className="bp-pf"><label>To age</label><BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} /></div>
-            <div className="bp-pf wide"><label>Saved each year</label><BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} /></div>
-            <button className="icon-btn" onClick={()=>delPhase(i)} disabled={bp.phases.length<=1} title="Remove phase">✕</button>
+        {/* 4) CONTRIBUTIONS BY AGE — the full phase editor, one level down.
+               Nothing has been removed: this is the same editor it has always
+               been. It just no longer stands between a newcomer and their
+               first answer. It opens itself when a plan actually uses more
+               than one period, because then the simple field above cannot
+               describe the plan. */}
+        <details className="bp-collapse" open={!onePhase} onToggle={materialisePhases}>
+          <summary className="bp-sub bp-summary">Plan contributions by age</summary>
+          <div>
+          <div className="bp-phases">
+            {bp.phases.map((p,i)=>{
+              const yrs = (isSet(p.toAge) && isSet(p.fromAge) && p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
+              return (
+              <React.Fragment key={i}>
+              <div className="bp-phase">
+                <div className="bp-pf"><label>From age</label><BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} /></div>
+                <div className="bp-pf"><label>To age</label><BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} /></div>
+                <div className="bp-pf wide"><label>Saved each year</label><BpNum money nullable value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} /></div>
+                <button className="icon-btn" onClick={()=>delPhase(i)} disabled={bp.phases.length<=1} title="Remove phase">✕</button>
+              </div>
+              <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
+              </React.Fragment>
+              );
+            })}
+            <button className="add-link" onClick={addPhase}>+ Add another period</button>
           </div>
-          <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
-          </React.Fragment>
-          );
-        })}
-        <button className="add-link" onClick={addPhase}>+ Add another period</button>
-      </div>
-      <Learn label="How periods work"><b>From and To are inclusive</b>, and periods <b>stack</b> where they overlap. A one-off lump sum is a single-year period; a £0 period stops contributions.</Learn>
+          <Learn label="How periods work"><b>From and To are inclusive</b>, and periods <b>stack</b> where they overlap. A one-off lump sum is a single-year period; a £0 period stops contributions.</Learn>
+          </div>
+        </details>
+        </div>
+      </details>
+
+      <AssumptionLine onAdjust={openAdvanced}>
+        Using Future Funded’s standard assumptions — {(bp.growth*100).toFixed(1)}% return,
+        {' '}{((bp.inflation||0)*100).toFixed(1)}% inflation, pension access at {bp.pensionAccessAge}.
+      </AssumptionLine>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
-      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <details className="bp-collapse" ref={advRef} onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
       <div>
       <div className="bp-assump" style={{marginTop:4}}>
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
@@ -830,6 +1011,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       </div>
       <div className="bp-note"><b>Perpetual income</b> = balance × your {(bp.withdrawalRate*100).toFixed(1)}% withdrawal rate — the income this pot could pay <i>forever</i>, shown as a gauge. {bp.mode==='bridge' ? <span>In this <b>Bridge</b> mode the target only has to last to pension access (and here leaves {bp.bridgeDepletion==='full'?'nothing':bp.bridgeDepletion==='preserve'?'the full pot':Math.round((bp.partialRemainPct!=null?bp.partialRemainPct:0.5)*100)+'%'} at access), so it's smaller than a perpetual pot — that's why a row can be <b>Reached</b> while perpetual income still sits below your {gbpC(bp.targetIncome)} target.</span> : <span>In Perpetual mode the target <i>is</i> income ÷ rate, so at the target this equals your {gbpC(bp.targetIncome)}/yr.</span>} Red below target · amber within 10% · green once reached. Figures in {realTerms?'today’s money':'future £ (nominal)'}. Not financial advice.</div>
       </details>
+      </React.Fragment>)}
     </div>
   );
 }
@@ -844,10 +1026,22 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
+  // first use — see the notes on BridgePlanner; this half works identically
+  const missing = Engine.coastMissing(cp);
+  const ready = missing.length === 0;
+  const [revealed, setRevealed] = useState(ready);
+  // Lose a required figure and the reveal is withdrawn with it, so filling the
+  // box back in does NOT snap to the answer on the first digit you type.
+  useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
+  const showSetup = !(ready && revealed);
+  const advRef = useRef(null);
+  const openAdvanced = () => { const el = advRef.current; if (!el) return;
+    el.open = true; el.scrollIntoView({ behavior:'smooth', block:'start' }); };
   // sequence-risk (pension drawdown) — memoised; the Monte Carlo is ~50ms
   const stress = useMemo(() => Engine.coastStressTest(cp, cp.minResidual||0), [cp]);
   const sim = useMemo(() => Engine.coastSimulate(cp), [cp]);
-  const bf = (age) => realTerms ? 1 : Math.pow(1 + (cp.inflation||0), (age||cp.currentAge) - cp.currentAge);
+  const bf = (age) => { const a0 = num(cp.currentAge, 0);
+    return realTerms ? 1 : Math.pow(1 + (cp.inflation||0), (age||a0) - a0); };
   const m = (v, age) => gbpC(v * bf(age));
 
   const scEnabled = { base: !(cp.scenarios&&cp.scenarios.base&&cp.scenarios.base.enabled===false),
@@ -864,17 +1058,25 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
 
   const updScen = (key, patch) => setCp({ scenarios: Object.assign({}, cp.scenarios, { [key]: Object.assign({}, (cp.scenarios||{})[key], patch) }) });
   const updPhase = (i, patch) => setCp({ phases: cp.phases.map((p,idx)=> idx===i ? Object.assign({},p,patch) : p) });
-  const addPhase = () => { const last = cp.phases[cp.phases.length-1]; const from = last ? (last.toAge||cp.currentAge)+1 : cp.currentAge;
-    setCp({ phases: cp.phases.concat([{ fromAge:from, toAge:Math.max(from, cp.retirementAge), annual:0 }]) }); };
+  const addPhase = () => { const last = cp.phases[cp.phases.length-1];
+    const start = num(cp.currentAge, 30);
+    const from = last && num(last.toAge, null) != null ? last.toAge + 1 : start;
+    setCp({ phases: cp.phases.concat([{ fromAge:from, toAge:Math.max(from, num(cp.retirementAge, 65)), annual:0 }]) }); };
   const delPhase = (i) => { if (cp.phases.length<=1) return; setCp({ phases: cp.phases.filter((_,idx)=>idx!==i) }); };
+
+  // contributions: one number by default, the by-age editor a level down
+  const onePhase = cp.phases.length === 1;
+  const flatAnnual = onePhase ? cp.phases[0].annual : null;
+  const setFlatAnnual = (v) => setCp({ phases: [Object.assign({}, cp.phases[0], { annual: v })] });
+  const materialisePhases = () => {
+    if (!cp.phases.some(p => !isSet(p.fromAge) || !isSet(p.toAge))) return;
+    const a = num(cp.currentAge, 30), end = Math.max(a, num(cp.retirementAge, 65));
+    setCp({ phases: cp.phases.map(p => Object.assign({}, p,
+      { fromAge: num(p.fromAge, a), toAge: num(p.toAge, end) })) });
+  };
 
   const rowClass = (r) => { if (r.drawing) return r.projected>1?'bp-green':'bp-below'; const ratio = r.required>0 ? r.projected/r.required : 2; return ratio>=1?'bp-green':ratio>=0.9?'bp-amber':'bp-below'; };
   const rowStat = (r) => { if (r.drawing) return r.projected>1?['green','Drawing']:['below','Depleted']; const ratio = r.required>0 ? r.projected/r.required : 2; return ratio>=1?['green','Above']:ratio>=0.9?['amber','Close']:['below','Below']; };
-
-  const cpNotReady = (cp.currentAge < 16 || cp.currentAge > 100) ? 'Add your age below'
-    : !((cp.currentPension||0) > 0 || (cp.phases||[]).some(p => (p.annual||0) > 0)) ? 'Add your pension below'
-    : !((cp.goalMode === 'pot' ? cp.targetPot : cp.targetIncome) > 0) ? 'Add the income you want in retirement'
-    : null;
   const coastLabelPos = (function(){
     const rs = base.rows; if (!rs || !rs.length || base.coastAge==null) return 'insideTopLeft';
     const a0 = rs[0].age, a1 = rs[rs.length-1].age;
@@ -916,9 +1118,48 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
         </div>
       </div>
 
-      {/* 1) RESULT — answer → evidence → help (the dominant answer first) */}
-      {cpNotReady ? <div className="bp-result"><div className="bp-answer waiting">{cpNotReady}</div></div> : (
+      {/* 0) FIRST USE — the setup card (see BridgePlanner for the reasoning) */}
+      {showSetup ? (
+      <div className="setup">
+        <div className="su-lead">Four numbers and we can tell you when your pension can look after itself.</div>
+        <div className="su-sub">“Coast” is the point where the pot you already have grows into your retirement
+          target on its own — no further contributions needed.</div>
+        <div className="su-grid">
+          <SuField label="Your age" hint="Used by both planners.">
+            <BpNum big nullable value={cp.currentAge} step="1" placeholder="38"
+              onChange={v=>setAge(v)} />
+          </SuField>
+          <SuField label="Pension pot today"
+            hint="All your pensions added together — workplace, personal, old ones. £0 is a perfectly good answer.">
+            <BpNum big money nullable value={cp.currentPension} step={1000} placeholder="0"
+              onChange={v=>setCp({currentPension:v})} />
+          </SuField>
+          {cp.goalMode === 'pot'
+            ? <SuField label="Target pension pot" hint="In today’s money.">
+                <BpNum big money nullable value={cp.targetPot} step={50000} placeholder="500,000"
+                  onChange={v=>setCp({targetPot:v})} />
+              </SuField>
+            : <SuField label="Retirement income you want each year"
+                hint={'In today’s money, State Pension included — we assume '
+                  + gbpC(cp.statePensionAmount||0) + '/yr from ' + num(cp.statePensionAge, 67) + '.'}>
+                <BpNum big money nullable value={cp.targetIncome} step={1000} placeholder="30,000"
+                  onChange={v=>setCp({targetIncome:v})} />
+              </SuField>}
+          <SuField label="What you pay in each year"
+            hint="Employee plus employer, plus any tax relief. £0 if you’re not contributing right now.">
+            <BpNum big money nullable value={flatAnnual} step={1000} placeholder="0"
+              onChange={setFlatAnnual} />
+          </SuField>
+        </div>
+        <SuCta left={missing.length} label="See my pension outlook" onGo={()=>setRevealed(true)} />
+        <div className="su-fine">Returns, inflation, the State Pension and the age you draw your pension are
+          already set to Future Funded’s standard assumptions — all editable under <b>Advanced
+          assumptions</b> once you’re in.</div>
+      </div>
+      ) : (
       <React.Fragment>
+
+      {/* 1) RESULT — answer → evidence → help (the dominant answer first) */}
       <div className="bp-result">
         <div className={'bp-answer '+(base.reached?'reached':'missed')}>{
           base.coasting ? 'Coasting now'
@@ -947,7 +1188,6 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
         <ScenChip name="conservative" label="Conservative" res={cons} toggleable={true} />
         <ScenChip name="optimistic" label="Optimistic" res={opt} toggleable={true} />
       </div>
-      </React.Fragment>)}
 
       {/* status tiles */}
       <div className="bp-results">
@@ -992,41 +1232,69 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
       {base.coasting && <div className="bp-note" style={{marginTop:12}}>
         <b>You’ve reached Pension Coast.</b> Your pension is projected to meet your retirement objective without further contributions. Additional pension contributions may raise retirement income, but likely add less <i>flexibility</i> than investing into accessible assets (your ISA/GIA Bridge Fund), which can fund the years before pension access. Not advice — just noting the optimisation problem has changed.</div>}
 
-      {/* 3) YOUR NUMBERS — the few inputs most people can answer straight away */}
+      {/* 3) YOUR NUMBERS — what YOU told us, folded to one line you can open */}
       <div className="bp-sub">Your numbers</div>
-      <div className="bp-assump">
-        <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setAge(v)} />
-          <div className="bp-hint">Used by both planners.</div></div>
-        <div className="bp-fld"><label>Pension balance today</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
-        {cp.goalMode==='pot'
-          ? <div className="bp-fld"><label>Target pension pot</label><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
-          : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">State Pension included</div></div>}
-        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
+      <div className="yn-line">
+        <span className="yn-i">Age <b>{isSet(cp.currentAge) ? ageStr(cp.currentAge) : '—'}</b></span>
+        <span className="yn-i">Pension <b>{isSet(cp.currentPension) ? gbpC(cp.currentPension) : '—'}</b></span>
+        <span className="yn-i">{cp.goalMode==='pot' ? 'Target pot' : 'Income wanted'} <b>{cp.goalMode==='pot'
+          ? (isSet(cp.targetPot) ? gbpC(cp.targetPot) : '—')
+          : (isSet(cp.targetIncome) ? gbpC(cp.targetIncome)+'/yr' : '—')}</b></span>
+        <span className="yn-i">Paying in <b>{onePhase ? (isSet(flatAnnual) ? gbpC(flatAnnual)+'/yr' : '—')
+          : cp.phases.length+' periods'}</b></span>
+        <span className="yn-i">Drawing at <b>{num(cp.retirementAge, '—')}</b></span>
       </div>
+      <details className="bp-collapse">
+        <summary className="bp-sub bp-summary">Edit your numbers</summary>
+        <div>
+        <div className="bp-assump" style={{marginTop:4}}>
+          <div className="bp-fld"><label>Current age</label><BpNum nullable value={cp.currentAge} step="0.1" onChange={v=>setAge(v)} />
+            <div className="bp-hint">Used by both planners.</div></div>
+          <div className="bp-fld"><label>Pension balance today</label><BpNum money nullable value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
+          {cp.goalMode==='pot'
+            ? <div className="bp-fld"><label>Target pension pot</label><BpNum money nullable value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
+            : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money nullable value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">State Pension included</div></div>}
+          {onePhase && <div className="bp-fld"><label>What you pay in each year</label>
+            <BpNum money nullable value={flatAnnual} step={1000} onChange={setFlatAnnual} />
+            <div className="bp-hint">Employee plus employer.</div></div>}
+          <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
+        </div>
 
-      {/* CONTRIBUTION PHASES */}
-      <div className="bp-sub">What you pay in each year</div>
-      <div className="bp-phases">
-        {cp.phases.map((p,i)=>{
-          const yrs = (p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
-          return (
-          <React.Fragment key={i}>
-          <div className="bp-phase">
-            <div className="bp-pf"><label>From age</label><BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} /></div>
-            <div className="bp-pf"><label>To age</label><BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} /></div>
-            <div className="bp-pf wide"><label>Paid in each year</label><BpNum money value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} /></div>
-            <button className="icon-btn" onClick={()=>delPhase(i)} disabled={cp.phases.length<=1} title="Remove phase">✕</button>
+        {/* CONTRIBUTIONS BY AGE — the full phase editor, one level down */}
+        <details className="bp-collapse" open={!onePhase} onToggle={materialisePhases}>
+          <summary className="bp-sub bp-summary">Plan contributions by age</summary>
+          <div>
+          <div className="bp-phases">
+            {cp.phases.map((p,i)=>{
+              const yrs = (isSet(p.toAge) && isSet(p.fromAge) && p.toAge>=p.fromAge) ? (p.toAge - p.fromAge + 1) : 0;
+              return (
+              <React.Fragment key={i}>
+              <div className="bp-phase">
+                <div className="bp-pf"><label>From age</label><BpNum value={p.fromAge} onChange={v=>updPhase(i,{fromAge:Math.round(v)})} /></div>
+                <div className="bp-pf"><label>To age</label><BpNum value={p.toAge} onChange={v=>updPhase(i,{toAge:Math.round(v)})} /></div>
+                <div className="bp-pf wide"><label>Paid in each year</label><BpNum money nullable value={p.annual} step={1000} onChange={v=>updPhase(i,{annual:v})} /></div>
+                <button className="icon-btn" onClick={()=>delPhase(i)} disabled={cp.phases.length<=1} title="Remove phase">✕</button>
+              </div>
+              <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
+              </React.Fragment>
+              );
+            })}
+            <button className="add-link" onClick={addPhase}>+ Add another period</button>
           </div>
-          <div className="bp-phase-sum">= {yrs} year{yrs===1?'':'s'} ({yrs===1?'age '+p.fromAge:'ages '+p.fromAge+'–'+p.toAge}) · <b>{gbpC(yrs*(p.annual||0))}</b> total</div>
-          </React.Fragment>
-          );
-        })}
-        <button className="add-link" onClick={addPhase}>+ Add another period</button>
-      </div>
-      <Learn label="How periods work"><b>From and To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Enter employee plus employer. Shown as entered, not inflation-adjusted.</Learn>
+          <Learn label="How periods work"><b>From and To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Enter employee plus employer. Shown as entered, not inflation-adjusted.</Learn>
+          </div>
+        </details>
+        </div>
+      </details>
+
+      <AssumptionLine onAdjust={openAdvanced}>
+        Using Future Funded’s standard assumptions — {(cp.growth*100).toFixed(1)}% return,
+        {' '}{((cp.inflation||0)*100).toFixed(1)}% inflation, State Pension {gbpC(cp.statePensionAmount||0)}/yr
+        from {num(cp.statePensionAge, 67)}.
+      </AssumptionLine>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
-      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <details className="bp-collapse" ref={advRef} onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
       <div>
       <div className="bp-assump" style={{marginTop:4}}>
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
@@ -1281,6 +1549,7 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
       </div>
 
       </details>
+      </React.Fragment>)}
     </div>
   );
 }
@@ -2142,12 +2411,18 @@ function App() {
     }
   };
 
-  // ISA/GIA Bridge Planner — independent inputs, seeded from the worked example
+  // ISA/GIA Bridge Planner — independent inputs.
+  //
+  // It used to start from a worked example (35, £50k, £43k). It now starts
+  // BLANK on the personal figures and keeps the shipped assumptions, so a new
+  // visitor is asked for their numbers instead of being shown someone else's.
+  // A saved plan still merges on top and is completely unaffected: every blob
+  // ever written carries these fields, so nothing that exists gets cleared.
   const [bridgeInputs, setBridgeInputs] = useState(() => {
-    let b = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS));
+    let b = Engine.bridgeBlank();
     try { const s = localStorage.getItem('optionality.bridge');
-      if (s) b = Object.assign({}, JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS)), JSON.parse(s)); } catch(e){}
-    if (!Array.isArray(b.phases) || !b.phases.length) b.phases = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.phases));
+      if (s) b = Object.assign({}, Engine.bridgeBlank(), JSON.parse(s)); } catch(e){}
+    if (!Array.isArray(b.phases) || !b.phases.length) b.phases = Engine.bridgeBlank().phases;
     if (!b.scenarios) b.scenarios = JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS.scenarios));
     // migrate any previously-saved separate lump sum into a one-off phase
     if (b.lumpSum > 0 && b.lumpSumAge != null) {
@@ -2225,12 +2500,13 @@ function App() {
   const setBp = (patch) => { notePatch('bridge', patch); setBridgeInputs(prev => Object.assign({}, prev, patch)); };
   const bridge = useMemo(() => Engine.bridgePlan(bridgeInputs), [bridgeInputs]);
 
-  // Pension Coast Planner — independent inputs, seeded from its worked example
+  // Pension Coast Planner — independent inputs, blank on the personal figures
+  // for the same reason as the bridge above.
   const [coastInputs, setCoastInputs] = useState(() => {
-    let c = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS));
+    let c = Engine.coastBlank();
     try { const s = localStorage.getItem('optionality.coast');
-      if (s) c = Object.assign({}, JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS)), JSON.parse(s)); } catch(e){}
-    if (!Array.isArray(c.phases) || !c.phases.length) c.phases = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.phases));
+      if (s) c = Object.assign({}, Engine.coastBlank(), JSON.parse(s)); } catch(e){}
+    if (!Array.isArray(c.phases) || !c.phases.length) c.phases = Engine.coastBlank().phases;
     if (!c.scenarios) c.scenarios = JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS.scenarios));
     // one-time migration: seed the State Pension for saved states that pre-date it
     if (!c._cv || c._cv < 2) { if (c.statePensionAmount == null) c.statePensionAmount = 11900; if (c.statePensionAge == null) c.statePensionAge = 67; c._cv = 2; }
@@ -2270,13 +2546,49 @@ function App() {
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
   const setCp = (patch) => { notePatch('coast', patch); setCoastInputs(prev => Object.assign({}, prev, patch)); };
   const coast = useMemo(() => Engine.coastPlan(coastInputs), [coastInputs]);
-  // ONE age for the whole page. It was asked for twice — once per planner —
-  // and a person only has one, so the pension planner (first on the page)
-  // owns the field and writes it to both models.
-  const setAge = (v) => { const a = Math.round(v*10)/10; setBp({currentAge:a}); setCp({currentAge:a}); };
-  useEffect(() => { if (coastInputs.currentAge !== bridgeInputs.currentAge)
-    setCoastInputs(prev => Object.assign({}, prev, { currentAge: bridgeInputs.currentAge })); }, []);
+  // ONE age for the whole page. It is asked for in both planners — whichever
+  // you reach first — and a person only has one, so either field writes to
+  // both models. Clearing it clears both, which is why null passes straight
+  // through instead of being rounded into a 0.
+  const setAge = (v) => { const a = isSet(v) ? Math.round(v*10)/10 : null;
+    setBp({currentAge:a}); setCp({currentAge:a}); };
+
+  /* ---- say what you want to live on once ----
+     Both planners need a target income and, for most people, it is the same
+     figure: the pension pays it after access, the bridge pays it before. So
+     the first one you answer seeds the other — but ONLY while the other is
+     still blank. Once a figure has been typed into a planner it is that
+     planner's, and nothing here will overwrite it; the two stay independently
+     editable exactly as before, which is what somebody planning a leaner
+     early-retirement than their eventual retirement needs. */
+  useEffect(() => {
+    const b = bridgeInputs.targetIncome, c = coastInputs.targetIncome;
+    if (isSet(b) && !isSet(c) && coastInputs.goalMode !== 'pot')
+      setCoastInputs(prev => Object.assign({}, prev, { targetIncome: b }));
+    else if (isSet(c) && !isSet(b))
+      setBridgeInputs(prev => Object.assign({}, prev, { targetIncome: c }));
+  }, [bridgeInputs.targetIncome, coastInputs.targetIncome, coastInputs.goalMode]);
+  /* Reconcile the two saved ages once, on mount. This used to make the coast
+     age follow the bridge unconditionally — safe only while both always held a
+     number. Now that an age can be genuinely absent, copying the bridge's over
+     would ERASE an age the person had already given the pension planner (fill
+     in your pension, come back, and your age is gone). So whichever one exists
+     wins, and the bridge only takes precedence when both do. */
+  useEffect(() => {
+    const b = bridgeInputs.currentAge, c = coastInputs.currentAge;
+    if (b === c) return;
+    const a = isSet(b) ? b : c;
+    setBridgeInputs(prev => Object.assign({}, prev, { currentAge: a }));
+    setCoastInputs(prev => Object.assign({}, prev, { currentAge: a }));
+  }, []);
   const combined = useMemo(() => Engine.combinedPlan(bridgeInputs, coastInputs), [bridgeInputs, coastInputs]);
+  // Whether each half has been filled in. Everything that draws BOTH pots
+  // together — the combined net-worth chart, the cash-flow chart, the CSV —
+  // is meaningless until both are, and a flat line at zero is a worse answer
+  // than no chart at all.
+  const bridgeReady = Engine.bridgeReady(bridgeInputs);
+  const coastReady  = Engine.coastReady(coastInputs);
+  const bothReady   = bridgeReady && coastReady;
 
   // ---- Mortgage or invest? — the side calculator under the planners ----
   const [mortgageInputs, setMortgageInputs] = useState(() => {
@@ -2480,7 +2792,9 @@ function App() {
     const a = document.createElement('a'); a.href=url; a.download='future-funded-cashflow.csv'; a.click();
     URL.revokeObjectURL(url);
   };
-  const reset = () => { if (confirm('Reset all inputs to defaults?')) { setInputs(JSON.parse(JSON.stringify(Engine.DEFAULTS))); setBridgeInputs(JSON.parse(JSON.stringify(Engine.BRIDGE_DEFAULTS))); setCoastInputs(JSON.parse(JSON.stringify(Engine.COAST_DEFAULTS))); } };
+  // Reset clears YOUR figures and puts the house assumptions back — it does not
+  // reinstate a worked example, because there no longer is one.
+  const reset = () => { if (confirm('Clear your figures and start again?')) { setInputs(JSON.parse(JSON.stringify(Engine.DEFAULTS))); setBridgeInputs(Engine.bridgeBlank()); setCoastInputs(Engine.coastBlank()); } };
 
   /* cash events */
   const updEvent = (i, patch) => {
@@ -2541,39 +2855,49 @@ function App() {
       <div className="layout">
       <main className="main">
 
-      {/* ===== THE THREE HEADLINE CARDS — this is the hero =====
-           One question each, answered by a number. If the inputs a card needs
-           are missing, it asks for them instead of computing nonsense: with a
-           zeroed target income the model happily reports "work-optional now". */}
+      {/* ===== THE THREE HEADLINE CARDS — this is the hero, AND the onboarding
+           =====
+           There is no separate wizard, no modal, no "step 1 of 4". These cards
+           are the way in: before the numbers exist each one names what it needs
+           and takes you to the field, and afterwards the same card carries the
+           answer. Tapping one is how most people will reach a planner at all.
+
+           THE RULE THAT MATTERS HERE: a card that is waiting for information is
+           NEVER red, and never amber. Red means "your plan doesn't currently
+           achieve this" — a real, useful, sometimes unwelcome finding. If it
+           also means "you haven't finished typing", it stops meaning anything,
+           and a first-time visitor is greeted by a wall of failure they had no
+           chance to avoid. So: no dot, dashed border, and a plain request. */}
       {(function(){
         var cb = coast.base, bb = bridge.base;
-        var cAge = bridgeInputs.currentAge, access = bridgeInputs.pensionAccessAge;
+        var cAge = bridgeInputs.currentAge, access = num(bridgeInputs.pensionAccessAge, 57);
 
-        var ageOk    = cAge >= 16 && cAge <= 100;
-        var wantsInc = (bridgeInputs.targetIncome || 0) > 0;
-        var hasAcc   = (bridgeInputs.currentBalance || 0) > 0
-                       || (bridgeInputs.phases || []).some(function(p){ return (p.annual||0) > 0; });
-        var hasPen   = (coastInputs.currentPension || 0) > 0
-                       || (coastInputs.phases || []).some(function(p){ return (p.annual||0) > 0; });
-        var pensionTarget = coastInputs.goalMode === 'pot'
-                            ? (coastInputs.targetPot || 0) > 0
-                            : (coastInputs.targetIncome || 0) > 0;
+        // One source of truth, shared with the planners themselves, so a card
+        // can never ask for a figure the planner below is already using.
+        var bMiss = Engine.bridgeMissing(bridgeInputs);
+        var cMiss = Engine.coastMissing(coastInputs);
+        var bReady = bMiss.length === 0, cReady = cMiss.length === 0;
+        // Nothing at all yet? Then the first card shouldn't itemise — it should
+        // just invite. Itemising only helps once you're part-way through.
+        var fresh = bMiss.length >= 4 && cMiss.length >= 4;
+        var bAsk = { age:'your age', balance:'your ISA / GIA balance', income:'the income you want',
+                     contrib:'what you save each year' };
+        var cAsk = { age:'your age', pension:'your pension balance', income:'the income you want',
+                     contrib:'what you pay in each year' };
+        var listOf = function(keys, dict){
+          var t = keys.map(function(k){ return dict[k]; });
+          return t.length === 1 ? t[0] : t.slice(0,-1).join(', ') + ' and ' + t[t.length-1];
+        };
 
-        var needAge = !ageOk ? 'Add your age to calculate this' : null;
-        var accPrompt = needAge || (!wantsInc ? 'Add the income you want each year'
-                                  : !hasAcc  ? 'Add your ISA or GIA savings' : null);
-        var bridgePrompt = needAge || (!hasAcc ? 'Add your ISA or GIA savings'
-                                     : !wantsInc ? 'Add the income you want each year' : null);
-        var penPrompt = needAge || (!hasPen ? 'Add your pension to calculate this'
-                                  : !pensionTarget ? 'Add the income you want in retirement' : null);
-
-        /* Reaching optionality only AT pension access is not an early exit — it is just
-           the pension unlocking. Treat that as "no bridge", not as a green result. */
-        var early = !accPrompt && bb.crossAge != null && bb.crossAge < access;
+        var early = bReady && bb.crossAge != null && bb.crossAge < access;
 
         /* 1 — When can I stop needing to work? */
         var one;
-        if (accPrompt)          one = { k:'Work optional', dot:'', prompt:accPrompt };
+        if (!bReady)            one = { k:'Work optional', waiting:true,
+                                        prompt: fresh ? 'Add your numbers' : 'Almost there',
+                                        sub: fresh ? 'We’ll work this out for you'
+                                                   : 'Still need ' + listOf(bMiss, bAsk),
+                                        ask:'Set it up →' };
         else if (bb.crossAge == null)
           one = { k:'Work optional', dot:'warn', v:'Not yet', sub:'Not reachable before pension access ' + access };
         else if (!early)
@@ -2585,7 +2909,8 @@ function App() {
         /* 2 — Is my bridge funded? */
         var lasts = bb.depletionAge == null || bb.depletionAge >= access;
         var two;
-        if (bridgePrompt) two = { k:'Bridge fund', dot:'', prompt:bridgePrompt };
+        if (!bReady)     two = { k:'Bridge fund', waiting:true, prompt:'Set up your bridge',
+                                 sub:'Add your ISA / GIA balance and what you save', ask:'Set it up →' };
         else if (!early) two = { k:'Bridge fund', dot:'warn',
                                  v: gbpC(Math.max(0, bridge.targetPot - bridgeInputs.currentBalance)) + ' short',
                                  sub:'of the pot that lets you stop before ' + access };
@@ -2597,7 +2922,8 @@ function App() {
 
         /* 3 — Is my pension funded? */
         var three;
-        if (penPrompt)        three = { k:'Pension', dot:'', prompt:penPrompt };
+        if (!cReady)          three = { k:'Pension', waiting:true, prompt:'Set up your pension',
+                                        sub:'Add your pension balance and contributions', ask:'Set it up →' };
         else if (cb.coasting) three = { k:'Pension', dot:'good', v:'Funded',
                                         sub:'No more contributions needed' };
         else if (cb.reached)  three = { k:'Pension', dot:'good', v:'Age ' + cb.coastAge,
@@ -2614,7 +2940,10 @@ function App() {
                 return <HCard key={i} {...c} jumpTo={i === 2 ? 'planner-pension' : 'planner-bridge'} />;
               })}
             </div>
-            <div className="hc-foot">Bridge covers you before pension access {access}; pension takes over after. Today’s money.</div>
+            <div className="hc-foot">{(bReady || cReady)
+              ? <span>Bridge covers you before pension access {access}; pension takes over after. Today’s money.</span>
+              : <span>Tap a card to fill in the few figures behind it — it takes about a minute, and everything
+                  else is already set to Future Funded’s standard assumptions.</span>}</div>
           </React.Fragment>
         );
       })()}
@@ -2622,10 +2951,13 @@ function App() {
       <div id="planner-pension"></div>
       <CoastPlanner cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
       <div id="planner-bridge"></div>
-      <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      <BridgePlanner bp={bridgeInputs} setBp={setBp} setAge={setAge} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
-      {/* ===== OUTPUTS ===== */}
-      <div className="outputs-block">
+      {/* ===== OUTPUTS =====
+           Both pots on one picture. Held back until BOTH planners have been
+           filled in: with one side empty this draws a confident chart of half
+           a life, and the reader has no way to tell which half. */}
+      {bothReady && <div className="outputs-block">
       {/* CHARTS — combined view from the two planners */}
       <div className="panel">
         <div className="chart-h"><h2>Combined net worth</h2></div>
@@ -2715,7 +3047,7 @@ function App() {
         </div>
         </details>
       </div>
-      </div>{/* end outputs-block */}
+      </div>}{/* end outputs-block */}
 
       {/* ===== EXPLORE OTHER DECISIONS =====
            Side calculators. They sit BELOW the two planners and the combined
