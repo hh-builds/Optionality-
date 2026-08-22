@@ -1791,11 +1791,14 @@
     growth: null,              // investment return; null = inherit the site's assumption
     fee: 0.0025,               // investment fee p.a.
     taxDrag: 0,                // ISA = none. GIA (taxable) is a later iteration.
-    horizonMode: '10',         // '5' | '10' | '20' | 'term' | 'custom'
+    horizonMode: 'term',       // 'term' | '5' | '10' | '20' | 'custom'.  The original
+                               // mortgage end date is the cleanest finishing line: both
+                               // strategies are mortgage-free, both have spent the same,
+                               // so final wealth is directly comparable.
     horizonYears: 10,          // used when horizonMode is 'custom'
     rateChangeTo: null,        // optional: the rate changes to this...
     rateChangeAfterYears: null,// ...after this many years (e.g. a fix ending)
-    _mv: 1
+    _mv: 2
   };
 
   // Standard repayment mortgage payment.
@@ -1839,11 +1842,12 @@
         pay = mtgPmt(balB, i, Math.max(1, o.termMonths - m));
       // penalty-free allowance resets every 12 months, on the balance then owed
       if (m % 12 === 0) allowance = (o.limitPct > 0) ? o.limitPct * balA : Infinity;
-      // Both paths commit the SAME spare cash, and they stop at the same moment:
-      // once the overpaid mortgage is gone there is nothing left to overpay, so
-      // the investing path stops paying in there too. Otherwise the two columns
-      // show different amounts of committed cash and stop being comparable.
-      var spare = (payoffA == null) ? (o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0)) : 0;
+      // The same money leaves your pocket every month on BOTH paths, right
+      // through to the original mortgage end date: the contractual payment plus
+      // the spare. On the overpaying path the spare goes on the mortgage until
+      // it is cleared and into investments after that — alongside the payment
+      // it no longer owes. That is what makes the two strategies comparable.
+      var spare = o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0);
       spareCommitted += spare;
 
       var acA = balA * i, acB = balB * i;
@@ -2016,7 +2020,9 @@
       spareAnnualTotal: round2(o.spareMonthly * 12 + o.spareAnnual),
       guaranteedReturn: o.rate,
       spareCommitted: round2(run.spareCommitted),
-      spareStopMonth: (run.payoffA != null && run.payoffA < H) ? run.payoffA : null,
+      // after the overpaid mortgage clears, this is what goes into investments
+      // each month on that path: the freed payment plus the spare
+      monthlyAfterPayoff: round2(o.payment + o.spareMonthly + o.spareAnnual / 12),
       overpay: {
         balance: round2(run.balA), interest: round2(run.intA), extra: round2(run.extra),
         investments: round2(run.invA), contributions: round2(run.contribA),

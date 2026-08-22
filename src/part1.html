@@ -1165,6 +1165,39 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
   .mo-free{grid-template-columns:1fr}
   .mo-hide{align-self:flex-start}
 }
+
+/* ---- mortgage module: the trade-off hero, the timeline, the gap callout ---- */
+.mo-trade{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:stretch;margin-bottom:2px}
+.mo-tcell{background:var(--surface-2);border-radius:var(--radius-sm);padding:16px 18px}
+.mo-tcell .k{font-size:var(--fs-label);color:var(--muted);font-weight:600;line-height:1.35}
+.mo-tcell .v{font-size:25px;font-weight:650;letter-spacing:-0.03em;line-height:1.15;margin-top:6px}
+.mo-tcell .s{font-size:var(--fs-help);color:var(--text-secondary);margin-top:8px;line-height:1.45}
+.mo-vs{align-self:center;font-size:var(--fs-label);color:var(--muted);font-weight:650}
+/* the two paths as a flow, so "what happens after payoff" is visible, not explained */
+.mo-tl{display:flex;flex-direction:column;gap:8px}
+.mo-tl-row{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;background:var(--surface-2);
+  border-radius:var(--radius-sm);padding:12px 14px;font-size:var(--fs-help)}
+.mo-tl-row .nm{display:flex;align-items:center;gap:7px;font-weight:650;font-size:var(--fs-label);min-width:80px}
+.mo-tl-row .cd{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.mo-tl-row .st{color:var(--text-secondary)}
+.mo-tl-row .st.end{font-weight:650;color:var(--text-primary);font-variant-numeric:tabular-nums}
+.mo-tl-row .ar{color:var(--muted)}
+/* where the two lines finish, read off the chart */
+.mo-gap{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;margin-top:10px;padding-top:11px;
+  border-top:1px solid var(--border)}
+.mo-gap>div{display:flex;align-items:baseline;gap:9px}
+.mo-gap .k{font-size:var(--fs-label);color:var(--muted);font-weight:600;display:flex;align-items:center;gap:7px}
+.mo-gap .v{font-size:var(--fs-h);font-weight:650;font-variant-numeric:tabular-nums}
+.mo-gap .d{margin-left:auto}
+.mo-gap .d .v{color:var(--accent)}
+.mo-caveat{font-size:var(--fs-help);color:var(--muted);line-height:1.55;margin-top:14px;max-width:680px}
+@media (max-width:560px){
+  .mo-trade{grid-template-columns:1fr;gap:9px}
+  .mo-vs{justify-self:start;padding:0 2px}
+  .mo-tcell .v{font-size:21px}
+  .mo-gap .d{margin-left:0;width:100%}
+  .mo-tl-row{font-size:12px}
+}
 </style>
 </head>
 <body>

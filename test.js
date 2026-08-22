@@ -314,7 +314,8 @@ console.log('MORTGAGE OVERPAYMENT vs INVESTING');
 let mfails = 0; function massert(c,m){ if(!c){ console.log('FAIL:', m); mfails++; } }
 const mbase = { growthFallback:0.07, lowGrowth:0.05, highGrowth:0.09 };
 const MP = (patch) => Object.assign({}, Engine.MORTGAGE_DEFAULTS, mbase, patch||{});
-const mr = Engine.mortgagePlan(MP());
+const mr = Engine.mortgagePlan(MP({ horizonMode:'10' }));   // the 10-year slice
+const mt = Engine.mortgagePlan(MP());                       // the default: full term
 console.log('£200k · 4.5% · 20y · £2k/yr · 7% − 0.25% fee · 10-year horizon');
 console.log('  payment           :', money(mr.payment), '/month');
 console.log('  winner            :', mr.winner, 'by', money(Math.abs(mr.diff)));
@@ -329,11 +330,14 @@ massert(Math.abs(mr.payment - Engine.mortgagePayment(200000, 0.045/12, 240)) < 0
 massert(mr.payoffMonths === 240, 'no-overpayment mortgage clears at the end of the term');
 massert(mr.payoffMonthsOverpay < 240 && mr.termCutMonths === 240 - mr.payoffMonthsOverpay, 'overpaying clears earlier by termCutMonths');
 massert(mr.interestSavedLifetime > mr.interestSaved && mr.interestSaved > 0, 'interest saved grows once you keep overpaying to the end');
+massert(Engine.mortgageHorizonYears(MP()) === 20, 'the default comparison is the full remaining term');
+massert(Math.abs(mt.interestSaved - mt.interestSavedLifetime) < 1, 'over the full term, interest saved IS the lifetime figure');
 // net wealth = investments − debt, and both paths start at −balance
 massert(mr.series[0].overpay === -200000 && mr.series[0].invest === -200000, 'both paths start at minus the mortgage');
 massert(Math.abs(mr.overpay.net - (mr.overpay.investments - mr.overpay.balance)) < 0.02, 'overpay net wealth = investments − debt');
 massert(Math.abs(mr.invest.net - (mr.invest.investments - mr.invest.balance)) < 0.02, 'invest net wealth = investments − debt');
 massert(mr.series.length === 11 && mr.series[10].year === 10, 'one chart point a year over the horizon');
+massert(mt.series.length === 21 && mt.series[20].year === 20, 'and over the full term');
 
 // THE key consistency check: if investments compound at exactly the rate the
 // mortgage charges, the two paths must be financially identical.
@@ -350,12 +354,14 @@ massert(mr.series.length === 11 && mr.series[10].year === 10, 'one chart point a
 (function(){
   let prev = -Infinity, mono = true;
   for (let g = 0.02; g <= 0.12001; g += 0.01) {
-    const d = Engine.mortgagePlan(MP({ growth:g, overpayLimitPct:0 })).diff;
+    const d = Engine.mortgagePlan(MP({ growth:g, overpayLimitPct:0, horizonMode:'10' })).diff;
     if (d < prev - 1e-6) mono = false; prev = d;
   }
   massert(mono, 'investing’s advantage is monotonic in the assumed return');
-  const one = Engine.mortgagePlan(MP({ spare:2000, overpayLimitPct:0 })).diff;
-  const two = Engine.mortgagePlan(MP({ spare:4000, overpayLimitPct:0 })).diff;
+  // linear only while neither path's structure changes — so hold the horizon
+  // inside the mortgage term, where nothing has been paid off early yet
+  const one = Engine.mortgagePlan(MP({ spare:2000, overpayLimitPct:0, horizonMode:'10' })).diff;
+  const two = Engine.mortgagePlan(MP({ spare:4000, overpayLimitPct:0, horizonMode:'10' })).diff;
   massert(Math.abs(two - 2*one) < 1, 'twice the spare cash = twice the gap (no cap binding)');
   const s = Engine.mortgagePlan(MP()).sensitivity;
   massert(s[0].diff < s[1].diff && s[1].diff < s[2].diff, 'lower / central / higher returns order correctly');
@@ -380,9 +386,9 @@ massert(mr.series.length === 11 && mr.series[10].year === 10, 'one chart point a
   const long = Engine.mortgagePlan(MP({ spare:1000, spareFreq:'monthly', horizonMode:'custom', horizonYears:25 }));
   massert(long.payoffMonthsOverpay < long.months, 'the overpaid mortgage clears inside this horizon');
   massert(long.overpay.investments > 0 && long.overpay.balance === 0, 'after payoff the overpay path holds investments, not debt');
-  massert(long.spareStopMonth === long.payoffMonthsOverpay, 'paying in stops when the overpaid mortgage clears');
-  massert(Math.abs(long.spareCommitted - 1000*long.payoffMonthsOverpay) < 1, 'spare committed = the monthly amount up to that month');
+  massert(Math.abs(long.spareCommitted - 1000*long.months) < 1, 'the spare keeps flowing to the end of the comparison, on both paths');
   massert(long.overpay.freedInvested > 0, 'the freed payment is invested on the overpaying path');
+  massert(Math.abs(long.monthlyAfterPayoff - (long.payment + 1000)) < 0.01, 'after payoff it invests the payment plus the spare');
 })();
 
 // the two paths always commit the SAME spare cash, and the two gains always
