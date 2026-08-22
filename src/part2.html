@@ -1545,10 +1545,6 @@ function AuthButton(props){
    Everything else is supporting evidence and progressively
    discloses underneath. It must never declare a "winner".
    ============================================================= */
-function MoRow({ k, v, strong }) {
-  return <div className="mo-r"><span className="k">{k}</span><span className={'v' + (strong ? ' strong' : '')}>{v}</span></div>;
-}
-
 function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClose }) {
   const narrow = useIsNarrow();
   const pc = (x, dp) => (x == null ? '—' : (x * 100).toFixed(dp == null ? 1 : dp) + '%');
@@ -1825,39 +1821,17 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
               {plan.crossover && <ReferenceLine x={Math.round((plan.crossover.month / 12) * 10) / 10} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
                 label={{ value: (plan.crossover.winner === 'invest' ? 'Investing ahead' : 'Overpaying ahead') + ' — year ' + Math.round(plan.crossover.month / 12),
                          position: 'insideTopLeft', fill: C.good, fontSize: narrow ? 10 : 11, fontWeight: 700 }} />}
+              <Line type="monotone" dataKey="growth" name="Investment growth" stroke={C.isa} strokeWidth={2.6} dot={false} />
               <Line type="monotone" dataKey="saved" name={plan.overpay.investments - plan.overpay.contributions > 1
                 ? 'Interest saved + growth' : 'Interest saved by overpaying'} stroke={C.pension} strokeWidth={2.6} dot={false} />
-              <Line type="monotone" dataKey="growth" name="Investment growth" stroke={C.isa} strokeWidth={2.6} dot={false} />
               {/* the lines often only part company near the end — mark where they finish */}
-              <ReferenceDot x={H} y={plan.overpayGain} r={4} fill={C.pension} stroke="none" isFront={true} />
               <ReferenceDot x={H} y={plan.investGain} r={4} fill={C.isa} stroke="none" isFront={true} />
+              <ReferenceDot x={H} y={plan.overpayGain} r={4} fill={C.pension} stroke="none" isFront={true} />
             </LineChart>
           </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
-          <div className="mo-gap">
-            {/* NOT plain "Interest saved" — this is the gain, which also carries
-                growth on the cash the overpaying path couldn't put on the
-                mortgage. The box above shows interest saved on its own, and two
-                different figures under one label is how people stop trusting a page. */}
-            <div><span className="k"><span className="sw" style={{ background: C.pension }}></span>{
-              plan.overpay.investments - plan.overpay.contributions > 1 ? 'Interest saved + growth' : 'Interest saved'
-            }</span><span className="v">{gbpC(plan.overpayGain)}</span></div>
-            <div><span className="k"><span className="sw" style={{ background: C.isa }}></span>Investment growth</span><span className="v">{gbpC(plan.investGain)}</span></div>
-            <div className="d"><span className="k">Difference at {endDate}</span><span className="v">{(winsInvest ? '+' : '−') + gbpC(Math.abs(plan.diff))} {winsInvest ? 'investing' : 'overpaying'}</span></div>
-          </div>
-          <div className="bp-note" style={{ marginTop: 6 }}>Both start at zero and show what your spare cash has
-            earned you by that year — interest you no longer pay on one path, growth on the other. <b>The gap
-            between the lines is the answer</b>: it is exactly the {gbp(round100(plan.diff))} above.
-            {plan.crossover ? ' They cross in year ' + Math.round(plan.crossover.month / 12) + ': '
-              + (plan.crossover.winner === 'invest'
-                  ? 'investing pulls ahead from there.'
-                  : 'overpaying catches up once the mortgage is gone and the whole payment can be invested.')
-              : (plan.firstLeader === 'invest'
-                  ? ' On these assumptions investing stays ahead throughout — there is no crossover.'
-                  : ' On these assumptions overpaying stays ahead throughout — there is no crossover.')}
-            {plan.overpay.investments - plan.overpay.contributions > 1
-              ? ' “Interest saved” also carries growth on the spare cash the overpaying path could not put on the '
-                + 'mortgage — above the allowance, or after it was cleared — so nothing goes missing between the two lines.'
-              : ''}</div>
+          {/* The figure strip and the explainer that sat here are gone: the
+              series are named in the tooltip, the cards above carry the totals,
+              and "Year by year" below is the audit trail. */}
         </div>
 
         {/* ---- YEAR BY YEAR — the whole comparison, line by line.
@@ -1873,9 +1847,11 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           <div className="tablewrap cards" style={{ maxHeight: 460 }}>
             <table>
               <thead>
+                {/* Invest first, matching the cards and the chart — the colours
+                    and the sides mean the same thing everywhere on the page */}
                 <tr className="grouprow"><th></th>
-                  <th colSpan={3} className="grp grp-p">Overpay the mortgage</th>
                   <th colSpan={3} className="grp grp-a">Invest the spare cash</th>
+                  <th colSpan={3} className="grp grp-p">Overpay the mortgage</th>
                   <th></th></tr>
                 <tr><th>Year</th>
                   <th>Owed</th><th>Invested</th><th>Interest paid</th>
@@ -1888,12 +1864,12 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
                   return (
                   <tr key={i}>
                     <td data-label="Year">{r.year}</td>
-                    <td data-label="Overpay owed">{r.debtOverpay > 0 ? gbpC(r.debtOverpay) : <span className="muted">cleared</span>}</td>
-                    <td data-label="Overpay invested">{gbpC(r.potOverpay)}</td>
-                    <td data-label="Overpay interest paid">{gbpC(r.intOverpay)}</td>
                     <td data-label="Invest owed">{r.debtInvest > 0 ? gbpC(r.debtInvest) : <span className="muted">cleared</span>}</td>
                     <td data-label="Invest invested">{gbpC(r.potInvest)}</td>
                     <td data-label="Invest interest paid">{gbpC(r.intInvest)}</td>
+                    <td data-label="Overpay owed">{r.debtOverpay > 0 ? gbpC(r.debtOverpay) : <span className="muted">cleared</span>}</td>
+                    <td data-label="Overpay invested">{gbpC(r.potOverpay)}</td>
+                    <td data-label="Overpay interest paid">{gbpC(r.intOverpay)}</td>
                     <td data-label="Difference">{Math.abs(d) < 100
                       ? <span className="muted">level</span>
                       : (d > 0 ? '+' : '−') + gbpC(Math.abs(d)) + (narrow ? '' : d > 0 ? ' inv' : ' ovp')}</td>
@@ -1945,14 +1921,6 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
         <div className="bp-sub">Certainty vs potential return</div>
         <div className="mo-tradeoff">
           <div className="mo-col">
-            <h4><span className="cd" style={{ background: C.pension }}></span>Overpay</h4>
-            <ul>
-              <li>Guaranteed interest saving</li>
-              <li>Mortgage-free sooner</li>
-              <li>Money becomes less accessible</li>
-            </ul>
-          </div>
-          <div className="mo-col">
             <h4><span className="cd" style={{ background: C.isa }}></span>Invest</h4>
             <ul>
               <li>Higher potential return</li>
@@ -1960,63 +1928,17 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
               <li>Returns are uncertain</li>
             </ul>
           </div>
+          <div className="mo-col">
+            <h4><span className="cd" style={{ background: C.pension }}></span>Overpay</h4>
+            <ul>
+              <li>Guaranteed interest saving</li>
+              <li>Mortgage-free sooner</li>
+              <li>Money becomes less accessible</li>
+            </ul>
+          </div>
         </div>
         <div className="mo-key">This isn’t purely a maths question. Overpaying gives a <b>known</b> saving;
           investing gives an <b>uncertain</b> return with potentially greater upside.</div>
-
-        {/* ---- 8) SEE THE NUMBERS — the reconciliation, for anyone checking the maths ---- */}
-        <details className="bp-collapse" onToggle={TRK.open('view_projection')}><summary className="bp-sub bp-summary">See the numbers</summary>
-        <div>
-        {(function () {
-          var sideGrowth = Math.max(0, plan.overpay.investments - plan.overpay.contributions);
-          return (
-          <React.Fragment>
-          <div className="mo-cols" style={{ marginTop: 4 }}>
-            <div className="mo-col">
-              <h4><span className="cd" style={{ background: C.pension }}></span>Overpay the mortgage</h4>
-              {/* leads with what the spare cash EARNED, not the net position: the
-                  latter is negative while a mortgage remains and reads as "what
-                  you'll have spent". It stays as a row — it is the honest bottom
-                  line, just not the headline. */}
-              <div className="net">{gbpC(plan.overpayGain)} <span className="nl">{sideGrowth > 0 ? 'interest saved + growth' : 'interest saved'}</span></div>
-              <MoRow k="Interest saved" v={gbpC(plan.interestSaved)} />
-              <MoRow k="Spare cash committed" v={gbpC(plan.spareCommitted)} />
-              {plan.spareCommitted - plan.overpay.extra > 1 && <MoRow k="Of that, actually overpaid" v={gbpC(plan.overpay.extra)} />}
-              {plan.overpay.freedInvested > 0 && <MoRow k="Freed-up payments invested" v={gbpC(plan.overpay.freedInvested)} />}
-              {sideGrowth > 0 && <MoRow k="Growth on the invested cash" v={gbpC(sideGrowth)} />}
-              <MoRow k="Mortgage still owed" v={gbpC(plan.overpay.balance)} />
-              <MoRow k="Net position" v={sgn(plan.overpay.net)} />
-              <MoRow k="Mortgage interest avoided" v={pc(plan.guaranteedReturn)} strong />
-            </div>
-            <div className="mo-col">
-              <h4><span className="cd" style={{ background: C.isa }}></span>Invest the spare cash</h4>
-              <div className="net">{gbpC(plan.investGain)} <span className="nl">investment growth</span></div>
-              <MoRow k="Investment growth" v={gbpC(plan.invest.growthAmount)} />
-              <MoRow k="Spare cash committed" v={gbpC(plan.spareCommitted)} />
-              {plan.invest.freedInvested > 0 && <MoRow k="Freed-up payments invested" v={gbpC(plan.invest.freedInvested)} />}
-              <MoRow k="Investment value" v={gbpC(plan.invest.investments)} />
-              <MoRow k="Mortgage still owed" v={gbpC(plan.invest.balance)} />
-              <MoRow k="Net position" v={sgn(plan.invest.net)} />
-              <MoRow k="Assumed return" v={pc(plan.growth) + ' — not guaranteed'} strong />
-            </div>
-          </div>
-          <div className="mo-key">Both strategies commit the same <b>{gbp(plan.spareCommitted)}</b> of spare cash and the
-            same monthly payment, right through to {endDate}. Net position is what you’d be worth if you settled up
-            that day — investments minus the mortgage still owed — which is why the comparison is the
-            <b> difference</b> between the two, not either figure on its own.
-            {plan.capBinding ? (capEarly
-              ? ' Your ' + gbp(plan.spareAnnualTotal) + ' a year is above the ' + pc(mp.overpayLimitPct, 0) + ' annual overpayment allowance on a ' + gbpC(mp.balance) + ' balance, so the excess is invested instead.'
-              : ' In the final years, part of your ' + gbp(plan.spareAnnualTotal) + ' annual overpayment exceeds the ' + pc(mp.overpayLimitPct, 0) + ' allowance as the remaining balance gets smaller. We’ve invested that excess instead.') : ''}</div>
-          <div className="mo-free" style={{ marginTop: 14 }}>
-            <div><div className="k">Mortgage-free — current payments</div><div className="v">{dateIn(plan.payoffMonths)}</div></div>
-            <div><div className="k">Mortgage-free — overpaying</div><div className="v">{dateIn(plan.payoffMonthsOverpay)}</div></div>
-            <div><div className="k">Interest saved over the whole mortgage</div><div className="v">{gbpC(plan.interestSavedLifetime)}</div></div>
-          </div>
-          </React.Fragment>
-          );
-        })()}
-        </div>
-        </details>
 
         {/* ---- 9) HOW THIS WORKS + the caveats ---- */}
         <details className="bp-collapse"><summary className="bp-sub bp-summary">How this works &amp; important assumptions</summary>
