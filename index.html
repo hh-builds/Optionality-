@@ -5031,6 +5031,10 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           <div className="mo-col">
             <h4><span className="cd" style={{ background: C.pension }}></span>Overpay the mortgage</h4>
             <div className="net">{gbp(round100(overpayGain))} <span className="nl">{sideGrowth > 0 ? 'interest saved + growth' : 'interest saved'}</span></div>
+            {/* when the overpaying path ends up holding investments too, show the
+                headline's arithmetic rather than leaving "+ growth" unexplained */}
+            {sideGrowth > 0 && <MoRow k="Interest saved" v={gbpC(plan.interestSaved)} />}
+            {sideGrowth > 0 && <MoRow k="Growth on the cash that got invested instead" v={gbpC(sideGrowth)} />}
             <MoRow k="Spare cash committed" v={gbpC(plan.spareCommitted)} />
             {plan.spareCommitted - plan.overpay.extra > 1 && <MoRow k="Of that, overpaid (the rest was above the allowance)" v={gbpC(plan.overpay.extra)} />}
             {plan.overpay.freedInvested > 0 && <MoRow k="Freed-up payments invested once it was cleared" v={gbpC(plan.overpay.freedInvested)} />}
@@ -5052,12 +5056,20 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
         <div className="mo-key">Both paths commit the <b>same {gbp(plan.spareCommitted)}</b>{plan.spareStopMonth
             ? <span> — paying in stops on both sides in year {Math.max(1, Math.round(plan.spareStopMonth / 12))}, when the
               overpaid mortgage is cleared and there is nothing left to overpay</span>
-            : <span></span>}. It saved <b>{gbp(round100(overpayGain))}</b> of interest on one path and earned
+            : <span></span>}. {sideGrowth > 0
+            ? <span>It came back as <b>{gbp(round100(overpayGain))}</b> on one path — {gbp(round100(plan.interestSaved))} of
+              interest saved plus {gbp(round100(sideGrowth))} of growth on the cash that got invested instead — against</span>
+            : <span>It saved <b>{gbp(round100(overpayGain))}</b> of interest on one path and earned</span>}
           {' '}<b>{gbp(round100(investGain))}</b> of growth on the other{reconciles
             ? <span> — a difference of <b>{gbp(round100(plan.diff))}</b>, which is the figure at the top</span>
             : <span></span>}. Net position is what you'd be worth if you settled up today: investments minus the
           mortgage still owed. It's negative on both paths while a mortgage remains, which is why the comparison
-          is the <b>difference</b> between them, not either number on its own.</div>
+          is the <b>difference</b> between them, not either number on its own.{sideGrowth > 0
+            ? <span> The overpaying side shows growth as well as interest because some of its cash couldn’t go on
+              the mortgage — {plan.overpay.capped > 0 ? 'your lender’s allowance turned ' + gbpC(plan.overpay.capped) + ' of it away' : 'the mortgage was already cleared'}
+              {plan.overpay.freedInvested > 0 ? ', and once the mortgage was gone the ' + gbp(Math.round(plan.payment)) + '/month payment was free to invest' : ''} — so
+              it was invested instead of disappearing.</span>
+            : <span></span>}</div>
         </React.Fragment>
           );
         })()}
