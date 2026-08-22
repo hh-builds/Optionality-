@@ -2048,7 +2048,11 @@ function App() {
     return x;
   });
   useEffect(() => { try { localStorage.setItem('optionality.mortgage', JSON.stringify(mortgageInputs)); } catch(e){} }, [mortgageInputs]);
-  const setMp = (patch) => { TRK.once('session','edit_mortgage'); setMortgageInputs(prev => Object.assign({}, prev, patch)); };
+  const mgDirty = useRef(false);
+  const setMp = (patch) => {
+    TRK.once('session','edit_mortgage'); mgDirty.current = true;
+    setMortgageInputs(prev => Object.assign({}, prev, patch));
+  };
   const [exploreOpen, setExploreOpen] = useState(false);
   // It INHERITS the site's return assumptions (base + the two scenarios) rather
   // than introducing a third set of numbers to keep in step.
@@ -2057,6 +2061,30 @@ function App() {
     lowGrowth:  (bridgeInputs.scenarios && bridgeInputs.scenarios.conservative && bridgeInputs.scenarios.conservative.growth) || null,
     highGrowth: (bridgeInputs.scenarios && bridgeInputs.scenarios.optimistic && bridgeInputs.scenarios.optimistic.growth) || null
   })), [mortgageInputs, bridgeInputs.growth, bridgeInputs.scenarios]);
+
+  // What did "Mortgage or invest?" actually TELL people? The single most useful
+  // thing this calculator can report back, and the same shape as plan_completed
+  // carrying the optionality age: the verdict, plus how demanding the bar was.
+  //
+  // Deliberately NOT their break-even rate itself — that tracks their mortgage
+  // rate closely enough to be a personal figure, so it goes up as a band. No
+  // balance, contribution or payment is sent, in line with everything else here.
+  useEffect(() => {
+    if (!mgDirty.current || !mortgage.ready) return;
+    // Only after they have put their OWN situation in — the shipped defaults
+    // have a verdict too, and it would tell us nothing about anybody.
+    const t = setTimeout(() => {
+      const b = mortgage.breakEven;
+      TRK.once('session', 'mortgage_verdict', {
+        verdict: mortgage.winner,
+        // null break-even = investing never catches up, even at a 30% return
+        band: b == null ? 'above 30%'
+            : b < 0.04 ? 'under 4%' : b < 0.06 ? '4-6%' : b < 0.08 ? '6-8%' : '8% or more',
+        horizon: mortgageInputs.horizonMode || 'term'
+      });
+    }, 1400);   // let typing settle, so we record a considered answer not a keystroke
+    return () => clearTimeout(t);
+  }, [mortgage, mortgageInputs.horizonMode]);
 
   // Fire the funnel events AFTER the model has recomputed, so the optionality
   // age we report is the one the user is actually looking at.

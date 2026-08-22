@@ -404,6 +404,13 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
         <div class="card"><div class="feat" id="feat"></div></div>
       </div>
       <div class="sec">
+        <div class="sec-h">Mortgage or invest? <span class="hint" id="mgHint"></span></div>
+        <div class="tiles" id="mgTiles"></div>
+        <div class="card" style="margin-top:11px"><div class="feat" id="mgBands"></div></div>
+        <div class="note" id="mgNote"></div>
+      </div>
+
+      <div class="sec">
         <div class="sec-h">Installed as an app <span class="hint" id="instHint"></span></div>
         <div class="tiles" id="instTiles"></div>
         <div class="note" id="instNote"></div>
@@ -842,6 +849,48 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     }).join('');
   }
 
+  // What the side calculator actually told people. One vote per device — its
+  // most recent answer — so somebody changing their mind twice in a sitting
+  // does not get counted twice.
+  var BANDS = ['under 4%', '4-6%', '6-8%', '8% or more', 'above 30%'];
+  function renderMortgage(d){
+    if (!d){ $('mgTiles').innerHTML = ''; $('mgBands').innerHTML = ''; $('mgNote').textContent = ''; return; }
+    var v = d.verdicts || {}, answered = Number(d.answered) || 0;
+    var share = function(x){ return answered > 0 ? pct(100 * (Number(x) || 0) / answered) : '—'; };
+
+    $('mgTiles').innerHTML =
+      tile('Opened it', n(d.opened)) +
+      tile('Put their figures in', n(d.edited),
+           d.opened > 0 ? pct(100 * (Number(d.edited) || 0) / Number(d.opened)) + ' of those who opened it' : null) +
+      tile('Got an answer', n(answered), 'devices') +
+      tile('“Overpay”', n(v.overpay || 0), share(v.overpay)) +
+      tile('“Invest”', n(v.invest || 0), share(v.invest)) +
+      tile('Line ball', n(v.tie || 0), share(v.tie));
+
+    var bands = d.bands || {};
+    var max = BANDS.reduce(function(a, k){ return Math.max(a, Number(bands[k]) || 0); }, 0) || 1;
+    $('mgBands').innerHTML = answered === 0
+      ? '<div class="empty">Nobody has reached an answer in this period yet.</div>'
+      : BANDS.map(function(k){
+          var c = Number(bands[k]) || 0;
+          return '<div class="feat-row' + (c ? '' : ' zero') + '">'
+               +   '<span class="feat-name"><b>' + esc(k) + '</b>'
+               +     '<span class="feat-track"><i class="alt" style="width:' + (100*c/max).toFixed(1) + '%"></i></span></span>'
+               +   '<span class="feat-n">' + n(c) + '</span>'
+               +   '<span class="feat-p">' + share(c) + '</span>'
+               + '</div>';
+        }).join('');
+
+    $('mgNote').innerHTML = 'The bars are the <b>return investing would have needed</b> to draw level '
+      + 'with overpaying — the lower the band, the more easily investing won. It is recorded as a band '
+      + 'on purpose: the exact figure tracks a person’s own mortgage rate closely enough to count as '
+      + 'a personal detail. No balance, payment or spare-cash figure is recorded at all. '
+      + 'One vote per device, its most recent answer, and only once somebody has entered their own '
+      + 'situation — the shipped defaults reach a verdict too, and counting those would say nothing '
+      + 'about anybody.';
+    $('mgHint').textContent = periodLabel();
+  }
+
   function renderInstalls(d){
     if (!d) { $('instTiles').innerHTML = ''; $('instNote').textContent = ''; return; }
     var share = d.visitors > 0 ? (100 * d.launch_devices / d.visitors) : null;
@@ -1227,10 +1276,12 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
           ['admin_features', P],
           ['admin_installs', P],
           ['admin_model_medians', {}],
-          ['admin_median_optionality_age', {}]
+          ['admin_median_optionality_age', {}],
+          ['admin_mortgage', P]
         ]);
         renderFeatures(q[0] || []); renderInstalls(q[1] || null);
         renderModel(q[2] || {}, q[3] || {});
+        renderMortgage(q[4] || null);
         $('instHint').textContent = periodLabel();
       } else if (tab === 'reach'){
         var c = await rpcAll([['admin_countries', P]]);
