@@ -1715,9 +1715,6 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
               <MoRow k="Paid into investments" v={gbpC(plan.invest.contributions)} />
               <MoRow k="Investment growth" v={'+' + gbpC(plan.invest.growthAmount)} />
               <div className="mo-tot"><span className="k">Investment pot</span><span className="v">{gbpC(plan.invest.investments)}</span></div>
-              {/* stated on both cards: "both mortgages are £0" is the precondition
-                  that makes comparing the two pots a fair comparison at all */}
-              {plan.invest.balance <= 1 && <MoRow k="Mortgage" v="£0" />}
               {plan.invest.balance > 1 && <MoRow k="Mortgage still owed" v={'−' + gbpC(plan.invest.balance)} />}
               {plan.invest.balance > 1 && <div className="mo-tot net"><span className="k">What you’d be worth</span><span className="v">{sgn(plan.invest.net)}</span></div>}
             </div>
@@ -1760,7 +1757,6 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
               <MoRow k="Paid into investments" v={gbpC(plan.overpay.contributions)} />
               <MoRow k="Investment growth" v={'+' + gbpC(oGrowth)} />
               <div className="mo-tot"><span className="k">Investment pot</span><span className="v">{gbpC(plan.overpay.investments)}</span></div>
-              {plan.overpay.balance <= 1 && <MoRow k="Mortgage" v="£0" />}
               {plan.overpay.balance > 1 && <MoRow k="Mortgage still owed" v={'−' + gbpC(plan.overpay.balance)} />}
               {plan.overpay.balance > 1 && <div className="mo-tot net"><span className="k">What you’d be worth</span><span className="v">{sgn(plan.overpay.net)}</span></div>}
             </div>
@@ -1854,6 +1850,62 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
                 + 'mortgage — above the allowance, or after it was cleared — so nothing goes missing between the two lines.'
               : ''}</div>
         </div>
+
+        {/* ---- YEAR BY YEAR — the whole comparison, line by line.
+             The two "Interest paid" columns are the point: the gap between them
+             IS the interest saved. Seeing it as a cost that one path pays and
+             the other doesn't is what makes clear it is money never spent, not a
+             second pot sitting somewhere waiting to be added on. */}
+        <details className="bp-collapse" onToggle={TRK.open('view_projection')}>
+        <summary className="bp-sub bp-summary">Year by year</summary>
+        <div>
+          <div className="desc" style={{ marginTop: 0, marginBottom: 10 }}>Everything each strategy owes,
+            holds and has paid in interest, at the end of every year. Cash terms, as entered.</div>
+          <div className="tablewrap cards" style={{ maxHeight: 460 }}>
+            <table>
+              <thead>
+                <tr className="grouprow"><th></th>
+                  <th colSpan={3} className="grp grp-p">Overpay the mortgage</th>
+                  <th colSpan={3} className="grp grp-a">Invest the spare cash</th>
+                  <th></th></tr>
+                <tr><th>Year</th>
+                  <th>Owed</th><th>Invested</th><th>Interest paid</th>
+                  <th>Owed</th><th>Invested</th><th>Interest paid</th>
+                  <th>Difference</th></tr>
+              </thead>
+              <tbody>
+                {plan.series.map(function (r, i) {
+                  const d = (r.invest || 0) - (r.overpay || 0);   // + = investing ahead
+                  return (
+                  <tr key={i}>
+                    <td data-label="Year">{r.year}</td>
+                    <td data-label="Overpay owed">{r.debtOverpay > 0 ? gbpC(r.debtOverpay) : <span className="muted">cleared</span>}</td>
+                    <td data-label="Overpay invested">{gbpC(r.potOverpay)}</td>
+                    <td data-label="Overpay interest paid">{gbpC(r.intOverpay)}</td>
+                    <td data-label="Invest owed">{r.debtInvest > 0 ? gbpC(r.debtInvest) : <span className="muted">cleared</span>}</td>
+                    <td data-label="Invest invested">{gbpC(r.potInvest)}</td>
+                    <td data-label="Invest interest paid">{gbpC(r.intInvest)}</td>
+                    <td data-label="Difference">{Math.abs(d) < 100
+                      ? <span className="muted">level</span>
+                      : (d > 0 ? '+' : '−') + gbpC(Math.abs(d)) + (narrow ? '' : d > 0 ? ' inv' : ' ovp')}</td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="bp-note" style={{ marginTop: 8 }}>“Invested” is what that strategy is holding;
+            “Owed” is what is left on the mortgage. <b>Difference</b> is what you would be worth on one path
+            against the other — investments minus the mortgage — so <b>+</b> means investing is ahead
+            and <b>−</b> means overpaying is.
+            {plan.overpay.balance <= 1 && plan.invest.balance <= 1
+              ? <span> The two <b>Interest paid</b> columns end {gbpC(plan.interestSaved)} apart, and
+                that gap is the interest overpaying avoided. It is a cost never incurred, which is why it
+                is not added to the pot on the right of it.</span>
+              : <span> The two <b>Interest paid</b> columns are {gbpC(plan.interestSaved)} apart so
+                far — that gap is the interest overpaying has avoided to date. It is a cost never incurred,
+                not a pot to add on.</span>}</div>
+        </div>
+        </details>
 
         {/* The old "How the two run" timeline lived here. The two flow cards
              above now tell that story with the money attached, so keeping it was

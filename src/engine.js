@@ -1830,8 +1830,12 @@
     // interest avoided (plus growth on anything the allowance turned away) vs
     // investment growth. Both start at zero, and gainB − gainA is exactly the
     // net-wealth gap — cash conservation guarantees it.
+    // intA/intB and contribA/contribB ride along per row so a year-by-year table
+    // can show the interest each path has actually PAID by that point. The gap
+    // between those two columns IS the interest saved, which is the clearest way
+    // to show it is a cost avoided rather than a second pot of money.
     var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB,
-                  gainA: 0, gainB: 0 }];
+                  gainA: 0, gainB: 0, intA: 0, intB: 0, contribA: 0, contribB: 0 }];
     for (var m = 0; m < months; m++) {
       var rate = (o.rateChangeMonth != null && m >= o.rateChangeMonth) ? o.rateChangeTo : o.rate;
       var i = rate / 12;
@@ -1876,7 +1880,8 @@
       if (balB <= 0.005) { balB = 0; if (payoffB == null) payoffB = m + 1; }
       rows.push({ m: m + 1, balA: balA, balB: balB, invA: invA, invB: invB,
                   netA: invA - balA, netB: invB - balB,
-                  gainA: (intB - intA) + (invA - contribA), gainB: invB - contribB });
+                  gainA: (intB - intA) + (invA - contribA), gainB: invB - contribB,
+                  intA: intA, intB: intB, contribA: contribA, contribB: contribB });
       if (o.stopWhenClear && balA === 0 && balB === 0) break;
     }
     return { rows: rows, balA: balA, balB: balB, invA: invA, invB: invB,
@@ -2001,14 +2006,20 @@
       var r0 = run.rows[y * 12];
       series.push({ year: y, saved: round2(r0.gainA), growth: round2(r0.gainB),
                     overpay: round2(r0.netA), invest: round2(r0.netB),
-                    debtOverpay: round2(r0.balA), debtInvest: round2(r0.balB) });
+                    debtOverpay: round2(r0.balA), debtInvest: round2(r0.balB),
+                    potOverpay: round2(r0.invA), potInvest: round2(r0.invB),
+                    inOverpay: round2(r0.contribA), inInvest: round2(r0.contribB),
+                    intOverpay: round2(r0.intA), intInvest: round2(r0.intB) });
     }
     var lastRow = run.rows[run.rows.length - 1];
     if (series.length === 0 || series[series.length - 1].year * 12 !== lastRow.m) {
       series.push({ year: Math.round((lastRow.m / 12) * 100) / 100,
                     saved: round2(lastRow.gainA), growth: round2(lastRow.gainB),
                     overpay: round2(lastRow.netA), invest: round2(lastRow.netB),
-                    debtOverpay: round2(lastRow.balA), debtInvest: round2(lastRow.balB) });
+                    debtOverpay: round2(lastRow.balA), debtInvest: round2(lastRow.balB),
+                    potOverpay: round2(lastRow.invA), potInvest: round2(lastRow.invB),
+                    inOverpay: round2(lastRow.contribA), inInvest: round2(lastRow.contribB),
+                    intOverpay: round2(lastRow.intA), intInvest: round2(lastRow.intB) });
     }
 
     return {
