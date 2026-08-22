@@ -1611,7 +1611,10 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
       </div>
       {(mp.horizonMode === 'custom') && <div className="bp-fld" style={{ marginTop: 10, maxWidth: 200 }}><label>Years to compare over</label>
         <BpNum value={mp.horizonYears} step="1" onChange={v => setMp({ horizonYears: Math.max(1, Math.round(v)) })} /></div>}
-      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Adjust assumptions</summary>
+      {/* Its own name, not open_advanced. The two planners use that one, and a
+          single row labelled "Opened advanced assumptions" counting both could
+          never be separated again afterwards. */}
+      <details className="bp-collapse" onToggle={TRK.open('mortgage_advanced')}><summary className="bp-sub bp-summary">Adjust assumptions</summary>
       <div>
         <div className="bp-assump" style={{ marginTop: 4 }}>
           <div className="bp-fld"><label>Your monthly payment</label>
