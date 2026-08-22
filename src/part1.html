@@ -782,6 +782,9 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .bp-answer{font-size:32px;font-weight:650;letter-spacing:-0.03em;line-height:1.08}
 .bp-answer.reached{color:var(--good-text)}
 .bp-answer.missed{color:var(--critical)}
+/* "Work to 66" — the plan works, just later than they hoped. Not a success and
+   not a failure, and red would be a lie about a perfectly reachable answer. */
+.bp-answer.later{color:var(--warning)}
 /* waiting on an input — deliberately quiet, and clearly not a result */
 .bp-answer.waiting{color:var(--muted);font-size:var(--fs-result);font-weight:600;letter-spacing:-0.01em}
 .bp-evidence{font-size:var(--fs-body);color:var(--text-secondary);margin-top:9px;line-height:1.45;
@@ -1141,18 +1144,14 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-inwrap.unset input::placeholder{color:var(--muted);opacity:.65}
 .bp-inwrap.unset>span.pfx{opacity:.45}
 
-/* --- "Your numbers" once they exist: a summary line you can open --- */
-.yn-line{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;
-  font-size:var(--fs-help);color:var(--text-secondary);line-height:1.5;padding:0 2px 2px}
-/* the summary reads as a caption on the boxes, not as another label in them */
-.yn-line + .yn-fields{margin-top:14px}
-.yn-line b{color:var(--text-primary);font-weight:650;font-variant-numeric:tabular-nums}
-.yn-line .yn-i{white-space:nowrap}
-/* the standing "these are our assumptions, not yours" line */
-.assump-line{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;
-  font-size:var(--fs-help);color:var(--muted);line-height:1.5;margin:10px 2px 0}
-.assump-line button{background:none;border:none;padding:0;font:inherit;color:var(--accent);
-  font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+/* --- "Your numbers" ---
+   There WAS a small-print summary line here restating every figure, and a
+   standing line of assumption percentages under each result. Both are gone.
+   The boxes sit open directly below the heading and say the same things at a
+   size you can read; the assumptions are disclosed once, in the setup card,
+   where somebody actually meets them. A figure repeated in 12px grey above the
+   input holding it is not reassurance, it's noise. */
+.yn-fields{margin-top:4px}
 
 /* --- headline card: waiting for numbers ---
    Deliberately NOT dimmed into invisibility. It is the main way into setup,

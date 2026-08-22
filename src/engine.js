@@ -1619,6 +1619,53 @@
     };
   }
 
+  /* =====================================================================
+     "Then when COULD I?"
+     ---------------------------------------------------------------------
+     When the pot doesn't reach the target by the age somebody picked, the
+     useful answer is not "no". It is the age at which the answer becomes
+     yes. Telling a 56-year-old their pension is £14k short at 65 and
+     leaving it there makes them do the search themselves, badly.
+
+     Pushing the date back helps in two separate ways, and both are real:
+       * more years of contributions, and more years of compounding; and
+       * a SMALLER target — retire before the State Pension starts and the
+         pot has to self-fund that income over the gap, so every year you
+         wait shrinks the bridge it has to carry (see coastTargetPot).
+     Testing each candidate age with retirementAge set to that age is what
+     captures the second one; a naive "keep growing the pot until it passes
+     today's target" would overstate the wait.
+
+     Contributions follow the work: a period that runs to the retirement
+     age means "I pay in until I stop working", so it is extended with the
+     date. A period the user deliberately ended earlier is left alone —
+     they have said contributions stop then, and they meant it.
+     ===================================================================== */
+  function coastWorkUntil(cp, sc, capAge) {
+    cp = fillCoast(cp);
+    sc = sc || { growth: cp.growth, withdrawalRate: cp.withdrawalRate };
+    var from = Math.round(coastObjAge(cp, sc));
+    var cap = Math.round(capAge || Math.max(from + 15, 75));
+    for (var a = from; a <= cap; a++) {
+      var x = Object.assign({}, cp, {
+        retirementAge: a,
+        phases: (cp.phases || []).map(function (p) {
+          return (p.toAge === from) ? Object.assign({}, p, { toAge: a }) : p;
+        })
+      });
+      var scA = Object.assign({}, sc, { retirementAge: a });
+      var pot = coastBalanceIfRetireAt(x, a);
+      var need = coastTargetPot(x, scA);
+      if (pot >= need - 1) {
+        return { age: a, extraYears: a - from, pot: pot, target: need,
+                 // did waiting help mainly by saving more, or by needing less?
+                 targetAtFrom: coastTargetPot(cp, sc),
+                 contributesLonger: (cp.phases || []).some(function (p) { return p.toAge === from; }) };
+      }
+    }
+    return null;   // not reachable by the cap — the answer is a different plan
+  }
+
   // "If I stopped contributing at age X…" — pension at objAge for each stop age.
   function coastStopSchedule(cp, sc) {
     var objAge = coastObjAge(cp, sc), targetPot = coastTargetPot(cp, sc), out = [];
@@ -2194,6 +2241,7 @@
     coastSimulate: coastSimulate,
     coastSurvivalRateAt: coastSurvivalRateAt,
     coastBalanceIfRetireAt: coastBalanceIfRetireAt,
+    coastWorkUntil: coastWorkUntil,
     combinedPlan: combinedPlan,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,

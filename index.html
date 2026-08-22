@@ -782,6 +782,9 @@ tr.grouprow th.grp-a{border-left:2px solid var(--border)}
 .bp-answer{font-size:32px;font-weight:650;letter-spacing:-0.03em;line-height:1.08}
 .bp-answer.reached{color:var(--good-text)}
 .bp-answer.missed{color:var(--critical)}
+/* "Work to 66" — the plan works, just later than they hoped. Not a success and
+   not a failure, and red would be a lie about a perfectly reachable answer. */
+.bp-answer.later{color:var(--warning)}
 /* waiting on an input — deliberately quiet, and clearly not a result */
 .bp-answer.waiting{color:var(--muted);font-size:var(--fs-result);font-weight:600;letter-spacing:-0.01em}
 .bp-evidence{font-size:var(--fs-body);color:var(--text-secondary);margin-top:9px;line-height:1.45;
@@ -1141,18 +1144,14 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
 .bp-inwrap.unset input::placeholder{color:var(--muted);opacity:.65}
 .bp-inwrap.unset>span.pfx{opacity:.45}
 
-/* --- "Your numbers" once they exist: a summary line you can open --- */
-.yn-line{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;
-  font-size:var(--fs-help);color:var(--text-secondary);line-height:1.5;padding:0 2px 2px}
-/* the summary reads as a caption on the boxes, not as another label in them */
-.yn-line + .yn-fields{margin-top:14px}
-.yn-line b{color:var(--text-primary);font-weight:650;font-variant-numeric:tabular-nums}
-.yn-line .yn-i{white-space:nowrap}
-/* the standing "these are our assumptions, not yours" line */
-.assump-line{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;
-  font-size:var(--fs-help);color:var(--muted);line-height:1.5;margin:10px 2px 0}
-.assump-line button{background:none;border:none;padding:0;font:inherit;color:var(--accent);
-  font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+/* --- "Your numbers" ---
+   There WAS a small-print summary line here restating every figure, and a
+   standing line of assumption percentages under each result. Both are gone.
+   The boxes sit open directly below the heading and say the same things at a
+   size you can read; the assumptions are disclosed once, in the setup card,
+   where somebody actually meets them. A figure repeated in 12px grey above the
+   input holding it is not reassurance, it's noise. */
+.yn-fields{margin-top:4px}
 
 /* --- headline card: waiting for numbers ---
    Deliberately NOT dimmed into invisibility. It is the main way into setup,
@@ -2958,6 +2957,53 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
     };
   }
 
+  /* =====================================================================
+     "Then when COULD I?"
+     ---------------------------------------------------------------------
+     When the pot doesn't reach the target by the age somebody picked, the
+     useful answer is not "no". It is the age at which the answer becomes
+     yes. Telling a 56-year-old their pension is £14k short at 65 and
+     leaving it there makes them do the search themselves, badly.
+
+     Pushing the date back helps in two separate ways, and both are real:
+       * more years of contributions, and more years of compounding; and
+       * a SMALLER target — retire before the State Pension starts and the
+         pot has to self-fund that income over the gap, so every year you
+         wait shrinks the bridge it has to carry (see coastTargetPot).
+     Testing each candidate age with retirementAge set to that age is what
+     captures the second one; a naive "keep growing the pot until it passes
+     today's target" would overstate the wait.
+
+     Contributions follow the work: a period that runs to the retirement
+     age means "I pay in until I stop working", so it is extended with the
+     date. A period the user deliberately ended earlier is left alone —
+     they have said contributions stop then, and they meant it.
+     ===================================================================== */
+  function coastWorkUntil(cp, sc, capAge) {
+    cp = fillCoast(cp);
+    sc = sc || { growth: cp.growth, withdrawalRate: cp.withdrawalRate };
+    var from = Math.round(coastObjAge(cp, sc));
+    var cap = Math.round(capAge || Math.max(from + 15, 75));
+    for (var a = from; a <= cap; a++) {
+      var x = Object.assign({}, cp, {
+        retirementAge: a,
+        phases: (cp.phases || []).map(function (p) {
+          return (p.toAge === from) ? Object.assign({}, p, { toAge: a }) : p;
+        })
+      });
+      var scA = Object.assign({}, sc, { retirementAge: a });
+      var pot = coastBalanceIfRetireAt(x, a);
+      var need = coastTargetPot(x, scA);
+      if (pot >= need - 1) {
+        return { age: a, extraYears: a - from, pot: pot, target: need,
+                 // did waiting help mainly by saving more, or by needing less?
+                 targetAtFrom: coastTargetPot(cp, sc),
+                 contributesLonger: (cp.phases || []).some(function (p) { return p.toAge === from; }) };
+      }
+    }
+    return null;   // not reachable by the cap — the answer is a different plan
+  }
+
   // "If I stopped contributing at age X…" — pension at objAge for each stop age.
   function coastStopSchedule(cp, sc) {
     var objAge = coastObjAge(cp, sc), targetPot = coastTargetPot(cp, sc), out = [];
@@ -3533,6 +3579,7 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
     coastSimulate: coastSimulate,
     coastSurvivalRateAt: coastSurvivalRateAt,
     coastBalanceIfRetireAt: coastBalanceIfRetireAt,
+    coastWorkUntil: coastWorkUntil,
     combinedPlan: combinedPlan,
     simulate: simulate,
     findOptionalityAge: findOptionalityAge,
@@ -3930,17 +3977,6 @@ function SuCta({ left, label, onGo }) {
   );
 }
 
-/* "Using Future Funded's standard assumptions — Adjust".
-   Point 2 of the separation above, said out loud exactly once per planner so
-   nobody has to wonder whose 7% it is. */
-function AssumptionLine({ onAdjust, children }) {
-  return (
-    <div className="assump-line">
-      <span>{children}</span>
-      <button onClick={onAdjust}>Adjust</button>
-    </div>
-  );
-}
 function BpNum({ value, onChange, step, min, money, pct, suffix, nullable, placeholder, big }) {
   // `.unset` fades the £ so an empty money field reads as a question rather
   // than as "£ nothing". It is deliberately NOT an error style — the user has
@@ -3975,9 +4011,6 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
   // the plan momentarily "complete" again and snap the form away mid-keystroke.
   useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
   const showSetup = !(ready && revealed);
-  const advRef = useRef(null);
-  const openAdvanced = () => { const el = advRef.current; if (!el) return;
-    el.open = true; el.scrollIntoView({ behavior:'smooth', block:'start' }); };
   // sequence-risk layers (memoised — the Monte Carlo is ~50ms, don't rerun on theme/units toggles)
   const stress = useMemo(() => Engine.bridgeStressTest(bp, bp.minResidual||0), [bp]);
   const sim = useMemo(() => Engine.bridgeSimulate(bp), [bp]);
@@ -4213,13 +4246,6 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
              These are the same fields the setup card asked for, so there is
              only ever one place each figure lives. */}
       <div className="bp-sub">Your numbers</div>
-      <div className="yn-line">
-        <span className="yn-i">Age <b>{isSet(bp.currentAge) ? ageStr(bp.currentAge) : '—'}</b></span>
-        <span className="yn-i">ISA / GIA <b>{isSet(bp.currentBalance) ? gbpC(bp.currentBalance) : '—'}</b></span>
-        <span className="yn-i">Income wanted <b>{isSet(bp.targetIncome) ? gbpC(bp.targetIncome)+'/yr' : '—'}</b></span>
-        <span className="yn-i">Saving <b>{onePhase ? (isSet(flatAnnual) ? gbpC(flatAnnual)+'/yr' : '—')
-          : bp.phases.length+' periods'}</b></span>
-      </div>
       <div className="bp-assump yn-fields">
         <div className="bp-fld"><label>Current age</label><BpNum nullable value={bp.currentAge} step="0.1" onChange={v=>setAge(v)} />
           <div className="bp-hint">Used by both planners.</div></div>
@@ -4260,13 +4286,9 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
           </div>
         </details>
 
-      <AssumptionLine onAdjust={openAdvanced}>
-        Using Future Funded’s standard assumptions — {(bp.growth*100).toFixed(1)}% return,
-        {' '}{((bp.inflation||0)*100).toFixed(1)}% inflation, pension access at {bp.pensionAccessAge}.
-      </AssumptionLine>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
-      <details className="bp-collapse" ref={advRef} onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
       <div>
       <div className="bp-assump" style={{marginTop:4}}>
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(bp.growth*100).toFixed(2)} step="0.1" onChange={v=>setBp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
@@ -4590,9 +4612,6 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
   // box back in does NOT snap to the answer on the first digit you type.
   useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
   const showSetup = !(ready && revealed);
-  const advRef = useRef(null);
-  const openAdvanced = () => { const el = advRef.current; if (!el) return;
-    el.open = true; el.scrollIntoView({ behavior:'smooth', block:'start' }); };
   // sequence-risk (pension drawdown) — memoised; the Monte Carlo is ~50ms
   const stress = useMemo(() => Engine.coastStressTest(cp, cp.minResidual||0), [cp]);
   const sim = useMemo(() => Engine.coastSimulate(cp), [cp]);
@@ -4646,6 +4665,21 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
   const statusText = base.coasting ? 'Already coasting'
     : base.reached ? base.yearsUntilCoast+(base.yearsUntilCoast===1?' yr to coast':' yrs to coast')
     : gbpC(base.shortfallNow)+' below coast';
+
+  /* ---- "then when COULD I?" ----
+     When the pot doesn't reach the target by the age they picked, "no" is a
+     useless answer. The age at which it becomes yes is the useful one, and
+     without it the reader has to search for it by nudging the retirement age
+     up a year at a time. Only worth working out when the target is actually
+     missed, and the Monte Carlo above is the expensive memo — this one is a
+     short loop, but it recomputes on every keystroke, so it is memoised too. */
+  const missesTarget = ready && !base.meetsTarget;
+  const workUntil = useMemo(
+    () => missesTarget ? Engine.coastWorkUntil(cp) : null,
+    [cp, missesTarget]);
+  // Waiting also SHRINKS the target, because the pot has one year less of
+  // State Pension to self-fund before it starts. Only say so when it happened.
+  const targetFell = workUntil && workUntil.targetAtFrom - workUntil.target > 500;
 
   const ScenChip = ({name,label,res,toggleable}) => {
     const on = !toggleable || scEnabled[name];
@@ -4717,19 +4751,36 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
 
       {/* 1) RESULT — answer → evidence → help (the dominant answer first) */}
       <div className="bp-result">
-        <div className={'bp-answer '+(base.reached?'reached':'missed')}>{
+        {/* The answer. When the age they picked doesn't reach the target, the
+            headline is the age that DOES — "not reached by 65" is a fact
+            about their guess, not an answer to their question. */}
+        <div className={'bp-answer '+(base.reached ? 'reached' : (workUntil ? 'later' : 'missed'))}>{
           base.coasting ? 'Coasting now'
           : base.reached ? 'Coast achieved at '+(base.coastAgeExact!=null?base.coastAgeExact.toFixed(1):base.coastAge)
+          : workUntil ? (workUntil.extraYears === 0 ? 'On track for ' + workUntil.age
+                                                    : 'Work to ' + workUntil.age)
           : 'Not reached by '+base.objAge}</div>
         <div className="bp-evidence">{base.reached
           ? <span><b>{m(base.coastBalance, base.coastAge)}</b> <span className="arrow">→</span> <b>{gbpC(plan.targetPot*bf(base.objAge))}</b> by age {base.objAge}</span>
+          : workUntil
+          ? <span>Stopping at {base.objAge} leaves you <b>{gbpC(Math.max(0, plan.targetPot - base.potAtObj))}</b> short.
+              {' '}{workUntil.extraYears === 1 ? 'One more year' : workUntil.extraYears + ' more years'} gets you
+              to <b>{gbpC(workUntil.pot)}</b> against a <b>{gbpC(workUntil.target)}</b> target.</span>
           : <span>Projected <b>{m(base.potAtObj, base.objAge)}</b> vs <b>{gbpC(plan.targetPot*bf(base.objAge))}</b> target by age {base.objAge}</span>}</div>
         <div className="bp-help-line">{base.reached
           ? (base.coasting
               ? 'Your pension already self-funds the target, with no further contributions.'
               : (base.yearsUntilCoast===0 ? 'No further contributions needed — it grows there on its own.'
                  : base.yearsUntilCoast+' more year'+(base.yearsUntilCoast===1?'':'s')+' of contributions, then it grows there on its own.'))
-          : 'Increase contributions or growth, or push the retirement age.'}</div>
+          : workUntil
+          ? (targetFell
+              ? 'Waiting helps twice: another ' + (workUntil.extraYears===1?'year':workUntil.extraYears+' years')
+                + ' of paying in and growing, and a smaller target — the pension has '
+                + (workUntil.extraYears===1?'one year':workUntil.extraYears+' years')
+                + ' less to cover on its own before the State Pension starts at ' + (cp.statePensionAge||67) + '.'
+              : 'Another ' + (workUntil.extraYears===1?'year':workUntil.extraYears+' years')
+                + ' of paying in and growing closes the gap. Or pay in more, or want less.')
+          : 'Working longer alone doesn’t close this — it needs more going in, a higher return, or a lower target income.'}</div>
       </div>
       <details className="bp-why"><summary>Why so early?</summary>
         <ol>
@@ -4751,7 +4802,13 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
         <div className="bp-tile"><div className="bt-k">Coast balance needed</div><div className="bt-v">{base.coastBalance!=null?m(base.coastBalance, base.coastAge):'—'}</div></div>
         <div className="bp-tile"><div className="bt-k">Target pension @ {base.objAge}{realTerms?'':' (future £)'}</div><div className="bt-v">{gbpC(plan.targetPot*bf(base.objAge))}</div>{!realTerms && <div className="bt-sub">= {gbpC(plan.targetPot)} in today’s money</div>}</div>
         <div className="bp-tile"><div className="bt-k">Projected pot @ {base.objAge}</div><div className="bt-v">{m(base.potAtObj, base.objAge)}</div></div>
-        <div className="bp-tile"><div className="bt-k">More years to contribute</div><div className="bt-v">{base.reached?(base.yearsUntilCoast===0?'0 — done':base.yearsUntilCoast):'—'}</div></div>
+        {/* When coast isn't reached this tile used to read a bare "—", which is
+            the one place the reader most wants a number. Give it the answer. */}
+        <div className="bp-tile">
+          <div className="bt-k">{base.reached ? 'More years to contribute' : 'Extra years to work'}</div>
+          <div className="bt-v">{base.reached ? (base.yearsUntilCoast===0 ? '0 — done' : base.yearsUntilCoast)
+            : workUntil ? (workUntil.extraYears===0 ? '0 — on track' : '+'+workUntil.extraYears)
+            : '—'}</div></div>
       </div>
 
       {/* 2) GRAPH */}
@@ -4791,16 +4848,6 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
       {/* 3) YOUR NUMBERS — the summary line, with the boxes open beneath it
              (see the same block in BridgePlanner for why they aren't hidden) */}
       <div className="bp-sub">Your numbers</div>
-      <div className="yn-line">
-        <span className="yn-i">Age <b>{isSet(cp.currentAge) ? ageStr(cp.currentAge) : '—'}</b></span>
-        <span className="yn-i">Pension <b>{isSet(cp.currentPension) ? gbpC(cp.currentPension) : '—'}</b></span>
-        <span className="yn-i">{cp.goalMode==='pot' ? 'Target pot' : 'Income wanted'} <b>{cp.goalMode==='pot'
-          ? (isSet(cp.targetPot) ? gbpC(cp.targetPot) : '—')
-          : (isSet(cp.targetIncome) ? gbpC(cp.targetIncome)+'/yr' : '—')}</b></span>
-        <span className="yn-i">Paying in <b>{onePhase ? (isSet(flatAnnual) ? gbpC(flatAnnual)+'/yr' : '—')
-          : cp.phases.length+' periods'}</b></span>
-        <span className="yn-i">Drawing at <b>{num(cp.retirementAge, '—')}</b></span>
-      </div>
       <div className="bp-assump yn-fields">
         <div className="bp-fld"><label>Current age</label><BpNum nullable value={cp.currentAge} step="0.1" onChange={v=>setAge(v)} />
           <div className="bp-hint">Used by both planners.</div></div>
@@ -4839,14 +4886,9 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
           </div>
         </details>
 
-      <AssumptionLine onAdjust={openAdvanced}>
-        Using Future Funded’s standard assumptions — {(cp.growth*100).toFixed(1)}% return,
-        {' '}{((cp.inflation||0)*100).toFixed(1)}% inflation, State Pension {gbpC(cp.statePensionAmount||0)}/yr
-        from {num(cp.statePensionAge, 67)}.
-      </AssumptionLine>
 
       {/* ===== ADVANCED ASSUMPTIONS — full capability, lower prominence ===== */}
-      <details className="bp-collapse" ref={advRef} onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
+      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Advanced assumptions</summary>
       <div>
       <div className="bp-assump" style={{marginTop:4}}>
         <div className="bp-fld"><label>Expected annual return</label><BpNum pct value={+(cp.growth*100).toFixed(2)} step="0.1" onChange={v=>setCp({growth:(v||0)/100})} /><div className="bp-hint">Nominal, before inflation</div></div>
