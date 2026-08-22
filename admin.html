@@ -85,6 +85,10 @@ a{color:var(--accent)}
 .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:14px 0}
 .controls .lbl{font-size:var(--fs-label);color:var(--muted);font-weight:600}
 .controls .spacer{flex:1 1 auto}
+/* On the People and Access log tabs these two filter nothing — an account list
+   is not a period of events. Show them as inert rather than let someone click a
+   control and watch nothing happen. */
+.controls.inert .seg,.controls.inert .lbl{opacity:.38;pointer-events:none}
 @media (max-width:640px){ .controls .seg{width:100%} .controls .seg button{flex:1 1 0} .controls .spacer{display:none} }
 .chk{display:inline-flex;align-items:center;gap:8px;font-size:var(--fs-label);font-weight:600;
   color:var(--text-secondary);cursor:pointer;user-select:none}
@@ -292,6 +296,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       <button class="btn" id="refresh">Refresh</button>
     </div>
     <div class="fresh" id="fresh"></div>
+    <div class="fresh" id="ctrlNote"></div>
 
     <div class="tabs" id="tabs">
       <button data-t="overview" class="on">Overview</button>
@@ -307,7 +312,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     <div class="pane" id="pane-overview">
       <div class="sec"><div class="tiles hero" id="heroTiles"></div></div>
       <div class="sec">
-        <div class="sec-h">Accounts <span class="hint">all time unless stated</span></div>
+        <div class="sec-h">Accounts <span class="hint" id="acctHint">all time unless stated</span></div>
         <div class="tiles" id="userTiles"></div>
       </div>
       <div class="sec">
@@ -553,18 +558,28 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
 
   function renderOverview(o){
     var u = o.users, e = o.engagement, m = o.meta || {};
+    // A figure counted from accounts cannot be split by device — somebody signs up
+    // on a laptop and uses it on a phone, so filing the account under one of them
+    // would be invention. Say so on the tile rather than showing an unfiltered
+    // number beside a filtered one and letting them look alike.
+    var whole = state.kind === 'all' ? '' : ' · all devices';
+    var join = function(s){ return whole ? (s ? s + whole : whole.slice(3)) : s; };
+
     $('heroTiles').innerHTML =
-      tile('Registered', n(u.total), n(u.new_7d) + ' in the last 7 days') +
+      tile('Registered', n(u.total), join(n(u.new_7d) + ' in the last 7 days')) +
       tile('Active · 7 days', n(u.active_7d), n(u.active_24h) + ' in the last 24h') +
-      tile('Plans filled in', n(u.with_plan), 'accounts holding real figures') +
+      tile('Plans filled in', n(u.with_plan), join('accounts holding real figures')) +
       tile('Visitors · 30 days', n(e.visitors_30d), n(e.sessions_30d) + ' sessions');
     $('userTiles').innerHTML =
-      tile('New · 7 days', n(u.new_7d)) +
-      tile('New · 30 days', n(u.new_30d)) +
+      tile('New · 7 days', n(u.new_7d), join('')) +
+      tile('New · 30 days', n(u.new_30d), join('')) +
       tile('Active · 30 days', n(u.active_30d)) +
-      tile('Unconfirmed', n(u.unconfirmed), 'never confirmed email') +
+      tile('Unconfirmed', n(u.unconfirmed), join('never confirmed email')) +
       tile('Returning', n(e.returning_users), 'more than one session') +
       tile('Sessions / user', e.avg_sessions_per_user == null ? '—' : Number(e.avg_sessions_per_user).toFixed(1));
+    $('acctHint').textContent = whole
+      ? 'all time · the account totals are not split by device — an account is not a phone'
+      : 'all time unless stated';
     $('engTiles').innerHTML =
       tile('Plans started', n(e.plans_created), 'devices that entered figures') +
       tile('Plans completed', n(e.plans_completed), 'both pots, seen live') +
@@ -673,9 +688,11 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
 
     var legend = SERIES.map(function(s, i){
       var total = rows.reduce(function(a, r){ return a + (Number(r[s.k]) || 0); }, 0);
+      // new_users is counted from accounts, so the device filter never reaches it
+      var label = s.label + (s.k === 'new_users' && state.kind !== 'all' ? ' (all devices)' : '');
       return '<button data-s="' + i + '" class="' + (s.on ? '' : 'off') + '">'
            +   '<span class="sw" style="background:' + s.color + '"></span>'
-           +   esc(s.label) + ' <span class="tot tnum">' + n(total) + '</span></button>';
+           +   esc(label) + ' <span class="tot tnum">' + n(total) + '</span></button>';
     }).join('');
 
     $('trendCard').innerHTML =
@@ -964,15 +981,22 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     try { var v = blob ? blob[key] : null; return v == null ? null : JSON.parse(v); }
     catch(e){ return null; }
   }
-  var MONEY = { currentBalance:1, currentPension:1, targetIncome:1, targetPot:1, statePensionAmount:1, minResidual:1 };
-  var RATE  = { growth:1, inflation:1, withdrawalRate:1, confidence:1, partialRemainPct:1 };
+  var MONEY = { currentBalance:1, currentPension:1, targetIncome:1, targetPot:1, statePensionAmount:1,
+                minResidual:1, balance:1, payment:1, spare:1 };
+  var RATE  = { growth:1, inflation:1, withdrawalRate:1, confidence:1, partialRemainPct:1,
+                rate:1, fee:1, taxDrag:1, overpayLimitPct:1, rateChangeTo:1 };
   var LABELS = {
     currentAge:'Current age', currentBalance:'ISA / GIA today', currentPension:'Pension today',
     targetIncome:'Target income', targetPot:'Target pot', withdrawalRate:'Withdrawal rate',
     growth:'Nominal return', inflation:'Inflation', pensionAccessAge:'Pension access age',
     retirementAge:'Retirement age', statePensionAmount:'State Pension', statePensionAge:'State Pension age',
     goalMode:'Goal', mode:'Model', bridgeDepletion:'Depletion', lifeExpectancy:'Life expectancy',
-    minResidual:'Buffer at access', confidence:'Target confidence'
+    minResidual:'Buffer at access', confidence:'Target confidence',
+    // "Mortgage or invest?" side calculator
+    balance:'Mortgage balance', rate:'Interest rate', termYears:'Years left', payment:'Monthly payment',
+    spare:'Spare cash', spareFreq:'Spare cash is', overpayLimitPct:'Penalty-free overpayment',
+    fee:'Investment fee', taxDrag:'Tax drag', horizonMode:'Horizon', horizonYears:'Horizon (years)',
+    rateChangeTo:'Rate changes to', rateChangeAfterYears:'…after (years)'
   };
   function fmtField(k, v){
     if (v == null || v === '') return '—';
@@ -1006,6 +1030,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     var blob = res.data || {};
     var b = inner(blob, 'optionality.bridge');
     var c = inner(blob, 'optionality.coast');
+    var mg = inner(blob, 'optionality.mortgage');
 
     var h = '<div class="sec"><div class="sec-h">Their figures <span class="hint">read-only</span></div>';
     h += '<div class="card"><div class="sec-h" style="margin-top:0">Work-optional (ISA / GIA)</div>'
@@ -1017,6 +1042,11 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
                        'growth','inflation','pensionAccessAge','retirementAge','statePensionAmount',
                        'statePensionAge','lifeExpectancy','confidence'])
       +  phaseTable(c) + '</div>';
+    // only shown when they have actually opened the side calculator
+    if (mg) h += '<div class="card"><div class="sec-h" style="margin-top:0">Mortgage or invest?</div>'
+      +  fieldList(mg, ['balance','rate','termYears','payment','spare','spareFreq','overpayLimitPct',
+                        'growth','fee','taxDrag','horizonMode','horizonYears','rateChangeTo',
+                        'rateChangeAfterYears']) + '</div>';
 
     h += '<div class="card"><div class="rowbtns">'
       +  '<button class="btn primary" id="openApp">Open the app with these figures</button>'
@@ -1069,8 +1099,8 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     try {
       if (tab === 'overview'){
         var o = await rpcAll([
-          ['admin_overview', { excl: state.excl }],
-          ['admin_trend',    { p: state.p, excl: state.excl }],
+          ['admin_overview', { excl: state.excl, kind: state.kind }],
+          ['admin_trend',    { p: state.p, excl: state.excl, kind: state.kind }],
           ['admin_funnel',   P]
         ]);
         renderOverview(o[0]); renderTrend(o[1] || []); renderFunnel(o[2] || []);
@@ -1097,8 +1127,9 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       loaded[tab] = true;
     } catch (e) {
       showErr('Could not load this section: ' + e.message
-        + '. If it says a function does not exist or the arguments do not match, run '
-        + 'supabase/003-admin-v2.sql in the SQL editor — it changes several function signatures.');
+        + '. If it says a function does not exist or the arguments do not match, run the migrations '
+        + 'in supabase/ that you have not applied yet (003-admin-v2.sql, then 004-device-filter.sql) '
+        + '— each of them changes function signatures.');
     }
     $('app').classList.remove('loading');
     busy = false;
@@ -1116,6 +1147,17 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
   function invalidate(){ loaded = {}; load(state.tab, true); }
 
   // ---------- controls ----------
+  // Period and Device filter events. The People tab lists accounts and the Access
+  // log lists admin actions, neither of which is an event — so on those two the
+  // controls are shown inert instead of silently doing nothing.
+  var NO_FILTER = { people:'This list is every account, not a period of activity — Period and Device do not apply here.',
+                    log:'The access log is shown in full — Period and Device do not apply here.' };
+  function syncControls(){
+    var off = NO_FILTER[state.tab];
+    document.querySelector('.controls').classList.toggle('inert', !!off);
+    $('ctrlNote').textContent = off || '';
+  }
+
   $('tabs').addEventListener('click', function(e){
     var b = e.target.closest('button'); if (!b) return;
     [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
@@ -1123,6 +1165,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     state.tab = b.dataset.t;
     [].forEach.call(document.querySelectorAll('.pane'), function(p){ p.classList.add('hidden'); });
     $('pane-' + state.tab).classList.remove('hidden');
+    syncControls();
     load(state.tab);
   });
 

@@ -1,7 +1,14 @@
 -- =====================================================================
 --  Future Funded — migration 002: install ("add to home screen") tracking
 --  Run this ONCE in Supabase → SQL Editor, after analytics.sql.
---  Safe to re-run.
+--  Safe to re-run — but see the warning below if 003/005 are already applied.
+--
+--  ⚠️ This file recreates admin_features, admin_installs and admin_users at their
+--  ORIGINAL signatures. Once 003-admin-v2.sql and 005-device-filter.sql have been
+--  applied, re-running it leaves duplicate overloads of the first two (PostgREST
+--  then cannot resolve the call) and silently reverts admin_users to the version
+--  that reported everybody's plan as Incomplete. **If you re-run this file, run
+--  003 and then 005 straight afterwards.**
 --
 --  Why a migration rather than just re-running analytics.sql: the event-name
 --  CHECK was added with an "ignore if it already exists" guard, so re-running

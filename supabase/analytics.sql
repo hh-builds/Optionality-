@@ -3,6 +3,16 @@
 --  Run this whole file ONCE in Supabase → SQL Editor.
 --  Safe to re-run: everything is create-if-not-exists / create-or-replace.
 --
+--  ⚠️ NOT SAFE TO RE-RUN ON ITS OWN once 003 and 005 have been applied.
+--  Later migrations replace six of the functions defined below. Re-running this
+--  file resurrects the ORIGINAL versions: for admin_funnel / admin_features /
+--  admin_installs / admin_overview / admin_trend that leaves a second overload
+--  and PostgREST can no longer resolve the call, and for admin_users it silently
+--  reinstates the version that reported everybody's plan as Incomplete — no
+--  error, just wrong answers, which is the worse of the two.
+--  **If you re-run this file, run 003-admin-v2.sql and then 005-device-filter.sql
+--  straight afterwards.** Together those two put everything back.
+--
 --  After running it, make yourself an admin (see the bootstrap block at
 --  the very bottom — it needs your email).
 -- =====================================================================
