@@ -50,6 +50,9 @@ a{color:var(--accent)}
 .ff-mark{width:28px;height:28px;border-radius:8px;background:#3e5c99;color:#fff;
   display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px}
 .brand h1{font-size:17px}
+.brand .home-link{margin-left:6px;text-decoration:none;white-space:nowrap}
+@media (max-width:520px){ .brand .home-link{font-size:0;padding:5px 9px}
+  .brand .home-link::before{content:"← App";font-size:var(--fs-help)} }
 .brand .tag{font-size:var(--fs-help);color:var(--muted);font-weight:600;
   border:1px solid var(--border);border-radius:999px;padding:2px 9px;margin-left:4px}
 .who{font-size:var(--fs-help);color:var(--muted);display:flex;align-items:center;gap:10px}
@@ -248,6 +251,10 @@ tbody tr.pick:hover td{background:var(--accent-soft)}
 .fb-meta{margin-top:10px;padding-top:9px;border-top:1px solid var(--grid);
   font-size:var(--fs-help);color:var(--muted)}
 .fb-ua{margin-top:3px;word-break:break-all;opacity:.8}
+.fb-act{margin-top:11px;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.fb-donetag{font-size:var(--fs-help);color:var(--good-text);font-weight:600}
+.fb-card.is-done{opacity:.62}
+.fb-card.is-done .fb-msg{color:var(--text-secondary)}
 
 /* drawer */
 .scrim{position:fixed;inset:0;background:rgba(15,16,18,.45);z-index:60;
@@ -291,6 +298,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
   <div class="topbar">
     <div class="brand">
       <span class="ff-mark">FF</span><h1>Future Funded</h1><span class="tag">Admin</span>
+      <a class="btn sm home-link" href="index.html">← Back to the app</a>
     </div>
     <div class="who" id="who"></div>
   </div>
@@ -428,9 +436,9 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
         <div class="note" id="instNote"></div>
       </div>
       <div class="sec">
-        <div class="sec-h">The model <span class="hint">medians across saved plans</span></div>
-        <div class="tiles" id="modelTiles"></div>
-        <div class="note" id="modelNote"></div>
+        <div class="sec-h">Headline figures <span class="hint" id="hlHint">across plans people have actually filled in</span></div>
+        <div class="tiles" id="hlTiles"></div>
+        <div class="note" id="hlNote"></div>
       </div>
     </div>
 
@@ -452,6 +460,13 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     <div class="pane hidden" id="pane-feedback">
       <div class="sec">
         <div class="sec-h">What people have sent <span class="hint" id="fbHint"></span></div>
+        <div class="filters">
+          <div class="seg" id="fbSeg">
+            <button data-v="open" class="on">To do</button>
+            <button data-v="done">Done</button>
+            <button data-v="all">Everything</button>
+          </div>
+        </div>
         <div id="fbList"></div>
         <div class="note">Sent from the suggestion box in the app's top bar, by anyone — signed in or
           not. Nothing from a person's plan is included. Notes cannot be edited or deleted from the
@@ -499,7 +514,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
 
   var $ = function(id){ return document.getElementById(id); };
   var state = { p:'30d', kind:'all', excl:true, tab:'overview',
-                search:'', filter:'all', sort:'last_active', dir:'desc', page:0, per:25, fbPage:0 };
+                search:'', filter:'all', sort:'last_active', dir:'desc', page:0, per:25, fbPage:0, fbFilter:'open' };
   var PAGE_TOTAL = 0;
   var loaded = {};          // which tabs have been fetched for the current controls
   var current = null;       // the user open in the drawer
@@ -939,6 +954,47 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       + (platBits ? ' Written steps shown to: ' + esc(platBits) + '.' : '');
   }
 
+  // Headline figures, averaged across people who typed their OWN numbers in.
+  // Accounts holding the shipped defaults verbatim are excluded — including
+  // them would describe what the app ships with, not what anybody has.
+  function renderHeadline(h, oa){
+    if (!h){ $('hlTiles').innerHTML = ''; $('hlNote').textContent = ''; return; }
+    if (h.suppressed){
+      $('hlTiles').innerHTML = '';
+      $('hlNote').innerHTML = 'Held back until <b>' + n(h.threshold) + '</b> people have filled a plan in — '
+        + n(h.n) + ' so far, out of ' + n(h.n_plans) + ' saved. Below that an “average” is really just '
+        + 'one person’s figures with extra steps, and the privacy policy promises not to show it. '
+        + 'You can still open an individual plan from the People tab, which is logged.';
+      return;
+    }
+    // median leads because it is the robust one; the mean sits underneath, since
+    // "on average" is the question people actually ask
+    var stat = function(label, st, fmt, note){
+      if (!st || !st.n) return tile(label, '—', 'no figures yet');
+      var f = fmt || gbp;
+      return tile(label, f(st.median),
+        'mean ' + f(st.mean) + ' · ' + n(st.n) + (st.n === 1 ? ' plan' : ' plans') + (note ? ' · ' + note : ''));
+    };
+    var age = function(x){ return x == null ? '—' : Number(x).toFixed(0); };
+    $('hlTiles').innerHTML =
+      stat('Invested wealth', h.wealth) +
+      stat('ISA / GIA', h.isa_gia) +
+      stat('Pension', h.pension) +
+      stat('Paying in a year', h.paying_in) +
+      stat('Target income', h.target_income) +
+      stat('Current age', h.current_age, age);
+    var extra = (oa && oa.median != null)
+      ? ' Median optionality age worked out for them: <b>' + Number(oa.median).toFixed(1)
+        + '</b>, from ' + n(oa.n) + ' devices.'
+      : '';
+    $('hlNote').innerHTML = 'Across <b>' + n(h.n) + '</b> of ' + n(h.n_plans) + ' saved plans — the rest still '
+      + 'hold the figures the app ships with, and averaging those in would describe the defaults rather than '
+      + 'anybody real. Each figure uses only the plans where <i>that</i> pot was filled in, so the pension '
+      + 'average is not diluted by people who only did the ISA side ('
+      + n(h.n_bridge) + ' filled in ISA/GIA, ' + n(h.n_coast) + ' the pension).'
+      + ' Median leads; the mean is underneath.' + extra;
+  }
+
   function renderModel(m, oa){
     if (m.suppressed){
       $('modelTiles').innerHTML = '';
@@ -1049,11 +1105,17 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
   var FB_TOTAL = 0;
   function renderFeedback(rows){
     if (!rows || !rows.length){
-      $('fbList').innerHTML = '<div class="card"><div class="empty">Nothing sent yet.</div></div>';
+      $('fbList').innerHTML = '<div class="card"><div class="empty">'
+        + (state.fbFilter === 'open' ? 'Nothing left to do — everything sent has been marked done.'
+          : state.fbFilter === 'done' ? 'Nothing marked done yet.'
+          : 'Nothing sent yet.') + '</div></div>';
       FB_TOTAL = 0; updateFbPager(); return;
     }
     FB_TOTAL = Number(rows[0].total_count) || rows.length;
-    $('tabFbN').textContent = ' ' + FB_TOTAL;
+    // the badge counts what is still TO DO, not everything ever sent — a number
+    // that never goes down is not a tracker
+    var open = Number(rows[0].open_count);
+    $('tabFbN').textContent = open ? ' ' + open : '';
     $('fbList').innerHTML = rows.map(function(r){
       var p = r.props || {};
       var bits = [];
@@ -1062,7 +1124,8 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       if (p.standalone) bits.push('installed app');
       if (p.tz) bits.push(esc(p.tz));
       if (p.lang) bits.push(esc(p.lang));
-      return '<div class="card fb-card">'
+      var done = !!r.done_at;
+      return '<div class="card fb-card' + (done ? ' is-done' : '') + '" data-id="' + esc(r.id) + '">'
         +   '<div class="fb-head">'
         +     '<span class="who">' + (r.email ? esc(r.email) : '<span class="no">signed out</span>') + '</span>'
         +     '<span class="when">' + esc(when(r.created_at)) + '</span>'
@@ -1072,8 +1135,23 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
               + esc(r.contact) + '</a></div>' : '')
         +   '<div class="fb-meta">' + bits.join(' · ')
         +     (p.ua ? '<div class="fb-ua">' + esc(p.ua) + '</div>' : '') + '</div>'
+        +   '<div class="fb-act">'
+        +     '<button class="btn sm fb-done" data-id="' + esc(r.id) + '" data-done="' + (done ? '1' : '0') + '">'
+        +       (done ? 'Mark as still to do' : '✓ Mark done') + '</button>'
+        +     (done ? '<span class="fb-donetag">Done ' + esc(ago(r.done_at))
+                      + (r.done_by ? ' by ' + esc(r.done_by) : '') + '</span>' : '')
+        +   '</div>'
         + '</div>';
     }).join('');
+    [].forEach.call($('fbList').querySelectorAll('.fb-done'), function(b){
+      b.addEventListener('click', async function(){
+        b.disabled = true;
+        var r = await supa.rpc('admin_feedback_done',
+          { fid: Number(b.dataset.id), done: b.dataset.done !== '1' });
+        if (r.error){ b.disabled = false; showErr('Could not update that note: ' + r.error.message); return; }
+        load('feedback', true);
+      });
+    });
     updateFbPager();
   }
 
@@ -1372,7 +1450,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
         var q = await rpcSoft([
           ['admin_features', P],
           ['admin_installs', P],
-          ['admin_model_medians', {}],
+          ['admin_headline', {}],
           ['admin_median_optionality_age', {}],
           ['admin_mortgage', P]
         ]);
@@ -1380,8 +1458,8 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
         else renderFeatures(q[0].data || []);
         if (q[1].error) sectionErr(['instTiles','instNote'], q[1].error, '003-admin-v2.sql');
         else renderInstalls(q[1].data || null);
-        if (q[2].error || q[3].error) sectionErr(['modelTiles','modelNote'], q[2].error || q[3].error, '003-admin-v2.sql');
-        else renderModel(q[2].data || {}, q[3].data || {});
+        if (q[2].error) sectionErr(['hlTiles','hlNote'], q[2].error, '010-tracker-and-headline.sql');
+        else renderHeadline(q[2].data || null, q[3].error ? null : (q[3].data || {}));
         if (q[4].error) sectionErr(['mgTiles','mgBands','mgNote'], q[4].error, '008-mortgage-verdict.sql');
         else renderMortgage(q[4].data || null);
         $('instHint').textContent = periodLabel();
@@ -1390,7 +1468,8 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
         var c = await rpcAll([['admin_countries', P]]);
         renderCountries(c[0] || {});
       } else if (tab === 'feedback'){
-        var fb = await rpcSoft([['admin_feedback', { lim: state.per, off: state.fbPage * state.per }]]);
+        var fb = await rpcSoft([['admin_feedback',
+          { lim: state.per, off: state.fbPage * state.per, filter: state.fbFilter }]]);
         if (fb[0].error) sectionErr(['fbList'], fb[0].error, '009-feedback.sql');
         else renderFeedback(fb[0].data || []);
       } else if (tab === 'log'){
@@ -1463,6 +1542,13 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     clearTimeout(userTimer); userTimer = setTimeout(function(){ load('people', true); }, 280);
   });
   $('filter').addEventListener('change', function(){ state.filter = this.value; state.page = 0; load('people', true); });
+  $('fbSeg').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if (!b) return;
+    [].forEach.call(this.querySelectorAll('button'), function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    state.fbFilter = b.dataset.v; state.fbPage = 0;
+    load('feedback', true);
+  });
   $('fbPrev').onclick = function(){ if (state.fbPage > 0){ state.fbPage--; load('feedback', true); } };
   $('fbNext').onclick = function(){ state.fbPage++; load('feedback', true); };
   $('prev').onclick = function(){ if (state.page > 0){ state.page--; load('people', true); } };
