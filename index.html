@@ -56,6 +56,88 @@
   });
 })();
 </script>
+<!-- READ-ONLY PLAN PREVIEW (admin support / debugging).
+     admin.html can open this page with #ff-preview=<base64 of a saved plan blob>.
+     When that is present the app renders THAT plan instead of whatever is in this
+     browser, without touching it: every optionality.* localStorage read and write
+     is redirected to an in-memory copy, cloud sync is switched off, and nothing is
+     tracked. Nothing is written anywhere, so the viewer's own plan is untouched and
+     the viewed user's row cannot be modified.
+     This runs FIRST — before OptCloud patches setItem and before React reads any
+     initial state — because both would otherwise see the real browser's data. -->
+<script>
+(function(){
+  window.__FF_PREVIEW__ = null;
+  var m = /(?:^|[#&])ff-preview=([^&]*)/.exec(location.hash || '');
+  if (!m || !m[1]) return;
+
+  var blob = null;
+  try {
+    var b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    var bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var json = (typeof TextDecoder !== 'undefined')
+      ? new TextDecoder('utf-8').decode(bytes)
+      : decodeURIComponent(escape(bin));
+    blob = JSON.parse(json);
+  } catch (e) { blob = null; }
+  if (!blob || typeof blob !== 'object') return;
+
+  // Drop it out of the address bar and the history entry straight away — someone
+  // else's figures should not sit in a URL that can be copied or shared by accident.
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+
+  var PREFIX = 'optionality.';
+  var mem = {};
+  for (var k in blob){
+    if (Object.prototype.hasOwnProperty.call(blob, k) && k.indexOf(PREFIX) === 0)
+      mem[k] = String(blob[k]);
+  }
+
+  var realGet    = localStorage.getItem.bind(localStorage);
+  var realSet    = localStorage.setItem.bind(localStorage);
+  var realRemove = localStorage.removeItem.bind(localStorage);
+  var isPlanKey  = function(k){ return String(k).indexOf(PREFIX) === 0; };
+
+  localStorage.getItem = function(k){
+    if (isPlanKey(k)) return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+    return realGet(k);
+  };
+  // Swallowed on purpose. The app rewrites these keys constantly (migrations, every
+  // edit), and in preview none of it may reach the disk.
+  localStorage.setItem = function(k, v){
+    if (isPlanKey(k)) { mem[k] = String(v); return; }
+    return realSet(k, v);
+  };
+  localStorage.removeItem = function(k){
+    if (isPlanKey(k)) { delete mem[k]; return; }
+    return realRemove(k);
+  };
+
+  window.__FF_PREVIEW__ = { label: blob.__label || 'a saved plan', keys: Object.keys(mem).length };
+  try { document.title = 'Preview — Future Funded'; } catch (e) {}
+
+  function banner(){
+    if (!document.body || document.getElementById('ff-preview-bar')) return;
+    var d = document.createElement('div');
+    d.id = 'ff-preview-bar';
+    d.setAttribute('role', 'status');
+    d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;'
+      + 'background:#7a4a12;color:#fff;font:600 13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;'
+      + 'padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:center;'
+      + 'flex-wrap:wrap;text-align:center;box-shadow:0 -2px 12px rgba(0,0,0,.25)';
+    d.innerHTML = 'Preview — you are looking at ' + String(window.__FF_PREVIEW__.label)
+      .replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; })
+      + '. Nothing you do here is saved, synced or recorded.'
+      + ' <a href="admin.html" style="color:#fff;text-decoration:underline">Back to admin</a>';
+    document.body.appendChild(d);
+    document.body.style.paddingBottom = '64px';
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', banner);
+  else banner();
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
@@ -78,6 +160,10 @@
   function emit(name, detail){ try{ window.dispatchEvent(new CustomEvent(name,{detail:detail})); }catch(e){} }
   function setStatus(s){ Cloud.status = s; emit('optcloud:status', s); }
   function setUser(u){ Cloud.user = u; emit('optcloud:auth', u); }
+
+  // Previewing someone else's saved plan: no session, no sync, no sign-in button.
+  // Without this the admin's own account would sync the previewed plan into their row.
+  if (window.__FF_PREVIEW__){ Cloud.ready = true; return; }
 
   // If the library didn't load (offline / blocked), degrade gracefully: the app
   // keeps working purely on localStorage and the Sign-in button hides itself.
@@ -220,6 +306,9 @@
 
   // Global Privacy Control is a real, legally recognised opt-out signal — honour it.
   if (navigator.globalPrivacyControl === true) return;
+  // Previewing someone else's plan from the admin page is not a visit by anybody —
+  // recording it would put the viewer's activity on the viewed person's device counts.
+  if (window.__FF_PREVIEW__) return;
   if (!window.fetch || !window.crypto) return;
 
   function uuid(){
@@ -256,6 +345,19 @@
     if (w < 768) return 'mobile';
     if (w < 1024) return 'tablet';
     return 'desktop';
+  }
+
+  // Roughly WHERE, from the browser's own clock setting — e.g. "Europe/London".
+  // Deliberately NOT an IP lookup: no geolocation service is called and nothing
+  // about a visitor is sent to a third party. It travels once, on `visit`, and is
+  // turned into a country inside our own database.
+  function zone(){
+    try {
+      var z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      // sanity-check the shape so a strange browser can't push junk into props
+      return (typeof z === 'string' && /^[A-Za-z0-9+_\-]+(\/[A-Za-z0-9+_\-]+){0,2}$/.test(z) && z.length < 64)
+        ? z : null;
+    } catch(e){ return null; }
   }
 
   // identity, kept current by OptCloud's auth events
@@ -330,8 +432,16 @@
     return true;
   }
 
+  // Durable per-device flags, for state that has to survive a page reload but is
+  // not itself an event. `plan_completed` needs this: it fires only when BOTH
+  // planners have been filled in, and people do the two halves days apart.
+  function mark(k){ if (!seen._f) seen._f = {}; if (seen._f[k]) return false; seen._f[k] = 1; saveSeen(); return true; }
+  function marked(k){ return !!(seen._f && seen._f[k]); }
+
   T.track = track;
   T.once = once;
+  T.mark = mark;
+  T.marked = marked;
   T.flush = function(){ flush(true); };
   T.hasFired = function(name){ return !!seen[name]; };
   T.firedThisSession = function(name){ return seen[name] === sess.id; };
@@ -347,7 +457,8 @@
 
   // ---- the entry events, fired here so they don't depend on React mounting ----
   if (freshSession){
-    track('visit');
+    var tz = zone();
+    track('visit', tz ? { tz: tz } : {});
     var last = parseInt(ls(K.last) || '0', 10);
     if (last && (nowMs - last) > RETURN_GAP_MS) track('return_visit');
     ss(K.last, String(nowMs));
@@ -2816,6 +2927,9 @@ const TRK = {
   once:(scope, n, p) => { try { window.OptTrack && window.OptTrack.once(scope, n, p); } catch(e){} },
   fired:(n) => { try { return !!(window.OptTrack && window.OptTrack.hasFired(n)); } catch(e){ return false; } },
   firedEarlier:(n) => { try { return !!(window.OptTrack && window.OptTrack.hasFired(n) && !window.OptTrack.firedThisSession(n)); } catch(e){ return false; } },
+  /* durable per-device flags that outlive a page load */
+  mark:(k) => { try { return !!(window.OptTrack && window.OptTrack.mark && window.OptTrack.mark(k)); } catch(e){ return false; } },
+  marked:(k) => { try { return !!(window.OptTrack && window.OptTrack.marked && window.OptTrack.marked(k)); } catch(e){ return false; } },
   /* fires when a <details> is opened, not when it's closed again */
   open:(n) => (e) => { try { if (e.target.open) TRK.once('session', n); } catch(err){} }
 };
@@ -4454,7 +4568,11 @@ function App() {
   // ---- product analytics -------------------------------------------------
   // Every planner edit funnels through setBp/setCp, so one hook here covers
   // both planners and every field without sprinkling calls through the JSX.
-  const touched = useRef({ bridge:false, coast:false });
+  // Which planners this device has EVER filled in. This used to be page-local, so
+  // `plan_completed` only fired if somebody did both halves in a single sitting —
+  // fill in your pension on Tuesday and your ISA on Thursday and it never fired at
+  // all, which is why so many people with a perfectly good plan read as Incomplete.
+  const touched = useRef({ bridge: TRK.marked('touched_bridge'), coast: TRK.marked('touched_coast') });
   const dirty = useRef(false);
   const notePatch = (which, patch) => {
     const keys = Object.keys(patch || {});
@@ -4464,6 +4582,7 @@ function App() {
       : ['currentAge','currentPension','phases','targetIncome','targetPot'];
     if (keys.some(k => core.indexOf(k) >= 0)) {
       touched.current[which] = true;
+      TRK.mark('touched_' + which);
       dirty.current = true;
       TRK.once('device','finances_entered');
     }

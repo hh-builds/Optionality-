@@ -11,6 +11,9 @@ const TRK = {
   once:(scope, n, p) => { try { window.OptTrack && window.OptTrack.once(scope, n, p); } catch(e){} },
   fired:(n) => { try { return !!(window.OptTrack && window.OptTrack.hasFired(n)); } catch(e){ return false; } },
   firedEarlier:(n) => { try { return !!(window.OptTrack && window.OptTrack.hasFired(n) && !window.OptTrack.firedThisSession(n)); } catch(e){ return false; } },
+  /* durable per-device flags that outlive a page load */
+  mark:(k) => { try { return !!(window.OptTrack && window.OptTrack.mark && window.OptTrack.mark(k)); } catch(e){ return false; } },
+  marked:(k) => { try { return !!(window.OptTrack && window.OptTrack.marked && window.OptTrack.marked(k)); } catch(e){ return false; } },
   /* fires when a <details> is opened, not when it's closed again */
   open:(n) => (e) => { try { if (e.target.open) TRK.once('session', n); } catch(err){} }
 };
@@ -1649,7 +1652,11 @@ function App() {
   // ---- product analytics -------------------------------------------------
   // Every planner edit funnels through setBp/setCp, so one hook here covers
   // both planners and every field without sprinkling calls through the JSX.
-  const touched = useRef({ bridge:false, coast:false });
+  // Which planners this device has EVER filled in. This used to be page-local, so
+  // `plan_completed` only fired if somebody did both halves in a single sitting —
+  // fill in your pension on Tuesday and your ISA on Thursday and it never fired at
+  // all, which is why so many people with a perfectly good plan read as Incomplete.
+  const touched = useRef({ bridge: TRK.marked('touched_bridge'), coast: TRK.marked('touched_coast') });
   const dirty = useRef(false);
   const notePatch = (which, patch) => {
     const keys = Object.keys(patch || {});
@@ -1659,6 +1666,7 @@ function App() {
       : ['currentAge','currentPension','phases','targetIncome','targetPot'];
     if (keys.some(k => core.indexOf(k) >= 0)) {
       touched.current[which] = true;
+      TRK.mark('touched_' + which);
       dirty.current = true;
       TRK.once('device','finances_entered');
     }
