@@ -456,6 +456,13 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
 
   const reached = base.reached;
   const targetPot = plan.targetPot;
+  /* ---- "then when COULD I?" — the bridge twin of the pension's Work-to age.
+     The search runs past pension access to STATE PENSION age, because that is
+     the next point at which income arrives from somewhere other than this pot.
+     It only fires where the target does not vanish at access (Perpetual,
+     Preserve, Partial); in the ordinary Bridge/Full model the plan always
+     reaches by access and the answer is already on screen. */
+  const workUntil = useMemo(() => reached ? null : Engine.bridgeWorkUntil(bp), [bp, reached]);
   // keep the crossover annotation inside the plot: flip sides past the midpoint
   const crossLabelPos = (function(){
     const rs = base.rows; if (!rs || !rs.length || base.crossAge==null) return 'insideTopLeft';
@@ -548,21 +555,36 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
 
       {/* 1) RESULT — answer → evidence → help. */}
       <div className="bp-result">
-        <div className={'bp-answer '+(reached?'reached':'missed')}>{reached
+        <div className={'bp-answer '+(reached ? 'reached' : (workUntil ? 'later' : 'missed'))}>{reached
           ? 'Work-optional at '+base.crossAge
+          : workUntil ? 'Work to '+workUntil.age
           : 'Not by '+bp.pensionAccessAge}</div>
         <div className="bp-evidence">{reached
           ? (bp.mode==='bridge'
               ? <span><b>{m(base.crossBalance, base.crossAge)}</b> funds <b>{gbpC(bp.targetIncome*bf(base.crossAge))}/yr</b> to pension access {bp.pensionAccessAge}</span>
               : <span><b>{m(base.crossBalance, base.crossAge)}</b> pot — enough for <b>{gbpC(bp.targetIncome*bf(base.crossAge))}/yr</b> at {(bp.withdrawalRate*100).toFixed(1)}%</span>)
+          : workUntil
+          ? <span>Not by pension access {bp.pensionAccessAge} — but keep saving to {workUntil.age} and
+              you reach <b>{gbpC(workUntil.pot)}</b> against the <b>{gbpC(workUntil.target)}</b> you need.</span>
           : <span>Short of the <b>{gbpC(targetPot)}</b> pot needed to fund {gbpC(bp.targetIncome)}/yr by pension access {bp.pensionAccessAge}</span>}</div>
         {(function(){
           var perp = bp.mode !== 'bridge';   // perpetual portfolio — a pot you live off indefinitely
           var lifeAge = bp.lifeExpectancy || 90;
           var runsDry = reached && bp.drawdownFromOptionality && base.depletionAge != null && (perp ? base.depletionAge <= lifeAge : base.depletionAge < bp.pensionAccessAge);
           var txt;
-          if (!reached) {
-            txt = 'Adjust contributions, growth or the target below.';
+          if (!reached && workUntil) {
+            txt = 'That is ' + (workUntil.pastAccess
+                    ? (workUntil.age - bp.pensionAccessAge) + ' year'
+                      + ((workUntil.age - bp.pensionAccessAge) === 1 ? '' : 's')
+                      + ' past pension access ' + bp.pensionAccessAge + ', still paying in.'
+                    : Math.round(workUntil.yearsFromNow) + ' more year'
+                      + (Math.round(workUntil.yearsFromNow) === 1 ? '' : 's') + ' of saving.')
+                + ' Or pay in more, or want less.';
+          } else if (!reached) {
+            // Searched every age to State Pension. Saying "adjust something"
+            // when working longer is not the lever wastes the reader's time.
+            txt = 'Working longer doesn’t close this on these figures — it needs more going in, '
+                + 'a higher return, or a lower target income.';
           } else if (perp) {
             // perpetual: no bridge / pension-handover framing — the pot is meant to last forever
             txt = !bp.drawdownFromOptionality

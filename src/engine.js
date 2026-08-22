@@ -1356,6 +1356,48 @@
     return bal;
   }
 
+  /* The bridge's "then when COULD I?", the twin of coastWorkUntil.
+     ---------------------------------------------------------------------
+     "Not by 57" is a dead end, and the search is widened past pension access
+     to **State Pension age**, because that is the next point at which income
+     arrives from somewhere other than this pot. Beyond it the question stops
+     being about the bridge at all.
+
+     ⚠️ In the ordinary Bridge / Full-depletion model this will never fire, and
+     that is correct rather than a gap: there the target falls to zero at
+     pension access, so the plan always "reaches" by then and the honest answer
+     is already on screen — you can stop when your pension unlocks. It earns
+     its keep in the modes where the target does NOT vanish at access:
+     Perpetual (a pot you live off indefinitely) and Bridge/Preserve or
+     /Partial (leave capital behind). Those are exactly the shapes that miss.
+
+     Contributions follow the work, as on the pension side: a period that runs
+     to pension access means "I pay in until I stop", so it extends with the
+     date; one the user ended earlier is left alone. */
+  function bridgeWorkUntil(bp, capAge) {
+    bp = fillBridge(bp);
+    var access = Math.round(bp.pensionAccessAge);
+    var cap = Math.round(capAge || bp.statePensionAge || 67);
+    var sc = { growth: bp.growth, withdrawalRate: bp.withdrawalRate, contribScale: 1 };
+    var perpetualPot = bp.withdrawalRate > 0 ? (bp.targetIncome || 0) / bp.withdrawalRate : Infinity;
+    var from = Math.floor(bp.currentAge) + 1;
+    for (var a = from; a <= cap; a++) {
+      var x = Object.assign({}, bp, {
+        phases: (bp.phases || []).map(function (p) {
+          return (Math.round(p.toAge) === access) ? Object.assign({}, p, { toAge: a }) : p;
+        })
+      });
+      var pot = bridgeBalanceIfStopAt(x, a);
+      var need = bridgeTargetAt(x, sc, a, perpetualPot);
+      if (isFinite(need) && pot >= need - 1) {
+        return { age: a, pot: pot, target: need,
+                 yearsFromNow: Math.max(0, a - bp.currentAge),
+                 pastAccess: a > access, cap: cap };
+      }
+    }
+    return null;   // not reachable by State Pension age — it needs a different plan
+  }
+
   // Monte-Carlo survival of the bridge if you stop at `stopAge`: draw the target
   // income (constant real) from the pot you'd hold there, against `trials`
   // bootstrapped historical real-return sequences, to pension access. Returns the
@@ -2231,6 +2273,7 @@
     bridgeSurvivalRateAt: bridgeSurvivalRateAt,
     stressTestedOptionalityAge: stressTestedOptionalityAge,
     bridgeBalanceIfStopAt: bridgeBalanceIfStopAt,
+    bridgeWorkUntil: bridgeWorkUntil,
     blockBootstrap: blockBootstrap,
     HIST_EQUITY_REAL: HIST_EQUITY_REAL,
     HIST_META: HIST_META,
