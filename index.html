@@ -1173,34 +1173,39 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .mo-tcell .v{font-size:25px;font-weight:650;letter-spacing:-0.03em;line-height:1.15;margin-top:6px}
 .mo-tcell .s{font-size:var(--fs-help);color:var(--text-secondary);margin-top:8px;line-height:1.45}
 .mo-vs{align-self:center;font-size:var(--fs-label);color:var(--muted);font-weight:650}
-/* the two paths as boxes that visibly add up to a total each */
-.mo-box{background:var(--surface-2);border-radius:var(--radius-sm);padding:15px 17px}
-.mo-tot{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:9px;
-  padding-top:9px;border-top:1px solid var(--border)}
-.mo-tot .k{font-size:var(--fs-label);font-weight:650;color:var(--text-primary)}
-.mo-tot .v{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
-.mo-tot.net{margin-top:5px;padding-top:5px;border-top:none}
-.mo-tot.net .v{color:var(--accent)}
-/* Each path as a flow you read top to bottom: when it happens, what happens,
-   and — at the end — what you are left with. The point is that the money can be
-   followed without knowing anything about amortisation. */
+/* Each path as a short numbered journey. Deliberately almost no rules — the
+   card tells the story, the year-by-year table below is the audit trail. */
 .mo-flows{align-items:start;margin-top:4px}
-.mo-flow{background:var(--surface-2);border-radius:var(--radius-sm);padding:15px 17px}
-.mo-flow h4{margin:0 0 12px;font-size:var(--fs-label);font-weight:650;display:flex;align-items:center;gap:8px}
+.mo-flow{background:var(--surface-2);border-radius:var(--radius-sm);padding:16px 18px}
+.mo-flow h4{margin:0 0 14px;font-size:var(--fs-label);font-weight:650;display:flex;align-items:center;gap:8px}
 .mo-flow .cd{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
-.mo-step .when{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;
-  text-transform:uppercase;color:var(--muted);margin-bottom:5px}
-.mo-step .what{font-size:var(--fs-body);line-height:1.4}
-.mo-step .sub{font-size:var(--fs-help);color:var(--text-secondary);margin-top:4px;line-height:1.45}
-.mo-step.last{border-top:1px solid var(--border);padding-top:11px;margin-top:2px}
-.mo-arrow{width:1px;height:16px;background:var(--baseline);margin:7px 0 7px 5px}
-/* the equation that explains where the bigger monthly figure comes from */
-.mo-eq{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px;margin:2px 0 2px}
-.mo-eq span{display:flex;flex-direction:column;font-size:var(--fs-help);color:var(--muted);line-height:1.25}
-.mo-eq span i{font-style:normal;font-size:var(--fs-h);font-weight:650;color:var(--text-primary);
+.mo-jn{list-style:none;counter-reset:jn;margin:0;padding:0}
+.mo-jn li{counter-increment:jn;position:relative;padding:0 0 20px 28px}
+.mo-jn li::before{content:counter(jn);position:absolute;left:0;top:0;width:19px;height:19px;
+  border-radius:50%;background:var(--surface-1);color:var(--muted);font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+/* the connector: a hairline, not a divider — it joins the steps rather than
+   cutting the card into a statement */
+.mo-jn li::after{content:"";position:absolute;left:9px;top:24px;bottom:2px;width:1px;background:var(--border)}
+.mo-jn li:last-child::after{display:none}
+.mo-jn .t{font-size:var(--fs-label);font-weight:650;line-height:1.35}
+.mo-jn .big{font-size:21px;font-weight:650;letter-spacing:-0.02em;margin-top:5px;line-height:1.2;
   font-variant-numeric:tabular-nums}
-.mo-eq .op{align-self:center;font-size:var(--fs-h);font-weight:650;color:var(--muted)}
-.mo-eq .tot i{color:var(--accent)}
+.mo-jn .big.sm{font-size:var(--fs-h);letter-spacing:-0.01em}
+.mo-jn .s{font-size:var(--fs-help);color:var(--text-secondary);margin-top:5px;line-height:1.45}
+/* the freed-up-cash sum: the parts understated, the total not */
+.mo-sum{margin:9px 0 3px;font-size:var(--fs-help);color:var(--text-secondary)}
+.mo-sum>div{display:flex;align-items:baseline;gap:8px;padding:1px 0}
+.mo-sum .op{width:10px;flex:0 0 auto;color:var(--muted);font-weight:650}
+.mo-sum .tot{margin-top:6px}
+.mo-sum .tot b{font-size:21px;font-weight:650;letter-spacing:-0.02em;color:var(--text-primary);
+  font-variant-numeric:tabular-nums}
+/* the outcome, lined up with the steps above it */
+.mo-out{padding-left:28px}
+.mo-out .w{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.mo-out .hero{font-size:26px;font-weight:650;letter-spacing:-0.03em;margin-top:4px;line-height:1.15;
+  font-variant-numeric:tabular-nums}
+.mo-out .s{font-size:var(--fs-help);color:var(--text-secondary);margin-top:6px;line-height:1.45}
 /* where the two lines finish, read off the chart */
 .mo-gap{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;margin-top:10px;padding-top:11px;
   border-top:1px solid var(--border)}
@@ -1215,7 +1220,8 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
   .mo-vs{justify-self:start;padding:0 2px}
   .mo-tcell .v{font-size:21px}
   .mo-gap .d{margin-left:0;width:100%}
-  .mo-eq span i{font-size:var(--fs-body)}
+  .mo-sum .tot b,.mo-jn .big{font-size:var(--fs-result)}
+  .mo-out .hero{font-size:22px}
 }
 </style>
 </head>
@@ -5022,79 +5028,80 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           const capMatters  = preInvested > Math.max(250, plan.overpay.contributions * 0.02);
           return (
         <React.Fragment>
+        {/* Each path as a short numbered journey. The job of these cards is to
+            make the STRATEGY understandable in about five seconds, not to
+            reconcile the arithmetic — the year-by-year table below does that.
+            ⚠️ Interest saved is deliberately NOT on these cards. It is a real
+            benefit but it is not a pot, and sitting next to "£69k invested" it
+            invites exactly the addition the whole design is trying to prevent.
+            It lives in the paragraph underneath and in the table, where there is
+            room to say what it actually is. */}
         <div className="mo-cols mo-flows">
 
           {/* ---- INVEST ---- */}
           <div className="mo-flow">
-            <h4><span className="cd" style={{ background: C.isa }}></span>Invest the {gbp(Math.round(spareM))}/month</h4>
-            <div className="mo-step">
-              <span className="when">Today</span>
-              <div className="what"><b>{gbp(Math.round(spareM))}/month</b> into investments</div>
-              <div className="sub">The mortgage carries on at {gbp(Math.round(plan.payment))}/month</div>
-            </div>
-            {/* Skipped when the mortgage ends exactly at the comparison date,
-                or the same date appears twice in a row and reads as a duplicate.
-                And never say "cleared" for a date beyond the window while a
-                balance is still being shown underneath. */}
-            {dateIn(plan.payoffMonths) !== endDate && <React.Fragment>
-              <div className="mo-arrow" aria-hidden="true"></div>
-              <div className="mo-step">
-                <span className="when">{plan.invest.balance > 1 ? 'Still running' : dateIn(plan.payoffMonths)}</span>
-                <div className="what">{plan.invest.balance > 1
-                  ? 'Mortgage not cleared until ' + dateIn(plan.payoffMonths)
-                  : 'Mortgage cleared'}</div>
-              </div>
-            </React.Fragment>}
-            <div className="mo-arrow" aria-hidden="true"></div>
-            <div className="mo-step last">
-              <span className="when">{endDate}</span>
-              <MoRow k="Paid into investments" v={gbpC(plan.invest.contributions)} />
-              <MoRow k="Investment growth" v={'+' + gbpC(plan.invest.growthAmount)} />
-              <div className="mo-tot"><span className="k">Investment pot</span><span className="v">{gbpC(plan.invest.investments)}</span></div>
-              {plan.invest.balance > 1 && <MoRow k="Mortgage still owed" v={'−' + gbpC(plan.invest.balance)} />}
-              {plan.invest.balance > 1 && <div className="mo-tot net"><span className="k">What you’d be worth</span><span className="v">{sgn(plan.invest.net)}</span></div>}
+            <h4><span className="cd" style={{ background: C.isa }}></span>Invest {gbp(Math.round(spareM))}/month</h4>
+            <ol className="mo-jn">
+              <li>
+                <div className="t">Put your spare cash into investments</div>
+                <div className="big">{gbp(Math.round(spareM))}/month</div>
+                <div className="s">on top of your normal {gbp(Math.round(plan.payment))} mortgage payment</div>
+              </li>
+              <li>
+                <div className="t">Your mortgage runs its full term</div>
+                <div className="big sm">{plan.invest.balance > 1
+                  ? 'Still running at ' + endDate
+                  : 'Mortgage-free ' + dateIn(plan.payoffMonths)}</div>
+                {plan.invest.balance > 1 && <div className="s">clears {dateIn(plan.payoffMonths)}</div>}
+              </li>
+            </ol>
+            <div className="mo-out">
+              <div className="w">By {endDate}</div>
+              <div className="hero">{gbpC(plan.invest.investments)} invested</div>
+              <div className="s">{gbpC(plan.invest.contributions)} paid in · {gbpC(plan.invest.growthAmount)} investment growth</div>
+              {plan.invest.balance > 1 && <div className="s">Mortgage still owed {gbpC(plan.invest.balance)} — you’d
+                be worth {sgn(plan.invest.net)}</div>}
             </div>
           </div>
 
           {/* ---- OVERPAY ---- */}
           <div className="mo-flow">
-            <h4><span className="cd" style={{ background: C.pension }}></span>Overpay by {gbp(Math.round(spareM))}/month</h4>
-            <div className="mo-step">
-              <span className="when">Today</span>
-              <div className="what"><b>{gbp(Math.round(spareM))}/month</b> onto the mortgage</div>
-              {capMatters && <div className="sub">Your lender’s allowance won’t take all of
-                it — {gbpC(preInvested)} is invested from the start instead</div>}
-            </div>
-            <div className="mo-arrow" aria-hidden="true"></div>
-            <div className="mo-step">
-              <span className="when">{clearedInWindow ? dateIn(plan.payoffMonthsOverpay) : 'Still running'}</span>
-              <div className="what">{clearedInWindow
-                ? 'Mortgage cleared' + (earlier ? ' — ' + spanStr(plan.termCutMonths, true) + ' sooner' : '')
-                : 'Mortgage clears ' + dateIn(plan.payoffMonthsOverpay)
-                  + (earlier ? ', ' + spanStr(plan.termCutMonths, true) + ' sooner — but after this window' : '')}</div>
-              {/* explanatory, NOT an addend — see the note below the cards */}
-              <div className="sub">Interest avoided by {endDate}: <b>{gbpC(plan.interestSaved)}</b></div>
-            </div>
-            {clearedInWindow && <div className="mo-arrow" aria-hidden="true"></div>}
-            {clearedInWindow && <div className="mo-step">
-              {/* the insight: where the bigger monthly figure comes from */}
-              <div className="mo-eq">
-                <span><i>{gbp(Math.round(plan.payment))}</i>former payment</span>
-                <span className="op">+</span>
-                <span><i>{gbp(Math.round(spareM))}</i>spare cash</span>
-                <span className="op">=</span>
-                <span className="tot"><i>{gbp(Math.round(plan.monthlyAfterPayoff))}</i>a month invested</span>
-              </div>
-              <div className="sub">from {dateIn(plan.payoffMonthsOverpay)} — {spanStr(monthsAfter, true)} of it</div>
-            </div>}
-            <div className="mo-arrow" aria-hidden="true"></div>
-            <div className="mo-step last">
-              <span className="when">{endDate}</span>
-              <MoRow k="Paid into investments" v={gbpC(plan.overpay.contributions)} />
-              <MoRow k="Investment growth" v={'+' + gbpC(oGrowth)} />
-              <div className="mo-tot"><span className="k">Investment pot</span><span className="v">{gbpC(plan.overpay.investments)}</span></div>
-              {plan.overpay.balance > 1 && <MoRow k="Mortgage still owed" v={'−' + gbpC(plan.overpay.balance)} />}
-              {plan.overpay.balance > 1 && <div className="mo-tot net"><span className="k">What you’d be worth</span><span className="v">{sgn(plan.overpay.net)}</span></div>}
+            <h4><span className="cd" style={{ background: C.pension }}></span>Overpay {gbp(Math.round(spareM))}/month</h4>
+            <ol className="mo-jn">
+              <li>
+                <div className="t">Put your spare cash into the mortgage</div>
+                <div className="big">{gbp(Math.round(spareM))}/month extra</div>
+                <div className="s">on top of your normal {gbp(Math.round(plan.payment))} mortgage payment</div>
+                {capMatters && <div className="s">Your lender won’t take all of it — {gbpC(preInvested)} is
+                  above the allowance, so that part is invested from the start</div>}
+              </li>
+              <li>
+                <div className="t">{clearedInWindow ? 'Your mortgage is cleared early' : 'Your mortgage clears earlier'}</div>
+                <div className="big">{clearedInWindow
+                  ? 'Mortgage-free ' + dateIn(plan.payoffMonthsOverpay)
+                  : 'Clears ' + dateIn(plan.payoffMonthsOverpay)}</div>
+                <div className="s">{earlier
+                  ? spanStr(plan.termCutMonths) + ' sooner'
+                  : 'no sooner — your overpayments are capped'}{clearedInWindow ? '' : ', after this window'}</div>
+              </li>
+              {clearedInWindow && <li>
+                <div className="t">Invest the money you’ve freed up</div>
+                <div className="s">Once the mortgage is gone, the money that was going towards it is
+                  available to invest:</div>
+                <div className="mo-sum">
+                  <div><span className="op"></span><span>{gbp(Math.round(plan.payment))} old mortgage payment</span></div>
+                  <div><span className="op">+</span><span>{gbp(Math.round(spareM))} spare cash</span></div>
+                  <div className="tot"><span className="op">=</span><b>{gbp(Math.round(plan.monthlyAfterPayoff))}/month invested</b></div>
+                </div>
+                <div className="s">for the remaining {spanStr(monthsAfter)}</div>
+              </li>}
+            </ol>
+            <div className="mo-out">
+              <div className="w">By {endDate}</div>
+              <div className="hero">{gbpC(plan.overpay.investments)} invested</div>
+              <div className="s">{gbpC(plan.overpay.contributions)} paid in · {gbpC(oGrowth)} investment growth</div>
+              {plan.overpay.balance > 1 && <div className="s">Mortgage still owed {gbpC(plan.overpay.balance)} — you’d
+                be worth {sgn(plan.overpay.net)}</div>}
             </div>
           </div>
         </div>
