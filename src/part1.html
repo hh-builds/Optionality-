@@ -1210,7 +1210,16 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
    is the loud thing — the other way round and every step shouts equally. The
    supporting copy is 13px rather than 12px and sits on --text-secondary, not
    --muted: it is meant to be read, not skimmed past. */
-.mortgage-module .bp-note{max-width:none}
+/* Every prose block in the module runs the page width — .bp-note was already
+   lifted; .mo-key and .mo-caveat were still capped at the 680px measure and
+   read as text hugging the left edge of a wide page.
+   Scoped to the module on purpose: the planners above use that measure
+   deliberately, and widening those was not asked for. */
+.mortgage-module .bp-note,
+.mortgage-module .mo-key,
+.mortgage-module .mo-caveat,
+.mortgage-module .assumptions,
+.mortgage-module .desc{max-width:none}
 .mo-flow h4{font-size:var(--fs-h);font-weight:650;letter-spacing:-0.01em}
 .mo-jn .t{font-size:13px;font-weight:600;color:var(--text-secondary);line-height:1.4}
 .mo-jn .big{font-size:22px;color:var(--text-primary);margin-top:3px}
