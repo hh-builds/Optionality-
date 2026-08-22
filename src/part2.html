@@ -1610,30 +1610,6 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
       {/* Its own name, not open_advanced. The two planners use that one, and a
           single row labelled "Opened advanced assumptions" counting both could
           never be separated again afterwards. */}
-      <details className="bp-collapse" onToggle={TRK.open('mortgage_advanced')}><summary className="bp-sub bp-summary">Adjust assumptions</summary>
-      <div>
-        <div className="bp-assump" style={{ marginTop: 4 }}>
-          <div className="bp-fld"><label>Your monthly payment</label>
-            <BpNum money value={mp.payment != null ? mp.payment : ''} step={50} onChange={v => setMp({ payment: v > 0 ? v : null })} />
-            <div className="bp-hint">{mp.payment > 0
-              ? (plan.paymentTooLow ? 'That doesn’t cover the interest — using ' + gbp(plan.derivedPayment) + ' instead.' : 'Leave blank to use the calculated ' + gbp(plan.derivedPayment) + '.')
-              : 'Blank = calculated from the balance, rate and term.'}</div></div>
-          <div className="bp-fld"><label>Overpayment allowance</label><BpNum pct value={+((mp.overpayLimitPct || 0) * 100).toFixed(1)} step="1" onChange={v => setMp({ overpayLimitPct: (v || 0) / 100 })} />
-            <div className="bp-hint">% of the balance each year, penalty-free. 0 = no limit.</div></div>
-          <div className="bp-fld"><label>Investment fee</label><BpNum pct value={+((mp.fee || 0) * 100).toFixed(2)} step="0.05" onChange={v => setMp({ fee: (v || 0) / 100 })} />
-            <div className="bp-hint">Platform + fund charges, taken off the return.</div></div>
-          <div className="bp-fld"><label>Rate changes to</label><BpNum pct value={mp.rateChangeTo != null ? +(mp.rateChangeTo * 100).toFixed(2) : ''} step="0.1"
-            onChange={v => setMp({ rateChangeTo: v > 0 ? v / 100 : null })} />
-            <div className="bp-hint">Optional — e.g. when a fix ends.</div></div>
-          <div className="bp-fld"><label>…after</label><BpNum value={mp.rateChangeAfterYears != null ? mp.rateChangeAfterYears : ''} step="1"
-            onChange={v => setMp({ rateChangeAfterYears: v > 0 ? Math.round(v) : null })} suffix="yrs" />
-            <div className="bp-hint">The payment is then recalculated over the remaining term.</div></div>
-        </div>
-        <div className="bp-note">The expected return is <b>{pc(plan.growth)}</b> nominal, and the lower / higher cases are
-          your Conservative and Optimistic scenarios — inherited from the planners above rather than a second set of
-          assumptions to keep in step. Change them there.</div>
-      </div>
-      </details>
 
       {!plan.ready ? (
         <div className="mo-hero"><div className="v waiting">{plan.need}</div></div>
@@ -1711,6 +1687,7 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
             <div className="mo-out">
               <div className="w">By {endDate}</div>
               <div className="hero">{gbpC(plan.invest.investments)} invested</div>
+              <div className="s">≈ {gbpC(todayEquiv(plan.invest.investments))} in today’s money</div>
               <div className="s">{gbpC(plan.invest.contributions)} paid in · {gbpC(plan.invest.growthAmount)} investment growth</div>
               {plan.invest.balance > 1 && <div className="s">Mortgage still owed {gbpC(plan.invest.balance)} — you’d
                 be worth {sgn(plan.invest.net)}</div>}
@@ -1752,6 +1729,7 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
             <div className="mo-out">
               <div className="w">By {endDate}</div>
               <div className="hero">{gbpC(plan.overpay.investments)} invested</div>
+              <div className="s">≈ {gbpC(todayEquiv(plan.overpay.investments))} in today’s money</div>
               <div className="s">{gbpC(plan.overpay.contributions)} paid in · {gbpC(oGrowth)} investment growth</div>
               {plan.overpay.balance > 1 && <div className="s">Mortgage still owed {gbpC(plan.overpay.balance)} — you’d
                 be worth {sgn(plan.overpay.net)}</div>}
@@ -1788,15 +1766,30 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           );
         })()}
 
-        {/* ---- 3) BREAK-EVEN — the sharpest single number in the module ---- */}
-        <div className="mo-be">
-          <div>
-            <div className="k">Break-even investment return</div>
-            <div className="v">{plan.breakEven != null ? pc(plan.breakEven) + ' p.a.' : '—'}</div>
-          </div>
-          <div className="t">Your investments need to average around <b>{pc(plan.breakEven)}</b> after fees to leave
-            you better off than overpaying. Your current assumption is <b>{pc(plan.growth)}</b>.</div>
+      <details className="bp-collapse" onToggle={TRK.open('mortgage_advanced')}><summary className="bp-sub bp-summary">Adjust assumptions</summary>
+      <div>
+        <div className="bp-assump" style={{ marginTop: 4 }}>
+          <div className="bp-fld"><label>Your monthly payment</label>
+            <BpNum money value={mp.payment != null ? mp.payment : ''} step={50} onChange={v => setMp({ payment: v > 0 ? v : null })} />
+            <div className="bp-hint">{mp.payment > 0
+              ? (plan.paymentTooLow ? 'That doesn’t cover the interest — using ' + gbp(plan.derivedPayment) + ' instead.' : 'Leave blank to use the calculated ' + gbp(plan.derivedPayment) + '.')
+              : 'Blank = calculated from the balance, rate and term.'}</div></div>
+          <div className="bp-fld"><label>Overpayment allowance</label><BpNum pct value={+((mp.overpayLimitPct || 0) * 100).toFixed(1)} step="1" onChange={v => setMp({ overpayLimitPct: (v || 0) / 100 })} />
+            <div className="bp-hint">% of the balance each year, penalty-free. 0 = no limit.</div></div>
+          <div className="bp-fld"><label>Investment fee</label><BpNum pct value={+((mp.fee || 0) * 100).toFixed(2)} step="0.05" onChange={v => setMp({ fee: (v || 0) / 100 })} />
+            <div className="bp-hint">Platform + fund charges, taken off the return.</div></div>
+          <div className="bp-fld"><label>Rate changes to</label><BpNum pct value={mp.rateChangeTo != null ? +(mp.rateChangeTo * 100).toFixed(2) : ''} step="0.1"
+            onChange={v => setMp({ rateChangeTo: v > 0 ? v / 100 : null })} />
+            <div className="bp-hint">Optional — e.g. when a fix ends.</div></div>
+          <div className="bp-fld"><label>…after</label><BpNum value={mp.rateChangeAfterYears != null ? mp.rateChangeAfterYears : ''} step="1"
+            onChange={v => setMp({ rateChangeAfterYears: v > 0 ? Math.round(v) : null })} suffix="yrs" />
+            <div className="bp-hint">The payment is then recalculated over the remaining term.</div></div>
         </div>
+        <div className="bp-note">The expected return is <b>{pc(plan.growth)}</b> nominal, and the lower / higher cases are
+          your Conservative and Optimistic scenarios — inherited from the planners above rather than a second set of
+          assumptions to keep in step. Change them there.</div>
+      </div>
+      </details>
 
         {/* ---- 4) THE CHART — the two GAINS, both starting at zero.
              ⚠️ Do not put net position back on here. Net wealth starts at minus

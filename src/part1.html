@@ -1084,8 +1084,8 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .bp-stress-resid{display:flex;flex-direction:column;gap:4px;min-width:150px}
 .bp-stress-resid label{font-size:11px;color:var(--muted);font-weight:600}
 .bp-stress-controls{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
-.bp-seg.sm button{padding:6px 11px;font-size:12px}
-@media (max-width:560px){ .bp-stress-controls{width:100%} .bp-stress-controls .bp-stress-resid{flex:1 1 100%} .bp-seg.sm{width:100%} .bp-seg.sm button{flex:1 1 0} }
+.bp-seg.sm button{padding:7px 12px;font-size:12.5px;min-height:34px;flex:1 1 0;min-width:78px}
+@media (max-width:560px){ .bp-stress-controls{width:100%} .bp-stress-controls .bp-stress-resid{flex:1 1 100%} .bp-seg.sm{width:100%} .bp-seg.sm button{flex:1 1 0;min-height:44px;min-width:0} }
 .bp-stress-lines{display:flex;flex-direction:column}
 .ssl{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 2px;border-top:1px solid var(--border)}
 .ssl:first-child{border-top:none}
@@ -1130,12 +1130,6 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .mo-line{font-size:var(--fs-body);color:var(--text-secondary);line-height:1.5;max-width:660px;margin-top:10px}
 .mo-line b{color:var(--text-primary);font-weight:650}
 /* the break-even rate is the most useful number in the module — give it a frame */
-.mo-be{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;background:var(--surface-2);
-  border-radius:var(--radius-sm);padding:14px 16px;margin:16px 0 2px}
-.mo-be .k{font-size:var(--fs-label);color:var(--muted);font-weight:600}
-.mo-be .v{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;margin-top:3px;white-space:nowrap}
-.mo-be .t{font-size:var(--fs-help);color:var(--text-secondary);line-height:1.55;flex:1 1 300px;min-width:0}
-.mo-be .t b{color:var(--text-primary);font-weight:650}
 /* mortgage-free date */
 /* the two paths, side by side */
 .mo-cols,.mo-tradeoff{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -1166,7 +1160,8 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .mo-vs{align-self:center;font-size:var(--fs-label);color:var(--muted);font-weight:650}
 /* Each path as a short numbered journey. Deliberately almost no rules — the
    card tells the story, the year-by-year table below is the audit trail. */
-.mo-flows{align-items:start;margin-top:4px}
+.mo-flows{align-items:stretch;margin-top:4px}  /* equal-height cards: one path is
+   shorter than the other and a half-height panel beside a full one reads as broken */
 .mo-flow{background:var(--surface-2);border-radius:var(--radius-sm);padding:16px 18px}
 .mo-flow h4{margin:0 0 14px;font-size:var(--fs-label);font-weight:650;display:flex;align-items:center;gap:8px}
 .mo-flow .cd{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
@@ -1191,12 +1186,24 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .mo-sum .tot{margin-top:6px}
 .mo-sum .tot b{font-size:21px;font-weight:650;letter-spacing:-0.02em;color:var(--text-primary);
   font-variant-numeric:tabular-nums}
+/* Type scale inside the module. The step LABEL is quiet and the figure under it
+   is the loud thing — the other way round and every step shouts equally. The
+   supporting copy is 13px rather than 12px and sits on --text-secondary, not
+   --muted: it is meant to be read, not skimmed past. */
+.mortgage-module .bp-note{max-width:none}
+.mo-flow h4{font-size:var(--fs-h);font-weight:650;letter-spacing:-0.01em}
+.mo-jn .t{font-size:13px;font-weight:600;color:var(--text-secondary);line-height:1.4}
+.mo-jn .big{font-size:22px;color:var(--text-primary);margin-top:3px}
+.mo-jn .big.sm{font-size:var(--fs-h)}
+.mo-jn .s{font-size:13px;font-weight:400;color:var(--text-secondary);margin-top:4px;line-height:1.5}
+.mo-sum{font-size:13px;font-weight:400}
+.mo-sum .tot b{font-size:22px}
 /* the outcome, lined up with the steps above it */
 .mo-out{padding-left:28px}
 .mo-out .w{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-.mo-out .hero{font-size:26px;font-weight:650;letter-spacing:-0.03em;margin-top:4px;line-height:1.15;
+.mo-out .hero{font-size:28px;font-weight:650;letter-spacing:-0.03em;margin-top:4px;line-height:1.15;
   font-variant-numeric:tabular-nums}
-.mo-out .s{font-size:var(--fs-help);color:var(--text-secondary);margin-top:6px;line-height:1.45}
+.mo-out .s{font-size:13px;font-weight:400;color:var(--text-secondary);margin-top:5px;line-height:1.5}
 .mo-caveat{font-size:var(--fs-help);color:var(--muted);line-height:1.55;margin-top:14px;max-width:680px}
 @media (max-width:560px){
   .mo-trade{grid-template-columns:1fr;gap:9px}
