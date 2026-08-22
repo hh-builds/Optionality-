@@ -1173,6 +1173,14 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .mo-tcell .v{font-size:25px;font-weight:650;letter-spacing:-0.03em;line-height:1.15;margin-top:6px}
 .mo-tcell .s{font-size:var(--fs-help);color:var(--text-secondary);margin-top:8px;line-height:1.45}
 .mo-vs{align-self:center;font-size:var(--fs-label);color:var(--muted);font-weight:650}
+/* the two paths as boxes that visibly add up to a total each */
+.mo-box{background:var(--surface-2);border-radius:var(--radius-sm);padding:15px 17px}
+.mo-tot{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:9px;
+  padding-top:9px;border-top:1px solid var(--border)}
+.mo-tot .k{font-size:var(--fs-label);font-weight:650;color:var(--text-primary)}
+.mo-tot .v{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.mo-tot.net{margin-top:5px;padding-top:5px;border-top:none}
+.mo-tot.net .v{color:var(--accent)}
 /* the two paths as a flow, so "what happens after payoff" is visible, not explained */
 .mo-tl{display:flex;flex-direction:column;gap:8px}
 .mo-tl-row{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;background:var(--surface-2);
