@@ -625,6 +625,14 @@ html{scroll-behavior:smooth}
 .burger{display:inline-flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
   width:40px;height:40px;border-radius:10px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;position:relative;z-index:61}
 .burger:hover{border-color:var(--accent);color:var(--accent)}
+/* the feedback suggestion box — same shape and tap target as the burger, so the
+   two read as a pair rather than as a button and an afterthought */
+.fb-btn{margin-left:auto}
+.topbar .burger + .burger{margin-left:8px}
+.fb-btn svg{display:block}
+.fb-text{resize:vertical;min-height:104px;line-height:1.5;font-family:inherit}
+.fb-fine{font-size:12px;color:var(--muted);line-height:1.5;margin:12px 0 0}
+
 .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
 .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
   position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:232px;
@@ -917,6 +925,7 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   /* 44px is the iOS minimum tap target; 40 with the notch above it was the
      difference between "fiddly" and "can't hit it" */
   .burger{display:inline-flex;position:relative;z-index:61;width:44px;height:44px}
+  .fb-btn{margin-left:auto}
   .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
   .toolbar{display:none}
   .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;

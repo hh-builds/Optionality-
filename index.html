@@ -625,6 +625,14 @@ html{scroll-behavior:smooth}
 .burger{display:inline-flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--border);color:var(--text-primary);
   width:40px;height:40px;border-radius:10px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;position:relative;z-index:61}
 .burger:hover{border-color:var(--accent);color:var(--accent)}
+/* the feedback suggestion box — same shape and tap target as the burger, so the
+   two read as a pair rather than as a button and an afterthought */
+.fb-btn{margin-left:auto}
+.topbar .burger + .burger{margin-left:8px}
+.fb-btn svg{display:block}
+.fb-text{resize:vertical;min-height:104px;line-height:1.5;font-family:inherit}
+.fb-fine{font-size:12px;color:var(--muted);line-height:1.5;margin:12px 0 0}
+
 .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
 .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
   position:absolute;top:calc(100% - 3px);right:0;z-index:60;min-width:232px;
@@ -917,6 +925,7 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   /* 44px is the iOS minimum tap target; 40 with the notch above it was the
      difference between "fiddly" and "can't hit it" */
   .burger{display:inline-flex;position:relative;z-index:61;width:44px;height:44px}
+  .fb-btn{margin-left:auto}
   .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
   .toolbar{display:none}
   .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
@@ -4654,6 +4663,136 @@ function inBody(node){
   return node;
 }
 
+/* =============================================================
+   FEEDBACK — a suggestion box in the top bar
+   -------------------------------------------------------------
+   Open to everyone, signed in or not: the people whose feedback is
+   most worth having are usually the ones who never made an account.
+   Sends straight to public.feedback (migration 009), which is
+   insert-anyone / read-admins-only, the same trust model as events.
+   ============================================================= */
+function FeedbackIcon(){
+  /* a suggestion box: a slot-lid carton with a note going in */
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+         strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 10.5h18V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9.5Z" />
+      <path d="M8.5 10.5V4.2a.7.7 0 0 1 .7-.7h5.6a.7.7 0 0 1 .7.7v6.3" />
+      <path d="M10.6 6.1h2.8M10.6 8.1h2.8" />
+      <path d="M7.4 10.5h9.2" />
+    </svg>
+  );
+}
+
+function FeedbackButton({ onOpen }){
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [contact, setContact] = useState('');
+  const [state, setState] = useState('idle');     // idle | sending | sent | error
+  const [err, setErr] = useState('');
+  const box = useRef(null);
+
+  const close = () => { setOpen(false); setState('idle'); setErr(''); };
+
+  useEffect(() => {
+    if (!open) return;
+    TRK.once('session', 'feedback_open');
+    const t = setTimeout(() => { try { box.current && box.current.focus(); } catch(e){} }, 30);
+    const esc = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', esc);
+    return () => { clearTimeout(t); document.removeEventListener('keydown', esc); };
+  }, [open]);
+
+  // Enough about the device to make "the chart looks wrong" actionable, and
+  // nothing that isn't already in the usage log except the browser string —
+  // which is the single most useful thing for reproducing a layout bug.
+  function context(){
+    const c = {};
+    try {
+      c.tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      c.viewport = window.innerWidth + 'x' + window.innerHeight;
+      c.standalone = !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                        || navigator.standalone === true);
+      c.lang = navigator.language;
+      c.ua = String(navigator.userAgent || '').slice(0, 300);
+    } catch(e){}
+    return c;
+  }
+
+  async function send(){
+    const text = msg.trim();
+    if (text.length < 2) { setErr('Add a little more and it’ll go through.'); setState('error'); return; }
+    setState('sending'); setErr('');
+    const row = {
+      message: text.slice(0, 4000),
+      contact: contact.trim() ? contact.trim().slice(0, 200) : null,
+      device_kind: (function(){ const w = Math.min(window.innerWidth || 1024,
+        (window.screen && window.screen.width) || 1024);
+        return w < 768 ? 'mobile' : w < 1024 ? 'tablet' : 'desktop'; })(),
+      props: context()
+    };
+    try {
+      const C = window.OptCloud;
+      if (C && C.client) {
+        // the signed-in case carries the auth token, so the row is attributed
+        const u = C.getUser && C.getUser();
+        if (u && u.id) row.user_id = u.id;
+        try { row.device_id = localStorage.getItem('ff.did') || null; } catch(e){}
+        const r = await C.client.from('feedback').insert(row);
+        if (r.error) throw new Error(r.error.message);
+      } else {
+        throw new Error('offline');
+      }
+      TRK.ev('feedback_sent');
+      setState('sent'); setMsg(''); setContact('');
+    } catch(e){
+      setState('error');
+      setErr('That didn’t send — you may be offline. Your note is still in the box, so try again in a moment.');
+    }
+  }
+
+  return (
+    <React.Fragment>
+      <button className="burger fb-btn" aria-label="Send feedback" title="Send feedback"
+        onClick={() => { if (onOpen) onOpen(); setOpen(true); }}><FeedbackIcon /></button>
+      {open && inBody(
+        <div className="auth-overlay" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
+          <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Send feedback">
+            <button className="auth-x" onClick={close} aria-label="Close">×</button>
+            {state === 'sent' ? (
+              <React.Fragment>
+                <h3 className="auth-title">Thank you — that’s landed</h3>
+                <p className="auth-sub">Genuinely useful. If you left an email address and it needs a
+                  reply, you’ll get one.</p>
+                <button className="btn primary" style={{ width:'100%' }} onClick={close}>Close</button>
+              </React.Fragment>
+            ) : (
+              <React.Fragment>
+                <h3 className="auth-title">Tell me what you think</h3>
+                <p className="auth-sub">What’s confusing, what’s missing, what’s wrong. It goes straight
+                  to the person who built it.</p>
+                {err && <div className="auth-msg err">{err}</div>}
+                <textarea ref={box} className="auth-input fb-text" rows={5} value={msg}
+                  maxLength={4000} placeholder="Anything at all…"
+                  onChange={e => { setMsg(e.target.value); if (state === 'error') setState('idle'); }} />
+                <input className="auth-input" type="email" value={contact} maxLength={200}
+                  placeholder="Email (optional, only if you’d like a reply)"
+                  onChange={e => setContact(e.target.value)} />
+                <button className="btn primary" style={{ width:'100%' }}
+                  disabled={state === 'sending'} onClick={send}>
+                  {state === 'sending' ? 'Sending…' : 'Send'}</button>
+                <p className="fb-fine">Sent with the date, your browser and screen size, and your account
+                  if you’re signed in — so a problem can actually be reproduced. Nothing from your plan
+                  is included.</p>
+              </React.Fragment>
+            )}
+          </div>
+        </div>
+      )}
+    </React.Fragment>
+  );
+}
+
 function AuthButton(props){
   const Cloud = typeof window !== 'undefined' ? window.OptCloud : null;
   const [user, setUser] = useState(() => (Cloud && Cloud.user) || null);
@@ -5723,6 +5862,7 @@ function App() {
       {/* top bar */}
       <div className="topbar">
         <div className="brand"><span className="ff-mark">FF</span><h1>Future Funded</h1></div>
+        <FeedbackButton onOpen={()=>setMenuOpen(false)} />
         <button className="burger" aria-label={menuOpen?'Close menu':'Open menu'} aria-expanded={menuOpen}
           onClick={()=>setMenuOpen(o=>!o)}>{menuOpen?'✕':'☰'}</button>
         {menuOpen && <div className="menu-backdrop" onClick={()=>setMenuOpen(false)}></div>}

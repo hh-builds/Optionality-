@@ -238,6 +238,17 @@ tbody tr.pick:hover td{background:var(--accent-soft)}
 .hidden{display:none!important}
 .loading{opacity:.45;transition:opacity .15s}
 
+/* feedback cards */
+.fb-card{margin-bottom:11px}
+.fb-head{display:flex;justify-content:space-between;gap:14px;align-items:baseline;flex-wrap:wrap}
+.fb-head .who{font-weight:650;font-size:var(--fs-label)}
+.fb-head .when{font-size:var(--fs-help);color:var(--muted);white-space:nowrap}
+.fb-msg{margin-top:9px;font-size:var(--fs-body);line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.fb-reply{margin-top:9px;font-size:var(--fs-help)}
+.fb-meta{margin-top:10px;padding-top:9px;border-top:1px solid var(--grid);
+  font-size:var(--fs-help);color:var(--muted)}
+.fb-ua{margin-top:3px;word-break:break-all;opacity:.8}
+
 /* drawer */
 .scrim{position:fixed;inset:0;background:rgba(15,16,18,.45);z-index:60;
   opacity:0;pointer-events:none;transition:opacity .16s}
@@ -324,6 +335,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       <button data-t="people">People<span class="n" id="tabPeopleN"></span></button>
       <button data-t="product">Product</button>
       <button data-t="reach">Reach</button>
+      <button data-t="feedback">Feedback<span class="n" id="tabFbN"></span></button>
       <button data-t="log">Access log</button>
     </div>
 
@@ -436,6 +448,22 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       </div>
     </div>
 
+    <!-- ---- FEEDBACK ---- -->
+    <div class="pane hidden" id="pane-feedback">
+      <div class="sec">
+        <div class="sec-h">What people have sent <span class="hint" id="fbHint"></span></div>
+        <div id="fbList"></div>
+        <div class="note">Sent from the suggestion box in the app's top bar, by anyone — signed in or
+          not. Nothing from a person's plan is included. Notes cannot be edited or deleted from the
+          app by anyone, including you; clearing them out is a SQL-editor job.</div>
+        <div class="pager">
+          <span id="fbInfo"></span>
+          <span><button class="btn" id="fbPrev">Previous</button>
+                <button class="btn" id="fbNext">Next</button></span>
+        </div>
+      </div>
+    </div>
+
     <!-- ---- ACCESS LOG ---- -->
     <div class="pane hidden" id="pane-log">
       <div class="sec">
@@ -471,7 +499,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
 
   var $ = function(id){ return document.getElementById(id); };
   var state = { p:'30d', kind:'all', excl:true, tab:'overview',
-                search:'', filter:'all', sort:'last_active', dir:'desc', page:0, per:25 };
+                search:'', filter:'all', sort:'last_active', dir:'desc', page:0, per:25, fbPage:0 };
   var PAGE_TOTAL = 0;
   var loaded = {};          // which tabs have been fetched for the current controls
   var current = null;       // the user open in the drawer
@@ -1016,6 +1044,47 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     $('next').disabled = to >= PAGE_TOTAL;
   }
 
+  // One note per card rather than a table row: the message is the point and a
+  // table squashes free text into a column nobody can read.
+  var FB_TOTAL = 0;
+  function renderFeedback(rows){
+    if (!rows || !rows.length){
+      $('fbList').innerHTML = '<div class="card"><div class="empty">Nothing sent yet.</div></div>';
+      FB_TOTAL = 0; updateFbPager(); return;
+    }
+    FB_TOTAL = Number(rows[0].total_count) || rows.length;
+    $('tabFbN').textContent = ' ' + FB_TOTAL;
+    $('fbList').innerHTML = rows.map(function(r){
+      var p = r.props || {};
+      var bits = [];
+      if (r.device_kind) bits.push(esc(r.device_kind));
+      if (p.viewport) bits.push(esc(p.viewport));
+      if (p.standalone) bits.push('installed app');
+      if (p.tz) bits.push(esc(p.tz));
+      if (p.lang) bits.push(esc(p.lang));
+      return '<div class="card fb-card">'
+        +   '<div class="fb-head">'
+        +     '<span class="who">' + (r.email ? esc(r.email) : '<span class="no">signed out</span>') + '</span>'
+        +     '<span class="when">' + esc(when(r.created_at)) + '</span>'
+        +   '</div>'
+        +   '<div class="fb-msg">' + esc(r.message).replace(/\n/g, '<br>') + '</div>'
+        +   (r.contact ? '<div class="fb-reply">Reply to <a href="mailto:' + esc(r.contact) + '">'
+              + esc(r.contact) + '</a></div>' : '')
+        +   '<div class="fb-meta">' + bits.join(' · ')
+        +     (p.ua ? '<div class="fb-ua">' + esc(p.ua) + '</div>' : '') + '</div>'
+        + '</div>';
+    }).join('');
+    updateFbPager();
+  }
+
+  function updateFbPager(){
+    var from = FB_TOTAL ? state.fbPage * state.per + 1 : 0;
+    var to = Math.min(FB_TOTAL, (state.fbPage + 1) * state.per);
+    $('fbInfo').textContent = FB_TOTAL ? (from + '–' + to + ' of ' + FB_TOTAL) : 'Nothing yet';
+    $('fbPrev').disabled = state.fbPage === 0;
+    $('fbNext').disabled = to >= FB_TOTAL;
+  }
+
   function renderAudit(rows){
     if (!rows || !rows.length){
       $('auditRows').innerHTML = '<tr><td colspan="4" class="empty">No plan has been viewed yet.</td></tr>';
@@ -1320,6 +1389,10 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       } else if (tab === 'reach'){
         var c = await rpcAll([['admin_countries', P]]);
         renderCountries(c[0] || {});
+      } else if (tab === 'feedback'){
+        var fb = await rpcSoft([['admin_feedback', { lim: state.per, off: state.fbPage * state.per }]]);
+        if (fb[0].error) sectionErr(['fbList'], fb[0].error, '009-feedback.sql');
+        else renderFeedback(fb[0].data || []);
       } else if (tab === 'log'){
         var l = await rpcAll([['admin_audit', { lim: 200 }]]);
         renderAudit(l[0] || []);
@@ -1351,6 +1424,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
   // log lists admin actions, neither of which is an event — so on those two the
   // controls are shown inert instead of silently doing nothing.
   var NO_FILTER = { people:'This list is every account, not a period of activity — Period and Device do not apply here.',
+                    feedback:'Feedback is shown newest first — Period and Device do not apply here.',
                     log:'The access log is shown in full — Period and Device do not apply here.' };
   function syncControls(){
     var off = NO_FILTER[state.tab];
@@ -1389,6 +1463,8 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     clearTimeout(userTimer); userTimer = setTimeout(function(){ load('people', true); }, 280);
   });
   $('filter').addEventListener('change', function(){ state.filter = this.value; state.page = 0; load('people', true); });
+  $('fbPrev').onclick = function(){ if (state.fbPage > 0){ state.fbPage--; load('feedback', true); } };
+  $('fbNext').onclick = function(){ state.fbPage++; load('feedback', true); };
   $('prev').onclick = function(){ if (state.page > 0){ state.page--; load('people', true); } };
   $('next').onclick = function(){ state.page++; load('people', true); };
 
