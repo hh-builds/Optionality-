@@ -3748,16 +3748,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
       <div className="bp-assump">
         <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
         <div className="bp-fld"><label>Income you want each year</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
-        <div className="bp-fld"><label>Target optionality age</label>
-          <BpNum value={bp.targetAge!=null?bp.targetAge:''} onChange={v=>setBp({targetAge: v>0?Math.round(v):null})} />
-          <div className="bp-hint">{(function(){
-            if (bp.targetAge==null) return 'Optional — set an age to see if you’re ahead or behind.';
-            if (base.crossAge==null) return 'Not reachable before pension access '+bp.pensionAccessAge+'.';
-            var d = bp.targetAge - base.crossAge;
-            if (Math.abs(d)<0.5) return 'On target.';
-            return d>0 ? monthsStr(Math.round(d*12))+' ahead of target' : monthsStr(Math.round(-d*12))+' behind target';
-          })()}</div>
-        </div>
       </div>
 
       {/* 4) CONTRIBUTION PHASES */}
@@ -5156,6 +5146,7 @@ function App() {
       if (!exists) b.phases = b.phases.concat([{ fromAge: b.lumpSumAge, toAge: b.lumpSumAge, annual: b.lumpSum }]);
     }
     delete b.lumpSum; delete b.lumpSumAge;
+    delete b.targetAge;   // removed 2026-08-19 — it was display-only and fed nothing
     // one-time migration: turn on the drawdown showcase for saved states that pre-date it
     if (!b._bv || b._bv < 2) { b.drawdownFromOptionality = true; if (b.lifeExpectancy == null) b.lifeExpectancy = 90; b._bv = 2; }
     // one-time migration: bump the default nominal return 7% -> 9% (and the scenario bands), where untouched
@@ -5217,7 +5208,6 @@ function App() {
     }
     if (keys.indexOf('phases') >= 0)       TRK.once('session','edit_savings');
     if (keys.indexOf('targetIncome') >= 0) TRK.once('session','edit_target_income');
-    if (keys.indexOf('targetAge') >= 0)    TRK.once('session','edit_target_age');
     if (keys.indexOf('scenarios') >= 0)    TRK.once('session','scenario_toggle');
     if (keys.indexOf('growth') >= 0 || keys.indexOf('inflation') >= 0)
       TRK.once('session','edit_return_inflation');

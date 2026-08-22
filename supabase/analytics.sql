@@ -221,8 +221,7 @@ begin
       nullif((bridge ->> 'targetIncome'), '')::numeric   as target_income,
       nullif((bridge ->> 'currentBalance'), '')::numeric as isa_gia,
       nullif((coast  ->> 'currentPension'), '')::numeric as pension,
-      nullif((bridge ->> 'currentAge'), '')::numeric     as current_age,
-      nullif((bridge ->> 'targetAge'), '')::numeric      as target_age
+      nullif((bridge ->> 'currentAge'), '')::numeric     as current_age
     from plans
   )
   select count(*) into n from vals;
@@ -242,8 +241,7 @@ begin
       nullif((bridge ->> 'targetIncome'), '')::numeric   as target_income,
       nullif((bridge ->> 'currentBalance'), '')::numeric as isa_gia,
       nullif((coast  ->> 'currentPension'), '')::numeric as pension,
-      nullif((bridge ->> 'currentAge'), '')::numeric     as current_age,
-      nullif((bridge ->> 'targetAge'), '')::numeric      as target_age
+      nullif((bridge ->> 'currentAge'), '')::numeric     as current_age
     from plans
   )
   select jsonb_build_object(
@@ -251,8 +249,7 @@ begin
     'median_target_income', percentile_cont(0.5) within group (order by target_income),
     'median_isa_gia',       percentile_cont(0.5) within group (order by isa_gia),
     'median_pension',       percentile_cont(0.5) within group (order by pension),
-    'median_current_age',   percentile_cont(0.5) within group (order by current_age),
-    'median_target_age',    percentile_cont(0.5) within group (order by target_age)
+    'median_current_age',   percentile_cont(0.5) within group (order by current_age)
   ) into r from vals;
 
   return r;
@@ -384,7 +381,6 @@ begin
   with names(n, l) as (values
     ('edit_savings',          'Changed savings assumptions'),
     ('edit_target_income',    'Changed target income'),
-    ('edit_target_age',       'Changed target optionality age'),
     ('open_advanced',         'Opened advanced assumptions'),
     ('edit_return_inflation', 'Changed return / inflation'),
     ('per_pot_assumptions',   'Different assumptions by pot'),

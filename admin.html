@@ -759,8 +759,7 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
       tile('Median target income', gbp(m.median_target_income), 'per year, today’s money') +
       tile('Median ISA / GIA', gbp(m.median_isa_gia)) +
       tile('Median pension', gbp(m.median_pension)) +
-      tile('Median current age', m.median_current_age == null ? '—' : Number(m.median_current_age).toFixed(1)) +
-      tile('Median target age', m.median_target_age == null ? '—' : Number(m.median_target_age).toFixed(1));
+      tile('Median current age', m.median_current_age == null ? '—' : Number(m.median_current_age).toFixed(1));
     $('modelNote').textContent = 'Across ' + m.n + ' saved plans, computed inside the database and returned '
       + 'only as medians.';
   }
