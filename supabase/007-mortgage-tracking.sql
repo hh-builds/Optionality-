@@ -1,5 +1,12 @@
 -- =====================================================================
 --  Future Funded — migration 007: report the mortgage module's usage
+--
+--  ⚠️ SUPERSEDED BY 008-mortgage-verdict.sql — running 008 alone does everything
+--  this file does and more. Kept for the record only.
+--  ⚠️ DO NOT RUN THIS AFTER 008: its event-name CHECK is narrower and would
+--  start rejecting `mortgage_verdict` rows. If you ever do, re-run 008 to widen
+--  it again.
+--
 --  Run in Supabase → SQL Editor, after 006. Safe to re-run.
 --
 --  `open_mortgage` and `edit_mortgage` have been firing since the module
