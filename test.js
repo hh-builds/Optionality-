@@ -305,3 +305,97 @@ const dA = Engine.coastSimulate(dcp,{confidence:0.80}).stressAgeExact, dB = Engi
 console.log('Stress-tested retire ages: 80% '+dA+' · 90% '+dB+' · 95% '+dC);
 dassert(dA <= dB && dB <= dC, 'higher confidence => equal-or-later stress-tested retirement age');
 console.log(dfails === 0 ? 'ALL PENSION-DRAWDOWN ASSERTIONS PASSED' : (dfails + ' PENSION-DRAWDOWN ASSERTION(S) FAILED'));
+
+/* ============================================================
+   9) MORTGAGE OVERPAYMENT vs INVESTING (side calculator)
+   ============================================================ */
+line();
+console.log('MORTGAGE OVERPAYMENT vs INVESTING');
+let mfails = 0; function massert(c,m){ if(!c){ console.log('FAIL:', m); mfails++; } }
+const mbase = { growthFallback:0.07, lowGrowth:0.05, highGrowth:0.09 };
+const MP = (patch) => Object.assign({}, Engine.MORTGAGE_DEFAULTS, mbase, patch||{});
+const mr = Engine.mortgagePlan(MP());
+console.log('£200k · 4.5% · 20y · £2k/yr · 7% − 0.25% fee · 10-year horizon');
+console.log('  payment           :', money(mr.payment), '/month');
+console.log('  winner            :', mr.winner, 'by', money(Math.abs(mr.diff)));
+console.log('  break-even return :', (mr.breakEven*100).toFixed(2)+'%');
+console.log('  mortgage-free     :', mr.payoffMonths+'m -> '+mr.payoffMonthsOverpay+'m ('+mr.termCutMonths+'m earlier)');
+console.log('  interest saved    :', money(mr.interestSaved), 'over 10y ·', money(mr.interestSavedLifetime), 'lifetime');
+console.log('  sensitivity       :', mr.sensitivity.map(s=>(s.growth*100).toFixed(0)+'% '+s.winner+' '+money(Math.abs(s.diff))).join(' · '));
+
+// the contractual payment is the standard amortisation of balance/rate/term
+massert(Math.abs(mr.payment - Engine.mortgagePayment(200000, 0.045/12, 240)) < 0.01, 'payment = closed-form amortisation');
+// with no overpayments the mortgage clears exactly at the end of the term
+massert(mr.payoffMonths === 240, 'no-overpayment mortgage clears at the end of the term');
+massert(mr.payoffMonthsOverpay < 240 && mr.termCutMonths === 240 - mr.payoffMonthsOverpay, 'overpaying clears earlier by termCutMonths');
+massert(mr.interestSavedLifetime > mr.interestSaved && mr.interestSaved > 0, 'interest saved grows once you keep overpaying to the end');
+// net wealth = investments − debt, and both paths start at −balance
+massert(mr.series[0].overpay === -200000 && mr.series[0].invest === -200000, 'both paths start at minus the mortgage');
+massert(Math.abs(mr.overpay.net - (mr.overpay.investments - mr.overpay.balance)) < 0.02, 'overpay net wealth = investments − debt');
+massert(Math.abs(mr.invest.net - (mr.invest.investments - mr.invest.balance)) < 0.02, 'invest net wealth = investments − debt');
+massert(mr.series.length === 11 && mr.series[10].year === 10, 'one chart point a year over the horizon');
+
+// THE key consistency check: if investments compound at exactly the rate the
+// mortgage charges, the two paths must be financially identical.
+(function(){
+  const equiv = Math.pow(1 + 0.045/12, 12) - 1;             // the mortgage's effective annual rate
+  const flat = Engine.mortgagePlan(MP({ fee:0, taxDrag:0, overpayLimitPct:0, growth: equiv }));
+  massert(Math.abs(flat.diff) < 1, 'at the mortgage rate exactly, overpaying and investing are level (diff ' + flat.diff + ')');
+  massert(Math.abs(flat.breakEven - equiv) < 0.0005, 'break-even = the mortgage rate when there are no fees (' + (flat.breakEven*100).toFixed(3) + '% vs ' + (equiv*100).toFixed(3) + '%)');
+  const fee = Engine.mortgagePlan(MP({ fee:0.0025, taxDrag:0, overpayLimitPct:0 }));
+  massert(Math.abs(fee.breakEven - (equiv + 0.0025)) < 0.0006, 'a 0.25% fee lifts the break-even by ~0.25pp — the rate is not just parroted back');
+})();
+
+// more return is never worse for investing, and the model is linear in the spare cash
+(function(){
+  let prev = -Infinity, mono = true;
+  for (let g = 0.02; g <= 0.12001; g += 0.01) {
+    const d = Engine.mortgagePlan(MP({ growth:g, overpayLimitPct:0 })).diff;
+    if (d < prev - 1e-6) mono = false; prev = d;
+  }
+  massert(mono, 'investing’s advantage is monotonic in the assumed return');
+  const one = Engine.mortgagePlan(MP({ spare:2000, overpayLimitPct:0 })).diff;
+  const two = Engine.mortgagePlan(MP({ spare:4000, overpayLimitPct:0 })).diff;
+  massert(Math.abs(two - 2*one) < 1, 'twice the spare cash = twice the gap (no cap binding)');
+  const s = Engine.mortgagePlan(MP()).sensitivity;
+  massert(s[0].diff < s[1].diff && s[1].diff < s[2].diff, 'lower / central / higher returns order correctly');
+})();
+
+// the overpayment cap turns money away — and that money is invested, not lost
+(function(){
+  const capped = Engine.mortgagePlan(MP({ spare:1500, spareFreq:'monthly', horizonMode:'term' }));
+  massert(capped.capBinding && capped.overpay.capped > 0, '£18k/yr against a 10% allowance hits the cap');
+  massert(capped.overpay.investments > 0, 'cap overflow is invested rather than discarded');
+  const free = Engine.mortgagePlan(MP({ spare:1500, spareFreq:'monthly', horizonMode:'term', overpayLimitPct:0 }));
+  const cap5 = Engine.mortgagePlan(MP({ spare:1500, spareFreq:'monthly', horizonMode:'5' }));
+  const free5 = Engine.mortgagePlan(MP({ spare:1500, spareFreq:'monthly', horizonMode:'5', overpayLimitPct:0 }));
+  massert(free5.overpay.balance < cap5.overpay.balance, 'without a cap the same cash clears more debt');
+  massert(free.payoffMonthsOverpay < capped.payoffMonthsOverpay, 'the cap delays the mortgage-free date');
+})();
+
+// once the overpaid mortgage is gone, the freed payment is invested (or overpaying
+// would look bad purely because its money vanished from the comparison)
+(function(){
+  const long = Engine.mortgagePlan(MP({ spare:1000, spareFreq:'monthly', horizonMode:'custom', horizonYears:25 }));
+  massert(long.payoffMonthsOverpay < long.months, 'the overpaid mortgage clears inside this horizon');
+  massert(long.overpay.investments > 0 && long.overpay.balance === 0, 'after payoff the overpay path holds investments, not debt');
+})();
+
+// a future rate rise makes overpaying more valuable -> a higher break-even
+(function(){
+  const flat2 = Engine.mortgagePlan(MP({ horizonMode:'term' }));
+  const rise  = Engine.mortgagePlan(MP({ horizonMode:'term', rateChangeTo:0.07, rateChangeAfterYears:3 }));
+  massert(rise.breakEven > flat2.breakEven, 'modelling a rate rise raises the return investing must beat');
+})();
+
+// guards: the module asks for what it needs rather than computing nonsense
+massert(!Engine.mortgagePlan(MP({ balance:0 })).ready, 'no balance -> not ready');
+massert(!Engine.mortgagePlan(MP({ termYears:0 })).ready, 'no term -> not ready');
+massert(!Engine.mortgagePlan(MP({ spare:0 })).ready && Engine.mortgagePlan(MP({ spare:0 })).breakEven === null, 'no spare cash -> not ready, no break-even');
+// a payment that doesn't even cover the interest falls back to the contractual one
+massert(Engine.mortgagePlan(MP({ payment:100 })).paymentTooLow, 'a payment below the interest is flagged');
+massert(Math.abs(Engine.mortgagePlan(MP({ payment:100 })).payment - mr.payment) < 0.01, '...and the contractual payment is used instead');
+// horizon resolution
+massert(Engine.mortgageHorizonYears(MP({horizonMode:'term'})) === 20, 'horizon "term" = the remaining term');
+massert(Engine.mortgageHorizonYears(MP({horizonMode:'custom', horizonYears:7})) === 7, 'custom horizon honoured');
+console.log(mfails === 0 ? 'ALL MORTGAGE ASSERTIONS PASSED' : (mfails + ' MORTGAGE ASSERTION(S) FAILED'));

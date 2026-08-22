@@ -74,7 +74,9 @@ alter table public.events add constraint events_name_allowed check (name in (
   'units_toggle', 'theme_toggle', 'export_csv',
   -- install / "add to home screen"  (see 002-install-tracking.sql)
   'install_click', 'install_prompted', 'install_accepted', 'install_dismissed',
-  'install_help', 'app_installed', 'app_launch'
+  'install_help', 'app_installed', 'app_launch',
+  -- side calculators: "Explore other decisions" (see 004-mortgage-module.sql)
+  'open_mortgage', 'edit_mortgage'
 ));
 
 do $$ begin

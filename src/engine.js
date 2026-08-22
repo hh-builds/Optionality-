@@ -1757,6 +1757,269 @@
              retireAge: retireAge, infl: inflC };
   }
 
+  // =====================================================================
+  // MORTGAGE OVERPAYMENT vs INVESTING — side calculator
+  // ---------------------------------------------------------------------
+  // Deliberately NOT a third dashboard. It answers one question: with the
+  // same spare cash, am I better off overpaying the mortgage or investing?
+  //
+  // Conventions (all deliberate; all disclosed in the UI):
+  //  • NOMINAL and MONTHLY. A mortgage is a nominal contract, so the whole
+  //    comparison runs in cash terms. The display layer may deflate to
+  //    today's money — both paths by the same factor, so the winner and the
+  //    break-even rate never change.
+  //  • Both paths see IDENTICAL cash every month: the contractual payment
+  //    plus the spare. Overpaying SHORTENS THE TERM, it does not cut the
+  //    payment (which is also what lenders do unless you ask otherwise), so
+  //    the payment is the same on both paths.
+  //  • Once a path's mortgage is gone, the freed payment is invested —
+  //    otherwise overpaying would look bad merely because its money
+  //    disappears from the comparison.
+  //  • Spare cash the annual overpayment allowance turns away is invested
+  //    instead of vanishing.
+  //  • NET WEALTH = investments − outstanding debt, on BOTH paths. Never
+  //    an investment balance set against "interest saved".
+  // =====================================================================
+  var MORTGAGE_DEFAULTS = {
+    balance: 200000,           // outstanding mortgage
+    rate: 0.045,               // annual interest rate
+    termYears: 20,             // years left to run
+    payment: null,             // monthly payment; null = derive from balance/rate/term
+    spare: 2000,               // spare cash available
+    spareFreq: 'annual',       // 'annual' | 'monthly'
+    overpayLimitPct: 0.10,     // lender's penalty-free allowance, % of the balance each year (0 = none)
+    growth: null,              // investment return; null = inherit the site's assumption
+    fee: 0.0025,               // investment fee p.a.
+    taxDrag: 0,                // ISA = none. GIA (taxable) is a later iteration.
+    horizonMode: '10',         // '5' | '10' | '20' | 'term' | 'custom'
+    horizonYears: 10,          // used when horizonMode is 'custom'
+    rateChangeTo: null,        // optional: the rate changes to this...
+    rateChangeAfterYears: null,// ...after this many years (e.g. a fix ending)
+    _mv: 1
+  };
+
+  // Standard repayment mortgage payment.
+  function mtgPmt(P, i, n) {
+    if (n <= 0) return P;
+    if (i <= 1e-12) return P / n;
+    return P * i / (1 - Math.pow(1 + i, -n));
+  }
+
+  function mtgWith(o, patch) {
+    var x = {}, k;
+    for (k in o) if (Object.prototype.hasOwnProperty.call(o, k)) x[k] = o[k];
+    for (k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) x[k] = patch[k];
+    return x;
+  }
+
+  // One monthly loop running BOTH paths against the same cash, so they can
+  // never accidentally be fed different amounts.
+  function mortgageRun(o) {
+    var months = Math.max(1, Math.round(o.months));
+    var rMonthly = Math.pow(1 + Math.max(-0.99, o.netReturn), 1 / 12) - 1;
+    var pay = o.payment;
+    var balA = o.balance, balB = o.balance;     // A = overpay, B = invest
+    var invA = 0, invB = 0, contribA = 0, contribB = 0;
+    var intA = 0, intB = 0, extra = 0, capped = 0;
+    var allowance = Infinity;
+    var payoffA = null, payoffB = null;
+    var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB }];
+    for (var m = 0; m < months; m++) {
+      var rate = (o.rateChangeMonth != null && m >= o.rateChangeMonth) ? o.rateChangeTo : o.rate;
+      var i = rate / 12;
+      // On a rate change the lender re-amortises. Size the new payment off the
+      // NO-overpayment balance and use it on both paths, so overpaying still
+      // buys a shorter term rather than a smaller payment.
+      if (o.rateChangeMonth != null && m === o.rateChangeMonth && balB > 0)
+        pay = mtgPmt(balB, i, Math.max(1, o.termMonths - m));
+      // penalty-free allowance resets every 12 months, on the balance then owed
+      if (m % 12 === 0) allowance = (o.limitPct > 0) ? o.limitPct * balA : Infinity;
+      var spare = o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0);
+
+      var acA = balA * i, acB = balB * i;
+      balA += acA; balB += acB; intA += acA; intB += acB;
+
+      var payA = Math.min(balA, pay), payB = Math.min(balB, pay);
+      balA -= payA; balB -= payB;
+
+      // A: overpay what the allowance permits, invest the rest
+      var want = Math.min(spare, balA);
+      var op = Math.min(want, allowance);
+      balA -= op; allowance -= op; extra += op; capped += (want - op);
+
+      var intoA = (spare - op) + (pay - payA);   // cap overflow + the freed payment
+      var intoB = spare + (pay - payB);
+      invA = invA * (1 + rMonthly) + intoA; contribA += intoA;
+      invB = invB * (1 + rMonthly) + intoB; contribB += intoB;
+
+      if (balA <= 0.005) { balA = 0; if (payoffA == null) payoffA = m + 1; }
+      if (balB <= 0.005) { balB = 0; if (payoffB == null) payoffB = m + 1; }
+      rows.push({ m: m + 1, balA: balA, balB: balB, invA: invA, invB: invB,
+                  netA: invA - balA, netB: invB - balB });
+      if (o.stopWhenClear && balA === 0 && balB === 0) break;
+    }
+    return { rows: rows, balA: balA, balB: balB, invA: invA, invB: invB,
+             contribA: contribA, contribB: contribB, intA: intA, intB: intB,
+             extra: extra, capped: capped, payoffA: payoffA, payoffB: payoffB };
+  }
+
+  function mortgageHorizonYears(mp) {
+    var mode = mp.horizonMode || 'custom';
+    if (mode === 'term') return Math.max(1, mp.termYears || 1);
+    if (mode === 'custom') return Math.max(1, mp.horizonYears || 1);
+    var n = parseFloat(mode);
+    return (isFinite(n) && n > 0) ? n : 10;
+  }
+
+  function mortgageOpts(mp, growth) {
+    var termM = Math.max(1, Math.round((mp.termYears || 0) * 12));
+    var bal = Math.max(0, mp.balance || 0);
+    var i = (mp.rate || 0) / 12;
+    var derived = mtgPmt(bal, i, termM);
+    var pay = (mp.payment != null && mp.payment > 0) ? mp.payment : derived;
+    // a payment that doesn't cover the interest never repays anything — fall
+    // back to the contractual one rather than modelling a debt spiral
+    var tooLow = (mp.payment != null && mp.payment > 0) && pay <= bal * i + 0.005;
+    if (tooLow) pay = derived;
+    var spare = Math.max(0, mp.spare || 0);
+    var fee = Math.max(0, mp.fee || 0), drag = Math.max(0, mp.taxDrag || 0);
+    return {
+      balance: bal,
+      rate: mp.rate || 0,
+      termMonths: termM,
+      payment: pay,
+      derivedPayment: derived,
+      paymentTooLow: tooLow,
+      spareMonthly: mp.spareFreq === 'monthly' ? spare : 0,
+      spareAnnual: mp.spareFreq === 'monthly' ? 0 : spare,
+      limitPct: mp.overpayLimitPct != null ? Math.max(0, mp.overpayLimitPct) : 0,
+      fee: fee, drag: drag,
+      netReturn: growth - fee - drag,
+      rateChangeMonth: (mp.rateChangeTo != null && mp.rateChangeAfterYears != null && mp.rateChangeAfterYears >= 0)
+        ? Math.round(mp.rateChangeAfterYears * 12) : null,
+      rateChangeTo: mp.rateChangeTo,
+      stopWhenClear: false,
+      months: 12
+    };
+  }
+
+  // The whole comparison. Everything the module shows comes from here.
+  function mortgagePlan(mp) {
+    var growth = (mp.growth != null) ? mp.growth
+               : (mp.growthFallback != null ? mp.growthFallback : 0.07);
+    var o = mortgageOpts(mp, growth);
+    var horizonYears = mortgageHorizonYears(mp);
+    var H = Math.max(1, Math.round(horizonYears * 12));
+
+    var need = (o.balance <= 0) ? 'Add your mortgage balance'
+             : ((mp.termYears || 0) <= 0) ? 'Add the years left on your mortgage'
+             : (((mp.spare || 0) <= 0) ? 'Add the spare cash you could use' : null);
+
+    var run = mortgageRun(mtgWith(o, { months: H }));
+    // Keep the overpayments going until the debt is gone — that is what the
+    // mortgage-free date, the term cut and lifetime interest saved describe.
+    var full = mortgageRun(mtgWith(o, { months: o.termMonths + 600, stopWhenClear: true }));
+
+    var last = run.rows[run.rows.length - 1];
+    var diff = last.netB - last.netA;            // + = investing ahead
+
+    // Crossovers. With flat rates one path leads from month one, so a naive
+    // "first month B is ahead" reads "overtakes in year 0" — useless. Track
+    // meaningful lead changes instead (a tolerance kills the noise): the cap
+    // binding, the overpaid mortgage clearing, or a rate change can genuinely
+    // hand the lead back later.
+    var tol = Math.max(50, o.balance * 0.0005);
+    var crossings = [], sign = 0, firstLeader = null;
+    for (var k = 1; k < run.rows.length; k++) {
+      var d = run.rows[k].netB - run.rows[k].netA;
+      var s = d > tol ? 1 : (d < -tol ? -1 : 0);
+      if (s !== 0 && s !== sign) {
+        if (sign !== 0) crossings.push({ month: k, winner: s > 0 ? 'invest' : 'overpay' });
+        else firstLeader = s > 0 ? 'invest' : 'overpay';
+        sign = s;
+      }
+    }
+    var crossM = crossings.length ? crossings[crossings.length - 1] : null;
+
+    // Break-even: the GROSS return at which the two paths end level. Solved on
+    // the full model, so the overpayment cap, the timing and the reinvestment
+    // of the freed payment are all in it — not just the mortgage rate echoed back.
+    var diffAt = function (g) {
+      var r = mortgageRun(mtgWith(o, { months: H, netReturn: g - o.fee - o.drag }));
+      var l = r.rows[r.rows.length - 1];
+      return l.netB - l.netA;
+    };
+    var breakEven = null;
+    if (o.balance > 0 && (o.spareMonthly + o.spareAnnual) > 0) {
+      var lo = 0, hi = 0.30;
+      if (diffAt(lo) >= 0) breakEven = 0;
+      else if (diffAt(hi) > 0) {
+        for (var b = 0; b < 44; b++) {
+          var mid = (lo + hi) / 2;
+          if (diffAt(mid) > 0) hi = mid; else lo = mid;
+        }
+        breakEven = Math.round(((lo + hi) / 2) * 10000) / 10000;
+      }
+    }
+
+    // Sensitivity — the site's own lower / central / higher return assumptions.
+    var lowG  = (mp.lowGrowth  != null) ? mp.lowGrowth  : Math.max(0, growth - 0.02);
+    var highG = (mp.highGrowth != null) ? mp.highGrowth : growth + 0.02;
+    var sens = [{ key: 'low', growth: lowG }, { key: 'central', growth: growth }, { key: 'high', growth: highG }]
+      .map(function (s) {
+        var r = mortgageRun(mtgWith(o, { months: H, netReturn: s.growth - o.fee - o.drag }));
+        var l = r.rows[r.rows.length - 1];
+        return { key: s.key, growth: s.growth, diff: round2(l.netB - l.netA),
+                 winner: (l.netB - l.netA) > 0 ? 'invest' : 'overpay' };
+      });
+
+    // yearly points for the chart (net wealth = investments − debt)
+    var series = [];
+    for (var y = 0; y * 12 < run.rows.length; y++) {
+      var r0 = run.rows[y * 12];
+      series.push({ year: y, overpay: round2(r0.netA), invest: round2(r0.netB),
+                    debtOverpay: round2(r0.balA), debtInvest: round2(r0.balB) });
+    }
+    var lastRow = run.rows[run.rows.length - 1];
+    if (series.length === 0 || series[series.length - 1].year * 12 !== lastRow.m) {
+      series.push({ year: Math.round((lastRow.m / 12) * 100) / 100, overpay: round2(lastRow.netA),
+                    invest: round2(lastRow.netB), debtOverpay: round2(lastRow.balA),
+                    debtInvest: round2(lastRow.balB) });
+    }
+
+    return {
+      ready: need == null, need: need,
+      growth: growth, fee: o.fee, taxDrag: o.drag, netReturn: o.netReturn,
+      horizonYears: horizonYears, months: H,
+      payment: round2(o.payment), derivedPayment: round2(o.derivedPayment),
+      paymentTooLow: o.paymentTooLow,
+      spareAnnualTotal: round2(o.spareMonthly * 12 + o.spareAnnual),
+      guaranteedReturn: o.rate,
+      overpay: {
+        balance: round2(run.balA), interest: round2(run.intA), extra: round2(run.extra),
+        investments: round2(run.invA), contributions: round2(run.contribA),
+        net: round2(lastRow.netA), capped: round2(run.capped)
+      },
+      invest: {
+        balance: round2(run.balB), interest: round2(run.intB),
+        investments: round2(run.invB), contributions: round2(run.contribB),
+        growthAmount: round2(run.invB - run.contribB), net: round2(lastRow.netB)
+      },
+      diff: round2(diff),
+      winner: diff > 0 ? 'invest' : (diff < 0 ? 'overpay' : 'tie'),
+      crossover: crossM, crossings: crossings, firstLeader: firstLeader,
+      interestSaved: round2(run.intB - run.intA),
+      interestSavedLifetime: round2(full.intB - full.intA),
+      payoffMonths: full.payoffB, payoffMonthsOverpay: full.payoffA,
+      termCutMonths: (full.payoffB != null && full.payoffA != null) ? (full.payoffB - full.payoffA) : null,
+      extraLifetime: round2(full.extra),
+      capBinding: run.capped > 0.5, cappedLifetime: round2(full.capped),
+      breakEven: breakEven,
+      sensitivity: sens,
+      series: series
+    };
+  }
+
   var Engine = {
     DEFAULTS: DEFAULTS,
     BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
@@ -1794,7 +2057,12 @@
     milestones: milestones,
     requiredPensionAtAccess: requiredPensionAtAccess,
     requiredBridgeValue: requiredBridgeValue,
-    coastFireAge: coastFireAge
+    coastFireAge: coastFireAge,
+    MORTGAGE_DEFAULTS: MORTGAGE_DEFAULTS,
+    mortgagePlan: mortgagePlan,
+    mortgageRun: mortgageRun,
+    mortgageHorizonYears: mortgageHorizonYears,
+    mortgagePayment: mtgPmt
   };
 
   root.Engine = Engine;

@@ -1106,6 +1106,65 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 .ss-card .st.ok{color:var(--good-text)} .ss-card .st.no{color:var(--critical)}
 .ss-card .dt{font-size:var(--fs-help);color:var(--muted);margin-top:3px;line-height:1.4}
 @media (max-width:560px){ .ss-cards{grid-template-columns:1fr} .bp-stress-q{font-size:18px} .bp-stress-resid{min-width:0;width:100%} }
+
+/* =====================================================================
+   EXPLORE OTHER DECISIONS — side calculators beneath the two planners.
+   Lighter chrome than a planner on purpose: this is an extra, not a
+   third dashboard.
+   ===================================================================== */
+.explore{margin:30px 0 0}
+.ex-h{font-size:var(--fs-body);letter-spacing:-0.01em;color:var(--text-primary);font-weight:650;
+  margin:0 2px 11px;display:flex;align-items:center;gap:10px}
+.ex-h::after{content:"";flex:1;height:1px;background:var(--border)}
+.ex-card{background:var(--surface-1);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px}
+.ex-card-k{font-size:var(--fs-h);font-weight:650;letter-spacing:-0.02em;margin-bottom:5px}
+.ex-card-b{font-size:var(--fs-help);color:var(--text-secondary);line-height:1.55;max-width:520px;margin-bottom:14px}
+
+/* ---- mortgage overpayment vs investing ---- */
+.mo-strap{font-size:var(--fs-help);color:var(--muted);line-height:1.5;max-width:560px;margin-top:3px}
+.mo-hide{flex:0 0 auto}
+.mo-hero{margin:16px 0 2px}
+.mo-hero .v{font-size:27px;font-weight:650;letter-spacing:-0.03em;line-height:1.12}
+.mo-hero .v.waiting{color:var(--muted);font-size:var(--fs-result);font-weight:600;letter-spacing:-0.01em}
+.mo-hero .sub{font-size:var(--fs-help);color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+.mo-line{font-size:var(--fs-body);color:var(--text-secondary);line-height:1.5;max-width:660px;margin-top:10px}
+.mo-line b{color:var(--text-primary);font-weight:650}
+/* the break-even rate is the most useful number in the module — give it a frame */
+.mo-be{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;background:var(--surface-2);
+  border-radius:var(--radius-sm);padding:14px 16px;margin:16px 0 2px}
+.mo-be .k{font-size:var(--fs-label);color:var(--muted);font-weight:600}
+.mo-be .v{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;margin-top:3px;white-space:nowrap}
+.mo-be .t{font-size:var(--fs-help);color:var(--text-secondary);line-height:1.55;flex:1 1 300px;min-width:0}
+.mo-be .t b{color:var(--text-primary);font-weight:650}
+/* mortgage-free date */
+.mo-free{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mo-free>div{background:var(--surface-2);border-radius:var(--radius-sm);padding:12px 14px}
+.mo-free .k{font-size:var(--fs-label);color:var(--muted);font-weight:600;line-height:1.3}
+.mo-free .v{font-size:var(--fs-h);font-weight:650;margin-top:5px;letter-spacing:-0.01em}
+.mo-free .v.accent{color:var(--accent)}
+/* the two paths, side by side */
+.mo-cols,.mo-tradeoff{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mo-col{background:var(--surface-2);border-radius:var(--radius-sm);padding:14px 16px}
+.mo-col h4{font-size:var(--fs-label);font-weight:650;margin:0;display:flex;align-items:center;gap:8px}
+.mo-col .cd{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.mo-col .net{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;margin:7px 0 9px;font-variant-numeric:tabular-nums}
+.mo-col .net .nl{font-size:var(--fs-help);font-weight:600;color:var(--muted);letter-spacing:0}
+.mo-col ul{margin:8px 0 0;padding-left:17px;color:var(--muted);font-size:var(--fs-help);line-height:1.65}
+.mo-col ul b{color:var(--text-secondary);font-weight:650}
+.mo-r{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-top:1px solid var(--border);font-size:var(--fs-help)}
+.mo-r .k{color:var(--muted);line-height:1.35}
+.mo-r .v{font-variant-numeric:tabular-nums;font-weight:650;text-align:right;white-space:nowrap;color:var(--text-primary)}
+.mo-r .v.strong{color:var(--accent)}
+.mo-key{font-size:var(--fs-help);color:var(--text-secondary);line-height:1.6;margin-top:12px;max-width:680px}
+.mo-key b{color:var(--text-primary);font-weight:650}
+@media (max-width:560px){
+  .ex-card{padding:16px 13px}
+  .explore{margin:22px 0 0}
+  .mo-hero .v{font-size:22px}
+  .mo-cols,.mo-tradeoff{grid-template-columns:1fr}
+  .mo-free{grid-template-columns:1fr}
+  .mo-hide{align-self:flex-start}
+}
 </style>
 </head>
 <body>
@@ -2871,6 +2930,269 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
              retireAge: retireAge, infl: inflC };
   }
 
+  // =====================================================================
+  // MORTGAGE OVERPAYMENT vs INVESTING — side calculator
+  // ---------------------------------------------------------------------
+  // Deliberately NOT a third dashboard. It answers one question: with the
+  // same spare cash, am I better off overpaying the mortgage or investing?
+  //
+  // Conventions (all deliberate; all disclosed in the UI):
+  //  • NOMINAL and MONTHLY. A mortgage is a nominal contract, so the whole
+  //    comparison runs in cash terms. The display layer may deflate to
+  //    today's money — both paths by the same factor, so the winner and the
+  //    break-even rate never change.
+  //  • Both paths see IDENTICAL cash every month: the contractual payment
+  //    plus the spare. Overpaying SHORTENS THE TERM, it does not cut the
+  //    payment (which is also what lenders do unless you ask otherwise), so
+  //    the payment is the same on both paths.
+  //  • Once a path's mortgage is gone, the freed payment is invested —
+  //    otherwise overpaying would look bad merely because its money
+  //    disappears from the comparison.
+  //  • Spare cash the annual overpayment allowance turns away is invested
+  //    instead of vanishing.
+  //  • NET WEALTH = investments − outstanding debt, on BOTH paths. Never
+  //    an investment balance set against "interest saved".
+  // =====================================================================
+  var MORTGAGE_DEFAULTS = {
+    balance: 200000,           // outstanding mortgage
+    rate: 0.045,               // annual interest rate
+    termYears: 20,             // years left to run
+    payment: null,             // monthly payment; null = derive from balance/rate/term
+    spare: 2000,               // spare cash available
+    spareFreq: 'annual',       // 'annual' | 'monthly'
+    overpayLimitPct: 0.10,     // lender's penalty-free allowance, % of the balance each year (0 = none)
+    growth: null,              // investment return; null = inherit the site's assumption
+    fee: 0.0025,               // investment fee p.a.
+    taxDrag: 0,                // ISA = none. GIA (taxable) is a later iteration.
+    horizonMode: '10',         // '5' | '10' | '20' | 'term' | 'custom'
+    horizonYears: 10,          // used when horizonMode is 'custom'
+    rateChangeTo: null,        // optional: the rate changes to this...
+    rateChangeAfterYears: null,// ...after this many years (e.g. a fix ending)
+    _mv: 1
+  };
+
+  // Standard repayment mortgage payment.
+  function mtgPmt(P, i, n) {
+    if (n <= 0) return P;
+    if (i <= 1e-12) return P / n;
+    return P * i / (1 - Math.pow(1 + i, -n));
+  }
+
+  function mtgWith(o, patch) {
+    var x = {}, k;
+    for (k in o) if (Object.prototype.hasOwnProperty.call(o, k)) x[k] = o[k];
+    for (k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) x[k] = patch[k];
+    return x;
+  }
+
+  // One monthly loop running BOTH paths against the same cash, so they can
+  // never accidentally be fed different amounts.
+  function mortgageRun(o) {
+    var months = Math.max(1, Math.round(o.months));
+    var rMonthly = Math.pow(1 + Math.max(-0.99, o.netReturn), 1 / 12) - 1;
+    var pay = o.payment;
+    var balA = o.balance, balB = o.balance;     // A = overpay, B = invest
+    var invA = 0, invB = 0, contribA = 0, contribB = 0;
+    var intA = 0, intB = 0, extra = 0, capped = 0;
+    var allowance = Infinity;
+    var payoffA = null, payoffB = null;
+    var rows = [{ m: 0, balA: balA, balB: balB, invA: 0, invB: 0, netA: -balA, netB: -balB }];
+    for (var m = 0; m < months; m++) {
+      var rate = (o.rateChangeMonth != null && m >= o.rateChangeMonth) ? o.rateChangeTo : o.rate;
+      var i = rate / 12;
+      // On a rate change the lender re-amortises. Size the new payment off the
+      // NO-overpayment balance and use it on both paths, so overpaying still
+      // buys a shorter term rather than a smaller payment.
+      if (o.rateChangeMonth != null && m === o.rateChangeMonth && balB > 0)
+        pay = mtgPmt(balB, i, Math.max(1, o.termMonths - m));
+      // penalty-free allowance resets every 12 months, on the balance then owed
+      if (m % 12 === 0) allowance = (o.limitPct > 0) ? o.limitPct * balA : Infinity;
+      var spare = o.spareMonthly + ((m % 12 === 0) ? o.spareAnnual : 0);
+
+      var acA = balA * i, acB = balB * i;
+      balA += acA; balB += acB; intA += acA; intB += acB;
+
+      var payA = Math.min(balA, pay), payB = Math.min(balB, pay);
+      balA -= payA; balB -= payB;
+
+      // A: overpay what the allowance permits, invest the rest
+      var want = Math.min(spare, balA);
+      var op = Math.min(want, allowance);
+      balA -= op; allowance -= op; extra += op; capped += (want - op);
+
+      var intoA = (spare - op) + (pay - payA);   // cap overflow + the freed payment
+      var intoB = spare + (pay - payB);
+      invA = invA * (1 + rMonthly) + intoA; contribA += intoA;
+      invB = invB * (1 + rMonthly) + intoB; contribB += intoB;
+
+      if (balA <= 0.005) { balA = 0; if (payoffA == null) payoffA = m + 1; }
+      if (balB <= 0.005) { balB = 0; if (payoffB == null) payoffB = m + 1; }
+      rows.push({ m: m + 1, balA: balA, balB: balB, invA: invA, invB: invB,
+                  netA: invA - balA, netB: invB - balB });
+      if (o.stopWhenClear && balA === 0 && balB === 0) break;
+    }
+    return { rows: rows, balA: balA, balB: balB, invA: invA, invB: invB,
+             contribA: contribA, contribB: contribB, intA: intA, intB: intB,
+             extra: extra, capped: capped, payoffA: payoffA, payoffB: payoffB };
+  }
+
+  function mortgageHorizonYears(mp) {
+    var mode = mp.horizonMode || 'custom';
+    if (mode === 'term') return Math.max(1, mp.termYears || 1);
+    if (mode === 'custom') return Math.max(1, mp.horizonYears || 1);
+    var n = parseFloat(mode);
+    return (isFinite(n) && n > 0) ? n : 10;
+  }
+
+  function mortgageOpts(mp, growth) {
+    var termM = Math.max(1, Math.round((mp.termYears || 0) * 12));
+    var bal = Math.max(0, mp.balance || 0);
+    var i = (mp.rate || 0) / 12;
+    var derived = mtgPmt(bal, i, termM);
+    var pay = (mp.payment != null && mp.payment > 0) ? mp.payment : derived;
+    // a payment that doesn't cover the interest never repays anything — fall
+    // back to the contractual one rather than modelling a debt spiral
+    var tooLow = (mp.payment != null && mp.payment > 0) && pay <= bal * i + 0.005;
+    if (tooLow) pay = derived;
+    var spare = Math.max(0, mp.spare || 0);
+    var fee = Math.max(0, mp.fee || 0), drag = Math.max(0, mp.taxDrag || 0);
+    return {
+      balance: bal,
+      rate: mp.rate || 0,
+      termMonths: termM,
+      payment: pay,
+      derivedPayment: derived,
+      paymentTooLow: tooLow,
+      spareMonthly: mp.spareFreq === 'monthly' ? spare : 0,
+      spareAnnual: mp.spareFreq === 'monthly' ? 0 : spare,
+      limitPct: mp.overpayLimitPct != null ? Math.max(0, mp.overpayLimitPct) : 0,
+      fee: fee, drag: drag,
+      netReturn: growth - fee - drag,
+      rateChangeMonth: (mp.rateChangeTo != null && mp.rateChangeAfterYears != null && mp.rateChangeAfterYears >= 0)
+        ? Math.round(mp.rateChangeAfterYears * 12) : null,
+      rateChangeTo: mp.rateChangeTo,
+      stopWhenClear: false,
+      months: 12
+    };
+  }
+
+  // The whole comparison. Everything the module shows comes from here.
+  function mortgagePlan(mp) {
+    var growth = (mp.growth != null) ? mp.growth
+               : (mp.growthFallback != null ? mp.growthFallback : 0.07);
+    var o = mortgageOpts(mp, growth);
+    var horizonYears = mortgageHorizonYears(mp);
+    var H = Math.max(1, Math.round(horizonYears * 12));
+
+    var need = (o.balance <= 0) ? 'Add your mortgage balance'
+             : ((mp.termYears || 0) <= 0) ? 'Add the years left on your mortgage'
+             : (((mp.spare || 0) <= 0) ? 'Add the spare cash you could use' : null);
+
+    var run = mortgageRun(mtgWith(o, { months: H }));
+    // Keep the overpayments going until the debt is gone — that is what the
+    // mortgage-free date, the term cut and lifetime interest saved describe.
+    var full = mortgageRun(mtgWith(o, { months: o.termMonths + 600, stopWhenClear: true }));
+
+    var last = run.rows[run.rows.length - 1];
+    var diff = last.netB - last.netA;            // + = investing ahead
+
+    // Crossovers. With flat rates one path leads from month one, so a naive
+    // "first month B is ahead" reads "overtakes in year 0" — useless. Track
+    // meaningful lead changes instead (a tolerance kills the noise): the cap
+    // binding, the overpaid mortgage clearing, or a rate change can genuinely
+    // hand the lead back later.
+    var tol = Math.max(50, o.balance * 0.0005);
+    var crossings = [], sign = 0, firstLeader = null;
+    for (var k = 1; k < run.rows.length; k++) {
+      var d = run.rows[k].netB - run.rows[k].netA;
+      var s = d > tol ? 1 : (d < -tol ? -1 : 0);
+      if (s !== 0 && s !== sign) {
+        if (sign !== 0) crossings.push({ month: k, winner: s > 0 ? 'invest' : 'overpay' });
+        else firstLeader = s > 0 ? 'invest' : 'overpay';
+        sign = s;
+      }
+    }
+    var crossM = crossings.length ? crossings[crossings.length - 1] : null;
+
+    // Break-even: the GROSS return at which the two paths end level. Solved on
+    // the full model, so the overpayment cap, the timing and the reinvestment
+    // of the freed payment are all in it — not just the mortgage rate echoed back.
+    var diffAt = function (g) {
+      var r = mortgageRun(mtgWith(o, { months: H, netReturn: g - o.fee - o.drag }));
+      var l = r.rows[r.rows.length - 1];
+      return l.netB - l.netA;
+    };
+    var breakEven = null;
+    if (o.balance > 0 && (o.spareMonthly + o.spareAnnual) > 0) {
+      var lo = 0, hi = 0.30;
+      if (diffAt(lo) >= 0) breakEven = 0;
+      else if (diffAt(hi) > 0) {
+        for (var b = 0; b < 44; b++) {
+          var mid = (lo + hi) / 2;
+          if (diffAt(mid) > 0) hi = mid; else lo = mid;
+        }
+        breakEven = Math.round(((lo + hi) / 2) * 10000) / 10000;
+      }
+    }
+
+    // Sensitivity — the site's own lower / central / higher return assumptions.
+    var lowG  = (mp.lowGrowth  != null) ? mp.lowGrowth  : Math.max(0, growth - 0.02);
+    var highG = (mp.highGrowth != null) ? mp.highGrowth : growth + 0.02;
+    var sens = [{ key: 'low', growth: lowG }, { key: 'central', growth: growth }, { key: 'high', growth: highG }]
+      .map(function (s) {
+        var r = mortgageRun(mtgWith(o, { months: H, netReturn: s.growth - o.fee - o.drag }));
+        var l = r.rows[r.rows.length - 1];
+        return { key: s.key, growth: s.growth, diff: round2(l.netB - l.netA),
+                 winner: (l.netB - l.netA) > 0 ? 'invest' : 'overpay' };
+      });
+
+    // yearly points for the chart (net wealth = investments − debt)
+    var series = [];
+    for (var y = 0; y * 12 < run.rows.length; y++) {
+      var r0 = run.rows[y * 12];
+      series.push({ year: y, overpay: round2(r0.netA), invest: round2(r0.netB),
+                    debtOverpay: round2(r0.balA), debtInvest: round2(r0.balB) });
+    }
+    var lastRow = run.rows[run.rows.length - 1];
+    if (series.length === 0 || series[series.length - 1].year * 12 !== lastRow.m) {
+      series.push({ year: Math.round((lastRow.m / 12) * 100) / 100, overpay: round2(lastRow.netA),
+                    invest: round2(lastRow.netB), debtOverpay: round2(lastRow.balA),
+                    debtInvest: round2(lastRow.balB) });
+    }
+
+    return {
+      ready: need == null, need: need,
+      growth: growth, fee: o.fee, taxDrag: o.drag, netReturn: o.netReturn,
+      horizonYears: horizonYears, months: H,
+      payment: round2(o.payment), derivedPayment: round2(o.derivedPayment),
+      paymentTooLow: o.paymentTooLow,
+      spareAnnualTotal: round2(o.spareMonthly * 12 + o.spareAnnual),
+      guaranteedReturn: o.rate,
+      overpay: {
+        balance: round2(run.balA), interest: round2(run.intA), extra: round2(run.extra),
+        investments: round2(run.invA), contributions: round2(run.contribA),
+        net: round2(lastRow.netA), capped: round2(run.capped)
+      },
+      invest: {
+        balance: round2(run.balB), interest: round2(run.intB),
+        investments: round2(run.invB), contributions: round2(run.contribB),
+        growthAmount: round2(run.invB - run.contribB), net: round2(lastRow.netB)
+      },
+      diff: round2(diff),
+      winner: diff > 0 ? 'invest' : (diff < 0 ? 'overpay' : 'tie'),
+      crossover: crossM, crossings: crossings, firstLeader: firstLeader,
+      interestSaved: round2(run.intB - run.intA),
+      interestSavedLifetime: round2(full.intB - full.intA),
+      payoffMonths: full.payoffB, payoffMonthsOverpay: full.payoffA,
+      termCutMonths: (full.payoffB != null && full.payoffA != null) ? (full.payoffB - full.payoffA) : null,
+      extraLifetime: round2(full.extra),
+      capBinding: run.capped > 0.5, cappedLifetime: round2(full.capped),
+      breakEven: breakEven,
+      sensitivity: sens,
+      series: series
+    };
+  }
+
   var Engine = {
     DEFAULTS: DEFAULTS,
     BRIDGE_DEFAULTS: BRIDGE_DEFAULTS,
@@ -2908,7 +3230,12 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
     milestones: milestones,
     requiredPensionAtAccess: requiredPensionAtAccess,
     requiredBridgeValue: requiredBridgeValue,
-    coastFireAge: coastFireAge
+    coastFireAge: coastFireAge,
+    MORTGAGE_DEFAULTS: MORTGAGE_DEFAULTS,
+    mortgagePlan: mortgagePlan,
+    mortgageRun: mortgageRun,
+    mortgageHorizonYears: mortgageHorizonYears,
+    mortgagePayment: mtgPmt
   };
 
   root.Engine = Engine;
@@ -3207,11 +3534,11 @@ function NumInput({ value, onChange, step, min, className, style, title, ariaLab
 }
 
 /* ---------- custom tooltip ---------- */
-function ChartTip({ active, payload, label, fmt }) {
+function ChartTip({ active, payload, label, fmt, lbl }) {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="tooltip">
-      <div className="t-age">Age {label}</div>
+      <div className="t-age">{(lbl || 'Age') + ' ' + label}</div>
       {payload.filter(p => p.value != null).map((p,i) => (
         <div className="t-row" key={i}>
           <span className="nm"><span className="sw" style={{background:p.color||p.stroke}}></span>{p.name}</span>
@@ -3271,7 +3598,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
 
   const reached = base.reached;
   const targetPot = plan.targetPot;
-  const notReady = (bp.currentAge < 16 || bp.currentAge > 100) ? 'Add your age below'
+  const notReady = (bp.currentAge < 16 || bp.currentAge > 100) ? 'Add your age in the pension planner above'
     : !((bp.currentBalance||0) > 0 || (bp.phases||[]).some(p => (p.annual||0) > 0)) ? 'Add your ISA or GIA savings below'
     : !((bp.targetIncome||0) > 0) ? 'Add the income you want each year'
     : null;
@@ -3419,7 +3746,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
              Everything more technical lives under Advanced assumptions below. */}
       <div className="bp-sub">Your numbers</div>
       <div className="bp-assump">
-        <div className="bp-fld"><label>Current age</label><BpNum value={bp.currentAge} step="0.1" onChange={v=>setBp({currentAge:Math.round(v*10)/10})} /></div>
         <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
         <div className="bp-fld"><label>Income you want each year</label><BpNum money value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
         <div className="bp-fld"><label>Target optionality age</label>
@@ -3545,8 +3871,6 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
                   onChange={v=> updScen(sc.key,{growth:(v||0)/100})} /></div>
                 <div className="bp-fld"><label>Inflation</label><BpNum pct value={+((scInfl||0)*100).toFixed(2)} step="0.1"
                   onChange={v=> updScen(sc.key,{inflation:(v||0)/100})} /></div>
-                <div className="bp-fld"><label>Contributions (× Base)</label><BpNum pct value={+((s.contribScale!=null?s.contribScale:1)*100).toFixed(0)} step="5"
-                  onChange={v=>updScen(sc.key,{contribScale:(v||0)/100})} /></div>
               </React.Fragment>}
             <div className="cross-line">Optionality: <b>{res.crossAge!=null?'age '+res.crossAge:'not by '+bp.pensionAccessAge}</b>{res.crossAge!=null && ' · target '+gbpC(res.perpetualPot)}</div>
           </div>
@@ -3770,7 +4094,7 @@ function BridgePlanner({ bp, setBp, plan, C, realTerms, setRealTerms }) {
    zero further contributions)? Reuses the .bridge-planner / bp-*
    styling. Real-terms model; nominal view only re-inflates.
    ============================================================= */
-function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
+function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
   // sequence-risk (pension drawdown) — memoised; the Monte Carlo is ~50ms
@@ -3924,7 +4248,8 @@ function CoastPlanner({ cp, setCp, plan, C, realTerms, setRealTerms }) {
       {/* 3) YOUR NUMBERS — the few inputs most people can answer straight away */}
       <div className="bp-sub">Your numbers</div>
       <div className="bp-assump">
-        <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setCp({currentAge:Math.round(v*10)/10})} /></div>
+        <div className="bp-fld"><label>Current age</label><BpNum value={cp.currentAge} step="0.1" onChange={v=>setAge(v)} />
+          <div className="bp-hint">Used by both planners.</div></div>
         <div className="bp-fld"><label>Pension balance today</label><BpNum money value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
         {cp.goalMode==='pot'
           ? <div className="bp-fld"><label>Target pension pot</label><BpNum money value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
@@ -4462,6 +4787,287 @@ function AuthButton(props){
 }
 
 /* ============================================================= */
+/* =============================================================
+   MORTGAGE OVERPAYMENT vs INVESTING — side calculator
+   -------------------------------------------------------------
+   Deliberately not a third dashboard: one question, one chart, a
+   handful of inputs. The design rule is that it must NOT say
+   "invest, because 7% beats 4.5%". It shows the guaranteed saving,
+   the possible investment outcome, the return investing has to beat,
+   how uncertain that return is, and what overpaying does to the
+   mortgage-free date — and leaves the trade-off with the user.
+   ============================================================= */
+function MoRow({ k, v, strong }) {
+  return <div className="mo-r"><span className="k">{k}</span><span className={'v'+(strong?' strong':'')}>{v}</span></div>;
+}
+
+function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClose }) {
+  const narrow = useIsNarrow();
+  const pc = (x, dp) => (x == null ? '—' : (x * 100).toFixed(dp == null ? 1 : dp) + '%');
+  /* "£-96k" reads as a typo; a real minus sign in front of the £ doesn't */
+  const sgn = (v) => (v < 0 ? '−' + gbpC(-v) : gbpC(v));
+  /* the headline gap is an estimate off assumed returns — £100s of precision
+     would be false precision, so round it */
+  const round100 = (x) => Math.round(Math.abs(x) / 100) * 100;
+  const spanStr = (months) => {
+    if (months == null) return '—';
+    const y = Math.floor(months / 12), m = months % 12, p = [];
+    if (y) p.push(y + ' year' + (y === 1 ? '' : 's'));
+    if (m) p.push(m + ' month' + (m === 1 ? '' : 's'));
+    return p.length ? p.join(' ') : '0 months';
+  };
+  const dateIn = (months) => {
+    if (months == null) return '—';
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + months);
+    return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  };
+  const H = plan.horizonYears;
+  const horizonLabel = H === 1 ? '1 year' : H + ' years';
+  const todayEquiv = (v) => v / Math.pow(1 + (inflation || 0), H);
+  const rateLine = (mp.rateChangeTo != null && mp.rateChangeAfterYears != null)
+    ? pc(mp.rate) + ' (then ' + pc(mp.rateChangeTo) + ' from year ' + mp.rateChangeAfterYears + ')'
+    : pc(mp.rate);
+
+  const tie = plan.ready && Math.abs(plan.diff) < 100;
+  const winsInvest = plan.winner === 'invest';
+
+  const setHorizon = (mode) => setMp({ horizonMode: mode });
+
+  return (
+    <div className="mortgage-module">
+      <div className="bp-topline">
+        <div>
+          <h3 className="bp-title">Mortgage or invest?</h3>
+          <div className="mo-strap">Same spare cash, two uses — compared as net wealth (investments minus what you still owe).</div>
+        </div>
+        <button className="btn subtle mo-hide" onClick={onClose}>✕ Close</button>
+      </div>
+
+      {!plan.ready ? (
+        <div className="mo-hero"><div className="v waiting">{plan.need}</div></div>
+      ) : (
+      <React.Fragment>
+        {/* ---- 1) THE ANSWER ---- */}
+        <div className="mo-hero">
+          <div className="v">{tie
+            ? 'It’s line-ball after ' + horizonLabel
+            : (winsInvest ? 'Investing' : 'Mortgage overpayment') + ' comes out '
+              + gbp(round100(plan.diff)) + ' ahead after ' + horizonLabel}</div>
+          <div className="sub">{tie
+            ? 'The two paths finish within £100 of each other on these assumptions.'
+            : '≈ ' + gbp(round100(todayEquiv(plan.diff))) + ' in today’s money · net wealth = investments − mortgage debt'}</div>
+        </div>
+        <div className="mo-line">
+          Mortgage overpayment gives you a <b>guaranteed</b> return equivalent to your {rateLine} mortgage
+          rate — you avoid that interest with no market risk. Investing would need to return more
+          than about <b>{pc(plan.breakEven)} a year</b>, after fees{plan.taxDrag > 0 ? ' and tax' : ''}, to leave you better off.
+        </div>
+
+        {/* ---- 2) BREAK-EVEN — the most useful number here ---- */}
+        <div className="mo-be">
+          <div>
+            <div className="k">Break-even return</div>
+            <div className="v">{plan.breakEven != null ? pc(plan.breakEven) + ' p.a.' : '—'}</div>
+          </div>
+          <div className="t">Your investments need to average around <b>{pc(plan.breakEven)}</b> a year for
+            investing to leave you better off than overpaying. That’s your {pc(mp.rate)} mortgage rate,
+            plus your {pc(mp.fee, 2)} investment fee{plan.taxDrag > 0 ? ' and ' + pc(plan.taxDrag, 2) + ' tax drag' : ''}, plus the
+            effect of mortgage interest compounding monthly. You’re assuming {pc(plan.growth)}.</div>
+        </div>
+
+        {/* ---- 3) THE CHART — net wealth, so the two paths are comparable ---- */}
+        <div className="bp-chart">
+          {ResponsiveContainer ? (
+          <ResponsiveContainer width="100%" height={narrow ? 230 : 290}>
+            <LineChart data={plan.series} margin={{ top: 26, right: 14, left: narrow ? 0 : 8, bottom: 2 }}>
+              <CartesianGrid stroke={C.grid} vertical={false} />
+              <XAxis dataKey="year" type="number" domain={[0, H]} stroke={C.axis}
+                tick={{ fontSize: narrow ? 10 : 11, fill: C.axis }} tickLine={false}
+                axisLine={{ stroke: C.baseline }} minTickGap={narrow ? 26 : 8} interval="preserveStartEnd" />
+              <YAxis stroke={C.axis} tick={{ fontSize: narrow ? 10 : 11, fill: C.axis }} tickLine={false}
+                axisLine={false} tickFormatter={gbpC} width={narrow ? 54 : 56} tickCount={narrow ? 4 : 6} />
+              <Tooltip content={<ChartTip lbl="Year" />} trigger={narrow ? 'click' : 'hover'} />
+              <ReferenceLine y={0} stroke={C.baseline} strokeWidth={1.5}
+                label={{ value: 'Debt cleared', position: 'insideBottomLeft', fill: C.axis, fontSize: narrow ? 10 : 11 }} />
+              {plan.crossover && <ReferenceLine x={Math.round((plan.crossover.month / 12) * 10) / 10} stroke={C.good} strokeDasharray="4 3" strokeWidth={1.5}
+                label={{ value: (plan.crossover.winner === 'invest' ? 'Investing ahead' : 'Overpaying ahead') + ' — year ' + Math.round(plan.crossover.month / 12),
+                         position: 'insideTopLeft', fill: C.good, fontSize: narrow ? 10 : 11, fontWeight: 700 }} />}
+              <Line type="monotone" dataKey="overpay" name="Overpay the mortgage" stroke={C.pension} strokeWidth={2.6} dot={false} />
+              <Line type="monotone" dataKey="invest" name="Invest the spare cash" stroke={C.isa} strokeWidth={2.6} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>) : <div className="muted">Chart library unavailable.</div>}
+          <div className="legend-row" style={{ marginBottom: 2 }}>
+            <span><span className="sw" style={{ background: C.pension }}></span>Overpay the mortgage</span>
+            <span><span className="sw" style={{ background: C.isa }}></span>Invest the spare cash</span>
+            <span className="terms-tag">net wealth · cash terms</span>
+          </div>
+          <div className="bp-note" style={{ marginTop: 2 }}>Net wealth is investments <b>minus</b> the mortgage still
+            owed, so the two paths are directly comparable — an investment balance set against "interest saved"
+            is not. Both lines start at minus your {gbpC(mp.balance)} mortgage.
+            {plan.crossover ? ' They cross in year ' + Math.round(plan.crossover.month / 12) + ': '
+              + (plan.crossover.winner === 'invest'
+                  ? 'investing pulls ahead from there.'
+                  : 'overpaying catches up once the mortgage is gone and the whole payment can be invested.')
+              : (plan.firstLeader === 'invest'
+                  ? ' On these assumptions investing stays ahead throughout — there is no crossover.'
+                  : ' On these assumptions overpaying stays ahead throughout — there is no crossover.')}</div>
+        </div>
+
+        {/* ---- 4) MORTGAGE-FREE DATE — often the figure that actually lands ---- */}
+        <div className="bp-sub">Mortgage-free date</div>
+        <div className="mo-free">
+          <div><div className="k">On your current payments</div><div className="v">{dateIn(plan.payoffMonths)}</div></div>
+          <div><div className="k">Keeping the overpayments going</div><div className="v">{dateIn(plan.payoffMonthsOverpay)}</div></div>
+          <div><div className="k">Earlier by</div><div className="v accent">{spanStr(plan.termCutMonths)}</div></div>
+        </div>
+        <div className="bp-note">Assumes you keep overpaying {gbp(plan.spareAnnualTotal)} a year until the mortgage is
+          gone — {gbp(plan.extraLifetime)} of extra payments in total, saving {gbp(plan.interestSavedLifetime)} of interest.
+          {plan.capBinding ? ' Some of your spare cash is above the ' + pc(mp.overpayLimitPct, 0)
+            + ' annual overpayment allowance, so it is invested instead.' : ''}</div>
+
+        {/* ---- 5) THE TWO PATHS SIDE BY SIDE ---- */}
+        <div className="bp-sub">After {horizonLabel}</div>
+        <div className="mo-cols">
+          <div className="mo-col">
+            <h4><span className="cd" style={{ background: C.pension }}></span>Overpay the mortgage</h4>
+            <div className="net">{sgn(plan.overpay.net)} <span className="nl">net wealth</span></div>
+            <MoRow k="Mortgage still owed" v={gbpC(plan.overpay.balance)} />
+            <MoRow k="Extra payments made" v={gbpC(plan.overpay.extra)} />
+            <MoRow k="Interest saved" v={gbpC(plan.interestSaved)} />
+            {plan.overpay.investments > 0 && <MoRow k="Invested (above the allowance / after payoff)" v={gbpC(plan.overpay.investments)} />}
+            <MoRow k="Effective return" v={pc(plan.guaranteedReturn) + ' guaranteed'} strong />
+          </div>
+          <div className="mo-col">
+            <h4><span className="cd" style={{ background: C.isa }}></span>Invest the spare cash</h4>
+            <div className="net">{sgn(plan.invest.net)} <span className="nl">net wealth</span></div>
+            <MoRow k="Mortgage still owed" v={gbpC(plan.invest.balance)} />
+            <MoRow k="Total contributions" v={gbpC(plan.invest.contributions)} />
+            <MoRow k="Investment growth" v={gbpC(plan.invest.growthAmount)} />
+            <MoRow k="Investment value" v={gbpC(plan.invest.investments)} />
+            <MoRow k={'Assumed return'} v={pc(plan.growth) + ' — not guaranteed'} strong />
+          </div>
+        </div>
+
+        {/* ---- 6) SENSITIVITY — three returns, not one forecast ---- */}
+        <div className="bp-sub">If returns come in lower or higher</div>
+        <div className="bp-stress-lines">
+          {plan.sensitivity.map(function (s, i) {
+            return (
+              <div className="ssl" key={i}>
+                <span className="k">{pc(s.growth)} a year{s.key === 'central' ? <span className="muted"> · your assumption</span> : ''}</span>
+                <span className="v">{Math.abs(s.diff) < 100
+                  ? 'line-ball'
+                  : narrow
+                    ? (s.winner === 'invest' ? 'invest +' : 'overpay +') + gbp(round100(s.diff))
+                    : (s.winner === 'invest' ? 'investing wins by ' : 'overpaying wins by ') + gbp(round100(s.diff))}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="bp-note">The lower and higher figures are this site’s own conservative and optimistic
+          return assumptions, so they move with the rest of your plan rather than being a second set of numbers.
+          Over {horizonLabel}, real returns can land well outside even this range.</div>
+
+        {/* ---- 7) CERTAINTY vs POTENTIAL — the part the maths can't settle ---- */}
+        <div className="bp-sub">Certainty vs potential return</div>
+        <div className="mo-tradeoff">
+          <div className="mo-col">
+            <h4><span className="cd" style={{ background: C.pension }}></span>Overpaying</h4>
+            <ul>
+              <li>A <b>guaranteed</b> saving — the interest you avoid is certain</li>
+              <li>Reduces debt, and the mortgage-free date with it</li>
+              <li><b>Lower liquidity</b> — the money is in the house, not reachable</li>
+              <li>Generally irreversible without borrowing again</li>
+              <li>No market volatility to sit through</li>
+            </ul>
+          </div>
+          <div className="mo-col">
+            <h4><span className="cd" style={{ background: C.isa }}></span>Investing</h4>
+            <ul>
+              <li>Higher <b>potential</b> return — but only a potential one</li>
+              <li>Money stays accessible (an ISA can be sold and withdrawn)</li>
+              <li>Returns are uncertain and arrive in an unhelpful order</li>
+              <li>Can fall materially over shorter periods</li>
+              <li>Fees and, outside an ISA, tax come off the return</li>
+            </ul>
+          </div>
+        </div>
+        <div className="mo-key">This isn’t purely a maths question. Overpaying gives a <b>known</b> return;
+          investing gives an <b>uncertain</b> one with potentially greater upside. A gap of {gbp(round100(plan.diff))} over
+          {' ' + horizonLabel} is well inside the range a couple of bad market years could move.</div>
+      </React.Fragment>)}
+
+      {/* ---- 8) YOUR NUMBERS ---- */}
+      <div className="bp-sub">Your numbers</div>
+      <div className="bp-assump">
+        <div className="bp-fld"><label>Mortgage balance</label><BpNum money value={mp.balance} step={1000} onChange={v => setMp({ balance: v })} /></div>
+        <div className="bp-fld"><label>Interest rate</label><BpNum pct value={+(mp.rate * 100).toFixed(2)} step="0.1" onChange={v => setMp({ rate: (v || 0) / 100 })} /></div>
+        <div className="bp-fld"><label>Years left</label><BpNum value={mp.termYears} step="1" onChange={v => setMp({ termYears: v })} />
+          <div className="bp-hint">Payment {gbp(plan.payment)}/month{mp.payment > 0 ? '' : ' (calculated)'}</div></div>
+        <div className="bp-fld"><label>Spare cash available</label><BpNum money value={mp.spare} step={100} onChange={v => setMp({ spare: v })} />
+          <div className="bp-seg sm" style={{ marginTop: 6 }}>
+            <button className={mp.spareFreq === 'monthly' ? 'on' : ''} onClick={() => setMp({ spareFreq: 'monthly' })}>a month</button>
+            <button className={mp.spareFreq !== 'monthly' ? 'on' : ''} onClick={() => setMp({ spareFreq: 'annual' })}>a year</button>
+          </div>
+        </div>
+      </div>
+      <div className="bp-tgroup" style={{ marginTop: 16 }}><span className="tl">Compare over</span>
+        <div className="bp-seg sm">
+          {[['5', '5 years'], ['10', '10 years'], ['20', '20 years'], ['term', 'Full term'], ['custom', 'Custom']].map(function (o) {
+            return <button key={o[0]} className={(mp.horizonMode || '10') === o[0] ? 'on' : ''} onClick={() => setHorizon(o[0])}>{o[1]}</button>;
+          })}
+        </div>
+      </div>
+      {(mp.horizonMode === 'custom') && <div className="bp-fld" style={{ marginTop: 10, maxWidth: 200 }}><label>Years to compare over</label>
+        <BpNum value={mp.horizonYears} step="1" onChange={v => setMp({ horizonYears: Math.max(1, Math.round(v)) })} /></div>}
+
+      {/* ---- 9) ADJUST ASSUMPTIONS ---- */}
+      <details className="bp-collapse" onToggle={TRK.open('open_advanced')}><summary className="bp-sub bp-summary">Adjust assumptions</summary>
+      <div>
+        <div className="bp-assump" style={{ marginTop: 4 }}>
+          <div className="bp-fld"><label>Your monthly payment</label>
+            <BpNum money value={mp.payment != null ? mp.payment : ''} step={50} onChange={v => setMp({ payment: v > 0 ? v : null })} />
+            <div className="bp-hint">{mp.payment > 0
+              ? (plan.paymentTooLow ? 'That doesn’t cover the interest — using ' + gbp(plan.derivedPayment) + ' instead.' : 'Leave blank to use the calculated ' + gbp(plan.derivedPayment) + '.')
+              : 'Blank = calculated from the balance, rate and term.'}</div></div>
+          <div className="bp-fld"><label>Overpayment allowance</label><BpNum pct value={+((mp.overpayLimitPct || 0) * 100).toFixed(1)} step="1" onChange={v => setMp({ overpayLimitPct: (v || 0) / 100 })} />
+            <div className="bp-hint">% of the balance each year, penalty-free. 0 = no limit.</div></div>
+          <div className="bp-fld"><label>Investment fee</label><BpNum pct value={+((mp.fee || 0) * 100).toFixed(2)} step="0.05" onChange={v => setMp({ fee: (v || 0) / 100 })} />
+            <div className="bp-hint">Platform + fund charges, taken off the return.</div></div>
+          <div className="bp-fld"><label>Rate changes to</label><BpNum pct value={mp.rateChangeTo != null ? +(mp.rateChangeTo * 100).toFixed(2) : ''} step="0.1"
+            onChange={v => setMp({ rateChangeTo: v > 0 ? v / 100 : null })} />
+            <div className="bp-hint">Optional — e.g. when a fix ends.</div></div>
+          <div className="bp-fld"><label>…after</label><BpNum value={mp.rateChangeAfterYears != null ? mp.rateChangeAfterYears : ''} step="1"
+            onChange={v => setMp({ rateChangeAfterYears: v > 0 ? Math.round(v) : null })} suffix="yrs" />
+            <div className="bp-hint">The payment is then recalculated over the remaining term.</div></div>
+        </div>
+        <div className="bp-note" style={{ marginTop: 12 }}>The expected return is <b>{pc(plan.growth)}</b> nominal,
+          and the lower / higher cases are your Conservative and Optimistic scenarios — all inherited from the
+          planners above rather than being a second set of assumptions to keep in step. Change them there.</div>
+        <Learn label="How this is worked out">
+          <b>Monthly, in cash (nominal) terms</b> — a mortgage is a cash debt, so the whole comparison runs in
+          pounds of the day; the headline also shows the gap in today’s money. Both paths get the <b>same</b> cash
+          each month: your payment plus the spare. Overpaying <b>shortens the term</b> rather than cutting the
+          payment, and once the overpaid mortgage is gone the freed-up payment is invested — otherwise overpaying
+          would look worse simply because its money left the comparison. Spare cash above the annual allowance is
+          invested instead. Break-even is solved on the full model, so the allowance, the timing and that
+          reinvestment are all in it — it isn’t your mortgage rate parroted back.
+        </Learn>
+        <div className="assumptions" style={{ marginTop: 10 }}>
+          <b>What this doesn’t model.</b> Early repayment charges — check your lender’s before overpaying a
+          penny; many charge a percentage of the amount repaid during a fixed period. It also assumes an
+          <b> ISA</b>, so no tax on growth (a taxable account would need a tax-drag assumption — a later
+          iteration), and it doesn’t cover offset or interest-only mortgages, product fees, remortgaging,
+          or capital gains tax schedules. Investment returns are assumptions, not guarantees. Overpayments
+          are generally <b>irreversible</b> — money in the house isn’t money you can spend, and an emergency
+          fund comes before either option.
+        </div>
+      </div>
+      </details>
+    </div>
+  );
+}
+
 function App() {
   const C = useColors();
   const narrow = useIsNarrow();
@@ -4642,7 +5248,31 @@ function App() {
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
   const setCp = (patch) => { notePatch('coast', patch); setCoastInputs(prev => Object.assign({}, prev, patch)); };
   const coast = useMemo(() => Engine.coastPlan(coastInputs), [coastInputs]);
+  // ONE age for the whole page. It was asked for twice — once per planner —
+  // and a person only has one, so the pension planner (first on the page)
+  // owns the field and writes it to both models.
+  const setAge = (v) => { const a = Math.round(v*10)/10; setBp({currentAge:a}); setCp({currentAge:a}); };
+  useEffect(() => { if (coastInputs.currentAge !== bridgeInputs.currentAge)
+    setCoastInputs(prev => Object.assign({}, prev, { currentAge: bridgeInputs.currentAge })); }, []);
   const combined = useMemo(() => Engine.combinedPlan(bridgeInputs, coastInputs), [bridgeInputs, coastInputs]);
+
+  // ---- Mortgage or invest? — the side calculator under the planners ----
+  const [mortgageInputs, setMortgageInputs] = useState(() => {
+    let x = JSON.parse(JSON.stringify(Engine.MORTGAGE_DEFAULTS));
+    try { const s = localStorage.getItem('optionality.mortgage');
+      if (s) x = Object.assign({}, JSON.parse(JSON.stringify(Engine.MORTGAGE_DEFAULTS)), JSON.parse(s)); } catch(e){}
+    return x;
+  });
+  useEffect(() => { try { localStorage.setItem('optionality.mortgage', JSON.stringify(mortgageInputs)); } catch(e){} }, [mortgageInputs]);
+  const setMp = (patch) => { TRK.once('session','edit_mortgage'); setMortgageInputs(prev => Object.assign({}, prev, patch)); };
+  const [exploreOpen, setExploreOpen] = useState(false);
+  // It INHERITS the site's return assumptions (base + the two scenarios) rather
+  // than introducing a third set of numbers to keep in step.
+  const mortgage = useMemo(() => Engine.mortgagePlan(Object.assign({}, mortgageInputs, {
+    growthFallback: bridgeInputs.growth,
+    lowGrowth:  (bridgeInputs.scenarios && bridgeInputs.scenarios.conservative && bridgeInputs.scenarios.conservative.growth) || null,
+    highGrowth: (bridgeInputs.scenarios && bridgeInputs.scenarios.optimistic && bridgeInputs.scenarios.optimistic.growth) || null
+  })), [mortgageInputs, bridgeInputs.growth, bridgeInputs.scenarios]);
 
   // Fire the funnel events AFTER the model has recomputed, so the optionality
   // age we report is the one the user is actually looking at.
@@ -4936,7 +5566,7 @@ function App() {
       })()}
 
       <div id="planner-pension"></div>
-      <CoastPlanner cp={coastInputs} setCp={setCp} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      <CoastPlanner cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
       <div id="planner-bridge"></div>
       <BridgePlanner bp={bridgeInputs} setBp={setBp} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
 
@@ -5032,6 +5662,26 @@ function App() {
         </details>
       </div>
       </div>{/* end outputs-block */}
+
+      {/* ===== EXPLORE OTHER DECISIONS =====
+           Side calculators. They sit BELOW the two planners and the combined
+           outputs on purpose: useful, but not part of the core answer. */}
+      <section className="explore" id="explore">
+        <div className="ex-h">Explore other decisions</div>
+        <div className="ex-card">
+          {!exploreOpen ? (
+            <React.Fragment>
+              <div className="ex-card-k">Mortgage or invest?</div>
+              <div className="ex-card-b">See whether spare cash could work harder reducing your mortgage or being invested.</div>
+              <button className="btn primary" onClick={()=>{ TRK.once('session','open_mortgage'); setExploreOpen(true); }}>Compare →</button>
+            </React.Fragment>
+          ) : (
+            <MortgageModule mp={mortgageInputs} setMp={setMp} plan={mortgage} C={C}
+              inheritedGrowth={bridgeInputs.growth} inflation={bridgeInputs.inflation}
+              onClose={()=>setExploreOpen(false)} />
+          )}
+        </div>
+      </section>
       </main>{/* end main */}
 
 
