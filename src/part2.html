@@ -1683,7 +1683,6 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           // Show it as its own step when it is material, or the sum won't add up.
           const preInvested = Math.max(0, plan.overpay.contributions - plan.monthlyAfterPayoff * monthsAfter);
           const capMatters  = preInvested > Math.max(250, plan.overpay.contributions * 0.02);
-          const owed = plan.invest.balance > 1 || plan.overpay.balance > 1;
           return (
         <React.Fragment>
         <div className="mo-cols mo-flows">
@@ -1763,22 +1762,31 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
           </div>
         </div>
 
-        {/* ---- the trade-off, in one line each way ---- */}
-        <div className="mo-tradeoff2">
-          <div><div className="k">{level ? 'Neither is clearly ahead' : (winsInvest ? 'More projected wealth by investing' : 'More projected wealth by overpaying')}</div>
-            <div className="v">{level ? 'Within £100' : gbp(round100(plan.diff))}</div></div>
-          <div className="vs">vs</div>
-          <div><div className="k">Mortgage-free sooner by overpaying</div>
-            <div className="v">{earlier ? spanStr(plan.termCutMonths, true) : 'No sooner'}</div></div>
+        {/* One paragraph doing the whole job: what overpaying buys you, and why
+            the interest saved must not be added to the pot next to it. The
+            "vs" strip that used to sit here said the same things in less
+            English, and the figures are all in the cards above anyway. */}
+        <div className="mo-key">
+          {(function () {
+            const saved = gbp(round100(plan.interestSaved));
+            const pot   = gbp(round100(plan.overpay.investments));
+            const perM  = gbp(Math.round(plan.monthlyAfterPayoff));
+            if (clearedInWindow) {
+              return <span>Overpaying saves <b>{saved}</b> of interest{earlier
+                ? <span> and clears the mortgage <b>{spanStr(plan.termCutMonths)}</b> sooner</span>
+                : <span></span>}. That {saved} isn’t extra money to add to the {pot} investment
+                pot — it’s what helps clear the mortgage early, freeing up <b>{perM} a month</b> to
+                invest from then on.</span>;
+            }
+            // the mortgage is still running at the comparison date, so nothing has
+            // been freed up yet — don't describe a windfall that hasn't happened
+            return <span>Overpaying has saved <b>{saved}</b> of interest so far{earlier
+              ? <span> and puts the mortgage on course to clear <b>{spanStr(plan.termCutMonths)}</b> sooner</span>
+              : <span></span>}. That {saved} isn’t extra money to add to the {pot} investment
+              pot — it’s what shrinks the balance faster, and once the mortgage is gone it frees
+              up <b>{perM} a month</b> to invest.</span>;
+          })()}
         </div>
-        <div className="mo-key">{owed
-          ? <span>Neither mortgage is cleared inside this window, so the comparison is the pot <b>minus what is
-              still owed</b> — {gbp(round100(plan.diff))} apart.</span>
-          : <span>Both mortgages are £0 by {endDate}, so the comparison is simply the two
-              pots — {gbp(round100(plan.diff))} apart.</span>}
-          {' '}The <b>{gbpC(plan.interestSaved)}</b> of interest avoided is not a separate pot to add on: it is
-          what <i>let</i> the mortgage clear early, and clearing early is what freed
-          up {gbp(Math.round(plan.payment))} a month to invest. It is already inside the figures above.</div>
         </React.Fragment>
           );
         })()}
