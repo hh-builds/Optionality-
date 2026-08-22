@@ -125,7 +125,8 @@
     d.setAttribute('role', 'status');
     d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;'
       + 'background:#7a4a12;color:#fff;font:600 13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;'
-      + 'padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:center;'
+      + 'padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px));'
+      + 'display:flex;gap:12px;align-items:center;justify-content:center;'
       + 'flex-wrap:wrap;text-align:center;box-shadow:0 -2px 12px rgba(0,0,0,.25)';
     d.innerHTML = 'Preview — you are looking at ' + String(window.__FF_PREVIEW__.label)
       .replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; })
@@ -523,7 +524,9 @@ body{
   font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
 }
-.wrap{max-width:1240px;margin:0 auto;padding:18px 22px 80px}
+.wrap{max-width:1240px;margin:0 auto;
+  padding:18px max(22px, env(safe-area-inset-right, 0px)) calc(80px + env(safe-area-inset-bottom, 0px))
+         max(22px, env(safe-area-inset-left, 0px))}
 /* two-column app layout: inputs sidebar (left / on top when narrow) + results main */
 .layout{display:flex;gap:22px;align-items:flex-start}
 .main{flex:1 1 0;min-width:0}
@@ -539,7 +542,11 @@ button{font-family:inherit}
   position:sticky;top:0;z-index:50;background:var(--page);
   background:color-mix(in srgb, var(--page) 88%, transparent);
   -webkit-backdrop-filter:saturate(1.4) blur(8px);backdrop-filter:saturate(1.4) blur(8px);
-  padding:11px 0 11px;margin-bottom:8px;border-bottom:1px solid var(--border)}
+  /* reserve the iOS status bar / Dynamic Island: with viewport-fit=cover the
+     page starts at y=0 on the physical screen, so without this the burger sits
+     under the notch and is close to untappable. */
+  padding:calc(11px + env(safe-area-inset-top, 0px)) 0 11px;
+  margin-bottom:8px;border-bottom:1px solid var(--border)}
 .brand{display:flex;align-items:center;gap:11px}
 /* FF monogram — theme-constant brand mark */
 .ff-mark{width:28px;height:28px;border-radius:10px;background:#3e5c99;color:#fff;
@@ -904,10 +911,12 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .btn{padding:10px 13px;min-height:44px}
   .icon-btn{width:44px;height:44px}
   /* ---- collapse the top bar into a burger menu so it stays one compact row ---- */
-  .topbar{flex-wrap:nowrap;gap:10px;padding:9px 0}
+  .topbar{flex-wrap:nowrap;gap:10px;padding:calc(9px + env(safe-area-inset-top, 0px)) 0 9px}
   .brand-sub{display:none}          /* subtitle is dead weight on a phone */
   .brand h1{font-size:16px}
-  .burger{display:inline-flex;position:relative;z-index:61}
+  /* 44px is the iOS minimum tap target; 40 with the notch above it was the
+     difference between "fiddly" and "can't hit it" */
+  .burger{display:inline-flex;position:relative;z-index:61;width:44px;height:44px}
   .menu-backdrop{display:block;position:fixed;inset:0;z-index:59;background:transparent}
   .toolbar{display:none}
   .toolbar.open{display:flex;flex-direction:column;align-items:stretch;gap:0;
@@ -926,7 +935,8 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
   .bp-seg{flex-wrap:wrap}
   .bp-scen-chips{gap:8px}
   /* reclaim horizontal space so content isn't pinched */
-  .wrap{padding:14px 12px 60px}
+  .wrap{padding:14px max(12px, env(safe-area-inset-right, 0px)) calc(60px + env(safe-area-inset-bottom, 0px))
+        max(12px, env(safe-area-inset-left, 0px))}
   .bridge-planner{padding:16px 13px}
   .bp-answer{font-size:25px}
   .bp-title{font-size:18px}
@@ -992,7 +1002,8 @@ html[data-theme="dark"] .bp-status.amber{color:var(--warning)} html[data-theme="
      full-width row each. Keep the menu one. */
   .bp-terms{display:none}
 
-  .wrap{padding:12px 12px 44px}
+  .wrap{padding:12px max(12px, env(safe-area-inset-right, 0px)) calc(44px + env(safe-area-inset-bottom, 0px))
+        max(12px, env(safe-area-inset-left, 0px))}
   .hero{margin:6px 2px 12px}
   .hc-foot{margin-top:1px}
   .bridge-planner{padding:15px 13px 14px;margin-bottom:12px}

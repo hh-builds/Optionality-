@@ -1255,6 +1255,28 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     return out.map(function(r){ return r.data; });
   }
 
+  // Same, but a failure does not take the whole tab down with it. A section
+  // whose function is not in the database yet — a migration not run — has to
+  // fail on its own and leave the working sections alone. The Product tab used
+  // to go completely blank because admin_mortgage was missing.
+  async function rpcSoft(calls){
+    return await Promise.all(calls.map(function(c){
+      return supa.rpc(c[0], c[1]).then(function(r){
+        return { name: c[0], data: r.data, error: r.error };
+      });
+    }));
+  }
+
+  // Put the failure where the missing thing was going to be, and say what fixes it.
+  function sectionErr(ids, err, file){
+    var msg = (err && err.message) || 'unknown error';
+    var missing = /does not exist|schema cache|PGRST202|could not find/i.test(msg);
+    var html = '<div class="err" style="margin:0">' + esc(msg)
+      + (missing && file ? ' — run <b>supabase/' + esc(file) + '</b> in the Supabase SQL editor.' : '')
+      + '</div>';
+    ids.forEach(function(id, i){ if ($(id)) $(id).innerHTML = (i === 0 ? html : ''); });
+  }
+
   async function load(tab, force){
     if (busy) return;
     if (loaded[tab] && !force) return;
@@ -1262,27 +1284,39 @@ pre{background:var(--surface-2);border-radius:9px;padding:12px;overflow:auto;fon
     var P = { p: state.p, kind: state.kind, excl: state.excl };
     try {
       if (tab === 'overview'){
-        var o = await rpcAll([
+        var o = await rpcSoft([
           ['admin_overview', { excl: state.excl, kind: state.kind }],
           ['admin_trend',    { p: state.p, excl: state.excl, kind: state.kind }],
           ['admin_funnel',   P]
         ]);
-        renderOverview(o[0]); renderTrend(o[1] || []); renderFunnel(o[2] || []);
+        if (o[0].error) sectionErr(['heroTiles','userTiles','engTiles','fresh'], o[0].error, '005-device-filter.sql');
+        else renderOverview(o[0].data);
+        if (o[1].error) sectionErr(['trendCard'], o[1].error, '005-device-filter.sql');
+        else renderTrend(o[1].data || []);
+        if (o[2].error) sectionErr(['funnel'], o[2].error, '003-admin-v2.sql');
+        else renderFunnel(o[2].data || []);
         $('funnelHint').textContent = periodLabel();
+        if (o.every(function(r){ return r.error; })) throw new Error(o[0].error.message);
       } else if (tab === 'people'){
         await loadUsers();
       } else if (tab === 'product'){
-        var q = await rpcAll([
+        var q = await rpcSoft([
           ['admin_features', P],
           ['admin_installs', P],
           ['admin_model_medians', {}],
           ['admin_median_optionality_age', {}],
           ['admin_mortgage', P]
         ]);
-        renderFeatures(q[0] || []); renderInstalls(q[1] || null);
-        renderModel(q[2] || {}, q[3] || {});
-        renderMortgage(q[4] || null);
+        if (q[0].error) sectionErr(['feat'], q[0].error, '008-mortgage-verdict.sql');
+        else renderFeatures(q[0].data || []);
+        if (q[1].error) sectionErr(['instTiles','instNote'], q[1].error, '003-admin-v2.sql');
+        else renderInstalls(q[1].data || null);
+        if (q[2].error || q[3].error) sectionErr(['modelTiles','modelNote'], q[2].error || q[3].error, '003-admin-v2.sql');
+        else renderModel(q[2].data || {}, q[3].data || {});
+        if (q[4].error) sectionErr(['mgTiles','mgBands','mgNote'], q[4].error, '008-mortgage-verdict.sql');
+        else renderMortgage(q[4].data || null);
         $('instHint').textContent = periodLabel();
+        if (q.every(function(r){ return r.error; })) throw new Error(q[0].error.message);
       } else if (tab === 'reach'){
         var c = await rpcAll([['admin_countries', P]]);
         renderCountries(c[0] || {});
