@@ -646,11 +646,12 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
         </div>
       </div>
 
-      {/* 3) YOUR NUMBERS — what YOU told us, folded down to one line.
-             Once the answer exists, the inputs are reference material rather
-             than the main event, so they read as a summary you can open. The
-             fields inside are the same ones the setup card asked for, so
-             there is only ever one place each figure lives. */}
+      {/* 3) YOUR NUMBERS — what YOU told us.
+             The summary line reads at a glance; the boxes sit open underneath
+             it, because changing a figure is the commonest thing anyone does
+             here and putting it behind a disclosure made it a two-step job.
+             These are the same fields the setup card asked for, so there is
+             only ever one place each figure lives. */}
       <div className="bp-sub">Your numbers</div>
       <div className="yn-line">
         <span className="yn-i">Age <b>{isSet(bp.currentAge) ? ageStr(bp.currentAge) : '—'}</b></span>
@@ -659,25 +660,22 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
         <span className="yn-i">Saving <b>{onePhase ? (isSet(flatAnnual) ? gbpC(flatAnnual)+'/yr' : '—')
           : bp.phases.length+' periods'}</b></span>
       </div>
-      <details className="bp-collapse">
-        <summary className="bp-sub bp-summary">Edit your numbers</summary>
-        <div>
-        <div className="bp-assump" style={{marginTop:4}}>
-          <div className="bp-fld"><label>Current age</label><BpNum nullable value={bp.currentAge} step="0.1" onChange={v=>setAge(v)} />
-            <div className="bp-hint">Used by both planners.</div></div>
-          <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money nullable value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
-          <div className="bp-fld"><label>Income you want each year</label><BpNum money nullable value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
-          {onePhase && <div className="bp-fld"><label>What you save each year</label>
-            <BpNum money nullable value={flatAnnual} step={1000} onChange={setFlatAnnual} />
-            <div className="bp-hint">Into ISAs and investment accounts, not your pension.</div></div>}
-        </div>
+      <div className="bp-assump yn-fields">
+        <div className="bp-fld"><label>Current age</label><BpNum nullable value={bp.currentAge} step="0.1" onChange={v=>setAge(v)} />
+          <div className="bp-hint">Used by both planners.</div></div>
+        <div className="bp-fld"><label>ISA / GIA balance today</label><BpNum money nullable value={bp.currentBalance} step={1000} onChange={v=>setBp({currentBalance:v})} /></div>
+        <div className="bp-fld"><label>Income you want each year</label><BpNum money nullable value={bp.targetIncome} step={1000} onChange={v=>setBp({targetIncome:v})} /></div>
+        {onePhase && <div className="bp-fld"><label>What you save each year</label>
+          <BpNum money nullable value={flatAnnual} step={1000} onChange={setFlatAnnual} />
+          <div className="bp-hint">Into ISAs and investment accounts, not your pension.</div></div>}
+      </div>
 
-        {/* 4) CONTRIBUTIONS BY AGE — the full phase editor, one level down.
-               Nothing has been removed: this is the same editor it has always
-               been. It just no longer stands between a newcomer and their
-               first answer. It opens itself when a plan actually uses more
-               than one period, because then the simple field above cannot
-               describe the plan. */}
+      {/* 4) CONTRIBUTIONS BY AGE — the full phase editor, one level down.
+             Nothing has been removed: this is the same editor it has always
+             been. It just no longer stands between a newcomer and their
+             first answer. It opens itself when a plan actually uses more
+             than one period, because then the simple field above cannot
+             describe the plan. */}
         <details className="bp-collapse" open={!onePhase} onToggle={materialisePhases}>
           <summary className="bp-sub bp-summary">Plan contributions by age</summary>
           <div>
@@ -701,8 +699,6 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
           <Learn label="How periods work"><b>From and To are inclusive</b>, and periods <b>stack</b> where they overlap. A one-off lump sum is a single-year period; a £0 period stops contributions.</Learn>
           </div>
         </details>
-        </div>
-      </details>
 
       <AssumptionLine onAdjust={openAdvanced}>
         Using Future Funded’s standard assumptions — {(bp.growth*100).toFixed(1)}% return,
@@ -1232,7 +1228,8 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
       {base.coasting && <div className="bp-note" style={{marginTop:12}}>
         <b>You’ve reached Pension Coast.</b> Your pension is projected to meet your retirement objective without further contributions. Additional pension contributions may raise retirement income, but likely add less <i>flexibility</i> than investing into accessible assets (your ISA/GIA Bridge Fund), which can fund the years before pension access. Not advice — just noting the optimisation problem has changed.</div>}
 
-      {/* 3) YOUR NUMBERS — what YOU told us, folded to one line you can open */}
+      {/* 3) YOUR NUMBERS — the summary line, with the boxes open beneath it
+             (see the same block in BridgePlanner for why they aren't hidden) */}
       <div className="bp-sub">Your numbers</div>
       <div className="yn-line">
         <span className="yn-i">Age <b>{isSet(cp.currentAge) ? ageStr(cp.currentAge) : '—'}</b></span>
@@ -1244,23 +1241,20 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
           : cp.phases.length+' periods'}</b></span>
         <span className="yn-i">Drawing at <b>{num(cp.retirementAge, '—')}</b></span>
       </div>
-      <details className="bp-collapse">
-        <summary className="bp-sub bp-summary">Edit your numbers</summary>
-        <div>
-        <div className="bp-assump" style={{marginTop:4}}>
-          <div className="bp-fld"><label>Current age</label><BpNum nullable value={cp.currentAge} step="0.1" onChange={v=>setAge(v)} />
-            <div className="bp-hint">Used by both planners.</div></div>
-          <div className="bp-fld"><label>Pension balance today</label><BpNum money nullable value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
-          {cp.goalMode==='pot'
-            ? <div className="bp-fld"><label>Target pension pot</label><BpNum money nullable value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
-            : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money nullable value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">State Pension included</div></div>}
-          {onePhase && <div className="bp-fld"><label>What you pay in each year</label>
-            <BpNum money nullable value={flatAnnual} step={1000} onChange={setFlatAnnual} />
-            <div className="bp-hint">Employee plus employer.</div></div>}
-          <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
-        </div>
+      <div className="bp-assump yn-fields">
+        <div className="bp-fld"><label>Current age</label><BpNum nullable value={cp.currentAge} step="0.1" onChange={v=>setAge(v)} />
+          <div className="bp-hint">Used by both planners.</div></div>
+        <div className="bp-fld"><label>Pension balance today</label><BpNum money nullable value={cp.currentPension} step={1000} onChange={v=>setCp({currentPension:v})} /></div>
+        {cp.goalMode==='pot'
+          ? <div className="bp-fld"><label>Target pension pot</label><BpNum money nullable value={cp.targetPot} step={50000} onChange={v=>setCp({targetPot:v})} /></div>
+          : <div className="bp-fld"><label>Retirement income you want each year</label><BpNum money nullable value={cp.targetIncome} step={1000} onChange={v=>setCp({targetIncome:v})} /><div className="bp-hint">State Pension included</div></div>}
+        {onePhase && <div className="bp-fld"><label>What you pay in each year</label>
+          <BpNum money nullable value={flatAnnual} step={1000} onChange={setFlatAnnual} />
+          <div className="bp-hint">Employee plus employer.</div></div>}
+        <div className="bp-fld"><label>Age you’ll draw your pension</label><BpNum value={cp.retirementAge} min={57} onChange={v=>setCp({retirementAge:Math.max(57, Math.round(v))})} /></div>
+      </div>
 
-        {/* CONTRIBUTIONS BY AGE — the full phase editor, one level down */}
+      {/* CONTRIBUTIONS BY AGE — the full phase editor, one level down */}
         <details className="bp-collapse" open={!onePhase} onToggle={materialisePhases}>
           <summary className="bp-sub bp-summary">Plan contributions by age</summary>
           <div>
@@ -1284,8 +1278,6 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
           <Learn label="How periods work"><b>From and To are inclusive</b> and overlapping periods <b>stack</b> (amounts add). Enter employee plus employer. Shown as entered, not inflation-adjusted.</Learn>
           </div>
         </details>
-        </div>
-      </details>
 
       <AssumptionLine onAdjust={openAdvanced}>
         Using Future Funded’s standard assumptions — {(cp.growth*100).toFixed(1)}% return,
