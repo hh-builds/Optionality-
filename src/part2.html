@@ -396,10 +396,20 @@ function SuField({ label, hint, children }) {
    might act on. It is not a liability shield.
 
    The wording is Harry's, near-verbatim. Keep it that way. */
-function Disclaimer({ onAck, label }) {
-  return (
+function Disclaimer({ onAck }) {
+  const btn = useRef(null);
+  useEffect(() => {
+    // Front and centre means it also takes the focus and stops the page moving
+    // underneath it — otherwise it is just a box somebody scrolls past.
+    const el = document.documentElement, prev = el.style.overflow;
+    el.style.overflow = 'hidden';
+    if (btn.current) { try { btn.current.focus({ preventScroll:true }); } catch(e){ btn.current.focus(); } }
+    return () => { el.style.overflow = prev; };
+  }, []);
+  return inBody(
+    <div className="dscl-veil" role="dialog" aria-modal="true" aria-labelledby="dscl-h">
     <div className="dscl">
-      <h3 className="dscl-h">Before we crunch the numbers</h3>
+      <h3 className="dscl-h" id="dscl-h">Before we crunch the numbers</h3>
       <p><b>Future Funded is a planning tool, not financial advice.</b> It uses assumptions about
         investment returns and inflation to show the options that building pension and accessible
         investments could give you over time.</p>
@@ -414,8 +424,9 @@ function Disclaimer({ onAck, label }) {
         than as a prediction or recommendation. If you’re unsure what’s right for you, consider
         speaking to a regulated financial adviser.</p>
       <div className="su-cta">
-        <button className="su-go" onClick={onAck}>{label || 'I understand — show my plan'} →</button>
+        <button className="su-go" ref={btn} onClick={onAck}>I understand — start planning →</button>
       </div>
+    </div>
     </div>
   );
 }
@@ -480,7 +491,7 @@ function BpNum({ value, onChange, step, min, money, pct, suffix, nullable, place
 }
 
 function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms,
-                        acked, onAck, onRevealed, nudge }) {
+                        onRevealed, nudge }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
   /* ---- is this plan set up yet? ----
@@ -499,10 +510,9 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms,
   useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
   // The disclaimer stands between the last box and the first answer, once ever.
   // `pending` is the gap: they have pressed the button but haven't read it yet.
-  const [pending, setPending] = useState(false);
-  const go = () => { if (acked) { setRevealed(true); onRevealed && onRevealed(); } else setPending(true); };
-  const ackAndGo = () => { onAck && onAck(); setPending(false); setRevealed(true); onRevealed && onRevealed(); };
-  useEffect(() => { if (acked && pending) ackAndGo(); }, [acked]);
+  // The disclaimer is a gate on the whole app now, met before anything else, so
+  // the reveal here is simply the reveal.
+  const go = () => { setRevealed(true); onRevealed && onRevealed(); };
   const showSetup = !(ready && revealed);
   // sequence-risk layers (memoised — the Monte Carlo is ~50ms, don't rerun on theme/units toggles)
   const stress = useMemo(() => Engine.bridgeStressTest(bp, bp.minResidual||0), [bp]);
@@ -617,8 +627,7 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms,
              answer's precondition, and it goes away for good once the four
              questions are answered. An empty chart ringed with warnings is
              the thing this replaces. */}
-      {pending && !acked ? <Disclaimer onAck={ackAndGo} /> :
-       showSetup ? (
+      {showSetup ? (
       <div className="setup">
         <div className="su-lead">Four numbers and we can tell you when work becomes optional.</div>
         <div className="su-sub">This is about the money you can reach <i>before</i> your pension unlocks
@@ -1121,7 +1130,7 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms,
    styling. Real-terms model; nominal view only re-inflates.
    ============================================================= */
 function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms,
-                       acked, onAck, onRevealed, nudge }) {
+                       onRevealed, nudge }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
   // first use — see the notes on BridgePlanner; this half works identically
@@ -1131,10 +1140,9 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms,
   // Lose a required figure and the reveal is withdrawn with it, so filling the
   // box back in does NOT snap to the answer on the first digit you type.
   useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
-  const [pending, setPending] = useState(false);
-  const go = () => { if (acked) { setRevealed(true); onRevealed && onRevealed(); } else setPending(true); };
-  const ackAndGo = () => { onAck && onAck(); setPending(false); setRevealed(true); onRevealed && onRevealed(); };
-  useEffect(() => { if (acked && pending) ackAndGo(); }, [acked]);
+  // The disclaimer is a gate on the whole app now, met before anything else, so
+  // the reveal here is simply the reveal.
+  const go = () => { setRevealed(true); onRevealed && onRevealed(); };
   const showSetup = !(ready && revealed);
   // sequence-risk (pension drawdown) — memoised; the Monte Carlo is ~50ms
   const stress = useMemo(() => Engine.coastStressTest(cp, cp.minResidual||0), [cp]);
@@ -1233,8 +1241,7 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms,
       </div>
 
       {/* 0) FIRST USE — the setup card (see BridgePlanner for the reasoning) */}
-      {pending && !acked ? <Disclaimer onAck={ackAndGo} /> :
-       showSetup ? (
+      {showSetup ? (
       <div className="setup">
         <div className="su-lead">Four numbers and we can tell you when your pension can look after itself.</div>
         <div className="su-sub">“Coast” is the point where the pot you already have grows into your retirement
@@ -2997,6 +3004,17 @@ function App() {
 
   return (
     <div className="wrap">
+      {/* THE FIRST THING ANYBODY SEES.
+          It was a step inside the setup flow — after the numbers, before the
+          result. Harry wanted it front and centre instead, so it is now a gate
+          on the whole app: nobody reaches a projection, or even the input
+          boxes, without having been told what this does and does not model.
+          One button, no checkbox, no X. On a short phone the card scrolls and
+          the button is sticky, so it stays reachable WITHOUT scrolling to the
+          end — that is deliberate. Forcing a scroll-to-bottom before enabling
+          the button is the legal-wall pattern Harry ruled out, and it buys
+          compliance theatre rather than comprehension. */}
+      {!ack.disclaimer && <Disclaimer onAck={ackDisclaimer} />}
       {/* top bar */}
       <div className="topbar">
         <div className="brand"><span className="ff-mark">FF</span><h1>Future Funded</h1></div>
@@ -3132,11 +3150,11 @@ function App() {
 
       <div id="planner-pension"></div>
       <CoastPlanner cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
-        acked={!!ack.disclaimer} onAck={ackDisclaimer} onRevealed={()=>revealedIn('coast')}
+        onRevealed={()=>revealedIn('coast')}
         nudge={nudgeAt === 'coast' ? nudgeNode : null} />
       <div id="planner-bridge"></div>
       <BridgePlanner bp={bridgeInputs} setBp={setBp} setAge={setAge} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
-        acked={!!ack.disclaimer} onAck={ackDisclaimer} onRevealed={()=>revealedIn('bridge')}
+        onRevealed={()=>revealedIn('bridge')}
         nudge={nudgeAt === 'bridge' ? nudgeNode : null} />
 
       {/* ===== OUTPUTS =====
