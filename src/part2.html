@@ -2961,7 +2961,16 @@ function App() {
   };
   // Reset clears YOUR figures and puts the house assumptions back — it does not
   // reinstate a worked example, because there no longer is one.
-  const reset = () => { if (confirm('Clear your figures and start again?')) { setInputs(JSON.parse(JSON.stringify(Engine.DEFAULTS))); setBridgeInputs(Engine.bridgeBlank()); setCoastInputs(Engine.coastBlank()); } };
+  // Reset means start over, so it also forgets that the disclaimer was shown:
+  // the next person to use this browser is a first-time user and should meet it
+  // again. (It is also the only way to see it a second time, which matters when
+  // somebody is trying to check the thing works.)
+  const reset = () => { if (confirm('Clear your figures and start again?')) {
+    setInputs(JSON.parse(JSON.stringify(Engine.DEFAULTS)));
+    setBridgeInputs(Engine.bridgeBlank()); setCoastInputs(Engine.coastBlank());
+    try { localStorage.removeItem(ACK_KEY); } catch(e){}
+    setAck({}); setNudgeAt(null);
+  } };
 
   /* cash events */
   const updEvent = (i, patch) => {
