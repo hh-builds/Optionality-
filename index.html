@@ -154,7 +154,20 @@
   var SUPABASE_KEY = 'sb_publishable_5gOqH6o9-cmDFWRTyLWtNA_414o6Wco';
   var PREFIX = 'optionality.';
 
+  // Which localStorage keys belong to A PLAN, as opposed to to the person.
+  // Theme, today's-money-vs-nominal and having read the disclaimer are facts
+  // about the user and must NOT change when they flick between plans — they
+  // still sync, they just travel in the projections row rather than in a plan.
+  var PLAN_KEYS = ['optionality.inputs','optionality.bridge',
+                   'optionality.coast','optionality.mortgage'];
+  var MAX_PLANS = 5;
+
   var Cloud = { user:null, status:'idle', ready:false, available:false,
+                // multiple saved plans (migration 012). `plansAvailable` stays
+                // false until the table has actually answered, so a client
+                // deployed ahead of the migration simply stays single-plan.
+                plansAvailable:false, plans:[], activePlanId:null, maxPlans:MAX_PLANS,
+                planKeys:PLAN_KEYS,
                 getUser:function(){ return this.user; } };
   window.OptCloud = Cloud;
 
@@ -199,17 +212,54 @@
     for (var k in cur){ if (!(k in data)) rawRemove(k); }
     for (var j in data){ rawSet(j, data[j]); }
   }
+  // Just the figures, for a row in `plans`.
+  function planSnapshot(){
+    var o = {}, v;
+    for (var i=0;i<PLAN_KEYS.length;i++){
+      v = localStorage.getItem(PLAN_KEYS[i]);
+      if (v != null) o[PLAN_KEYS[i]] = v;
+    }
+    return o;
+  }
+  // Swap the open plan's figures for another's. Writes with the UNPATCHED
+  // setter — the caller decides when to push, so switching doesn't fire four
+  // debounced uploads on the way past. Preferences are untouched by design.
+  function applyPlanSnapshot(data){
+    data = data || {};
+    for (var i=0;i<PLAN_KEYS.length;i++){
+      var k = PLAN_KEYS[i];
+      if (Object.prototype.hasOwnProperty.call(data, k)) rawSet(k, String(data[k]));
+      else rawRemove(k);
+    }
+  }
 
   // ---- save (debounced) ----
   var saveTimer = null;
+  // Two writes, one snapshot, so they cannot disagree:
+  //   * projections — the whole blob, exactly as it always was. Still what the
+  //     login sync pulls and what every admin function reports on, which is why
+  //     none of them had to change for this feature.
+  //   * plans — the same figures, in the row for whichever plan is open.
+  // If the plans table isn't there (migration 012 not run), only the first
+  // happens and the app is single-plan, silently.
   function saveNow(){
     if (!Cloud.user) return Promise.resolve();
     setStatus('saving');
-    return supa.from('projections').upsert({
-      user_id: Cloud.user.id, data: snapshot(), updated_at: new Date().toISOString()
-    }).then(function(res){
-      setStatus(res.error ? 'error' : 'saved');
-      if (res.error) console.warn('[OptCloud] save failed', res.error);
+    var snap = snapshot(), jobs = [];
+    jobs.push(supa.from('projections').upsert({
+      user_id: Cloud.user.id, data: snap, updated_at: new Date().toISOString()
+    }));
+    if (Cloud.plansAvailable && Cloud.activePlanId){
+      var only = {};
+      for (var i=0;i<PLAN_KEYS.length;i++)
+        if (Object.prototype.hasOwnProperty.call(snap, PLAN_KEYS[i]))
+          only[PLAN_KEYS[i]] = snap[PLAN_KEYS[i]];
+      jobs.push(supa.from('plans').update({ data: only }).eq('id', Cloud.activePlanId));
+    }
+    return Promise.all(jobs).then(function(res){
+      var bad = res.filter(function(r){ return r && r.error; });
+      setStatus(bad.length ? 'error' : 'saved');
+      if (bad.length) console.warn('[OptCloud] save failed', bad[0].error);
     });
   }
   function scheduleSave(){
@@ -244,17 +294,160 @@
           // the cloud converges, instead of looping.
           var GUARD = 'optionality._syncPulled';
           var pulled = null; try { pulled = sessionStorage.getItem(GUARD); } catch(e){}
-          if (pulled){ try { sessionStorage.removeItem(GUARD); } catch(e){} saveNow(); return; }
+          if (pulled){ try { sessionStorage.removeItem(GUARD); } catch(e){} ensurePlans().then(saveNow); return; }
           try { sessionStorage.setItem(GUARD, '1'); } catch(e){}
           applySnapshot(row.data); location.reload(); return;
         }
         try { sessionStorage.removeItem('optionality._syncPulled'); } catch(e){}
         setStatus('saved');
+        ensurePlans();
       } else {
-        saveNow();   // brand-new account: seed it with whatever's in the browser now
+        // brand-new account: seed it with whatever's in the browser now, and
+        // give it the one plan that everything else assumes exists
+        ensurePlans().then(saveNow);
       }
     });
   }
+
+  /* ---- multiple saved plans (migration 012) --------------------------------
+     A plan is a complete version of somebody's forecast, kept under a name they
+     chose. The name is a LABEL and nothing else: nothing here or in the engine
+     behaves differently because a plan is called "Pay rise".
+
+     `plans` is the library; `projections` still holds whichever plan is open.
+     That is what keeps the admin, the read-only preview and the login sync
+     working with no change at all — and it means this whole feature can be
+     deployed before or after the migration without either one breaking.
+
+     Two events go out:
+       optcloud:plans      the list or the open plan changed — redraw the picker
+       optcloud:planapply  the localStorage figures have been REPLACED; whoever
+                           is holding React state needs to re-read them
+     ------------------------------------------------------------------------ */
+  function markActive(id){
+    Cloud.activePlanId = id;
+    Cloud.plans = Cloud.plans.map(function(p){
+      return { id:p.id, name:p.name, is_active: p.id === id };
+    });
+  }
+  function emitPlans(){ emit('optcloud:plans', Cloud.plans); }
+
+  // Anything other than a normal result means "no plans table here" — a missing
+  // relation, or PostgREST not knowing about it yet. Treated the same way in
+  // every case: stay single-plan and say nothing. A half-working picker would
+  // be far worse than none.
+  function planTableMissing(err){
+    if (!err) return false;
+    var c = String(err.code || ''), m = String(err.message || '');
+    return c === '42P01' || c === 'PGRST205' || c === 'PGRST202'
+        || /does not exist|schema cache|relation .* plans/i.test(m);
+  }
+
+  function loadPlans(){
+    if (!Cloud.user) return Promise.resolve([]);
+    return supa.from('plans').select('id,name,is_active')
+      .order('sort_order', { ascending:true }).order('created_at', { ascending:true })
+      .then(function(res){
+        if (res.error){
+          if (planTableMissing(res.error)) { Cloud.plansAvailable = false; Cloud.plans = []; }
+          else console.warn('[OptCloud] plans load failed', res.error);
+          emitPlans();
+          return [];
+        }
+        Cloud.plansAvailable = true;
+        Cloud.plans = (res.data || []).map(function(p){
+          return { id:p.id, name:p.name, is_active: !!p.is_active };
+        });
+        var open = Cloud.plans.filter(function(p){ return p.is_active; })[0] || Cloud.plans[0] || null;
+        Cloud.activePlanId = open ? open.id : null;
+        if (open) markActive(open.id);
+        emitPlans();
+        return Cloud.plans;
+      });
+  }
+
+  // Called once a session has settled. A signed-in account always ends up with
+  // at least one plan: an account that predates 012 was given "My plan" by the
+  // backfill, and one created since gets it here, seeded from whatever is in
+  // the browser at that moment.
+  function ensurePlans(){
+    if (!Cloud.user) return Promise.resolve();
+    return loadPlans().then(function(list){
+      if (!Cloud.plansAvailable || list.length) return;
+      return supa.rpc('plan_create', { p_name:'My plan', p_data: planSnapshot() })
+        .then(function(res){
+          if (res.error){
+            if (planTableMissing(res.error)) Cloud.plansAvailable = false;
+            else console.warn('[OptCloud] first plan failed', res.error);
+            return;
+          }
+          return loadPlans();
+        });
+    });
+  }
+
+  Cloud.loadPlans = loadPlans;
+
+  // Make a plan and open it. `data` null = duplicate what is on screen now;
+  // {} = start from scratch.
+  Cloud.createPlan = function(name, data){
+    var dup = data == null;
+    var payload = dup ? planSnapshot() : (data || {});
+    return saveNow()                       // don't lose the open plan's last keystroke
+      .then(function(){ return supa.rpc('plan_create', { p_name:String(name||'').trim(), p_data:payload }); })
+      .then(function(res){
+        if (res.error) throw res.error;
+        var row = res.data;
+        var id = row && (row.id || (row[0] && row[0].id));
+        // Starting from scratch means the page has to empty itself. Duplicating
+        // means it already shows the right figures, so nothing is applied and
+        // there is no flicker.
+        if (!dup) { applyPlanSnapshot(payload); emit('optcloud:planapply', id); }
+        markActive(id);
+        return loadPlans().then(function(){ return saveNow(); }).then(function(){ return id; });
+      });
+  };
+
+  Cloud.renamePlan = function(id, name){
+    return supa.from('plans').update({ name:String(name||'').trim() }).eq('id', id)
+      .then(function(res){ if (res.error) throw res.error; return loadPlans(); });
+  };
+
+  Cloud.switchPlan = function(id){
+    if (id === Cloud.activePlanId) return Promise.resolve(id);
+    return saveNow()
+      .then(function(){ return supa.from('plans').select('data').eq('id', id).maybeSingle(); })
+      .then(function(res){
+        if (res.error) throw res.error;
+        applyPlanSnapshot(res.data ? res.data.data : {});
+        emit('optcloud:planapply', id);
+        markActive(id);
+        emitPlans();
+        return supa.rpc('plan_set_active', { p_id: id });
+      })
+      .then(function(res){
+        if (res && res.error) throw res.error;
+        return saveNow().then(function(){ return id; });   // projections follows the open plan
+      });
+  };
+
+  // Returns the id of the plan that is open afterwards — the same one, unless
+  // the deleted plan was the open one.
+  Cloud.deletePlan = function(id){
+    var wasOpen = id === Cloud.activePlanId;
+    return supa.rpc('plan_delete', { p_id: id }).then(function(res){
+      if (res.error) throw res.error;
+      var nxt = res.data;
+      if (!wasOpen) { return loadPlans().then(function(){ return Cloud.activePlanId; }); }
+      return supa.from('plans').select('data').eq('id', nxt).maybeSingle().then(function(r2){
+        if (r2.error) throw r2.error;
+        applyPlanSnapshot(r2.data ? r2.data.data : {});
+        emit('optcloud:planapply', nxt);
+        markActive(nxt);
+        return loadPlans().then(function(){ return saveNow(); }).then(function(){ return nxt; });
+      });
+    });
+  };
 
   // ---- auth methods (resolve to { data, error }) ----
   Cloud.recovery = false;
@@ -263,7 +456,14 @@
   Cloud.signInWithMagicLink = function(email){ return supa.auth.signInWithOtp({ email:email, options:{ emailRedirectTo:redirectUrl(), shouldCreateUser:true } }); };
   Cloud.resetPassword = function(email){ return supa.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl() }); };
   Cloud.updateUser = function(attrs){ return supa.auth.updateUser(attrs); };
-  Cloud.signOut = function(){ return supa.auth.signOut().then(function(r){ setUser(null); syncedFor = null; setStatus('idle'); return r; }); };
+  // Signing out leaves the figures in the browser, as it always has — but the
+  // library goes with the session, so the picker disappears and what stays on
+  // screen is simply "your plan" again.
+  Cloud.signOut = function(){ return supa.auth.signOut().then(function(r){
+    setUser(null); syncedFor = null; setStatus('idle');
+    Cloud.plans = []; Cloud.activePlanId = null; Cloud.plansAvailable = false;
+    emitPlans();
+    return r; }); };
 
   supa.auth.onAuthStateChange(function(event, session){
     var u = session && session.user ? session.user : null;
@@ -560,6 +760,82 @@ button{font-family:inherit}
 .hero{margin:14px 2px 18px;max-width:660px}
 .hero h2{font-size:var(--fs-h);line-height:1.5;letter-spacing:-0.01em;font-weight:500;color:var(--text-secondary);margin:0}
 @media (max-width:560px){ .hero{margin:8px 2px 14px} .hero h2{font-size:var(--fs-body)} }
+
+/* =====================================================================
+   SAVED PLANS — a signed-in user's named versions of the same forecast.
+
+   This sits between the strapline and the three headline cards, and the
+   whole visible feature is one row: tabs on a desktop, one dropdown on a
+   phone. It must not compete with the cards below it, so there are no
+   boxes, no fills and no shadows — the open plan is marked by weight,
+   colour and a 2px rule, which is enough to be unmistakable while still
+   reading as navigation rather than as an answer.
+
+   Anonymous visitors never see any of it.
+   ===================================================================== */
+.plans{display:flex;align-items:center;gap:4px;margin:0 2px 10px;min-height:32px;flex-wrap:nowrap}
+.plan-tabs{display:none}          /* desktop only — see the 721px block below */
+.plan-tab{background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--muted);font:inherit;font-size:var(--fs-label);font-weight:600;
+  padding:5px 2px 4px;margin-right:14px;cursor:pointer;white-space:nowrap;
+  max-width:16ch;overflow:hidden;text-overflow:ellipsis;line-height:1.4}
+.plan-tab:hover{color:var(--text-primary)}
+.plan-tab.on{color:var(--text-primary);border-bottom-color:var(--accent)}
+.plan-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+/* the picker on a phone: "Plan: My plan ▾" and nothing else */
+.plan-pick{display:inline-flex;align-items:center;gap:6px;background:none;border:none;
+  color:var(--text-primary);font:inherit;font-size:var(--fs-label);font-weight:600;
+  padding:6px 4px;cursor:pointer;min-height:32px;max-width:min(60vw,22ch)}
+.plan-pick .pp-lab{color:var(--muted);font-weight:600;flex:0 0 auto}
+.plan-pick .pp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-pick .pp-caret{color:var(--muted);font-size:10px;flex:0 0 auto}
+.plan-add,.plan-more{background:none;border:none;color:var(--muted);font:inherit;
+  font-size:var(--fs-label);font-weight:700;cursor:pointer;padding:5px 8px;border-radius:8px;
+  line-height:1.4;flex:0 0 auto}
+.plan-add:hover,.plan-more:hover{color:var(--accent);background:var(--accent-soft)}
+.plan-add[disabled]{opacity:.4;cursor:default}
+.plan-add[disabled]:hover{color:var(--muted);background:none}
+.plan-more{letter-spacing:1px}
+/* Saving… / Saved. Deliberately the quietest thing in the row: it is
+   reassurance, not information, and there is no Save button to go with it. */
+.plan-state{margin-left:auto;font-size:var(--fs-help);color:var(--muted);
+  white-space:nowrap;flex:0 0 auto;padding-left:8px}
+.plan-state.err{color:var(--critical)}
+/* the two popovers (plan list, and the ••• actions) */
+.plan-pop{position:relative;flex:0 0 auto}
+.plan-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:60;min-width:200px;
+  background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-lift);padding:5px;display:flex;flex-direction:column}
+.plan-menu.right{left:auto;right:0}
+.plan-menu button{background:none;border:none;text-align:left;font:inherit;
+  font-size:var(--fs-body);color:var(--text-primary);padding:9px 10px;border-radius:8px;
+  cursor:pointer;min-height:40px;display:flex;align-items:center;gap:8px;width:100%}
+.plan-menu button:hover{background:var(--surface-2)}
+.plan-menu button.on{color:var(--accent);font-weight:650}
+.plan-menu button.danger{color:var(--critical)}
+.plan-menu .pm-tick{width:12px;flex:0 0 auto;color:var(--accent)}
+.plan-menu .pm-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-sep{height:1px;background:var(--border);margin:5px 2px}
+.plan-backdrop{position:fixed;inset:0;z-index:55}
+.plan-full{font-size:var(--fs-help);color:var(--muted);padding:8px 10px;line-height:1.45;max-width:24ch}
+/* choosing what a new plan starts from */
+.plan-start{display:flex;flex-direction:column;gap:8px;margin:2px 0 14px}
+.plan-start button{display:block;width:100%;text-align:left;background:var(--surface-1);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;
+  font:inherit;color:var(--text-primary);cursor:pointer}
+.plan-start button:hover{border-color:var(--accent)}
+.plan-start button.on{border-color:var(--accent);background:var(--accent-soft)}
+.plan-start .ps-h{font-size:var(--fs-body);font-weight:650;display:block}
+.plan-start .ps-p{font-size:var(--fs-help);color:var(--text-secondary);display:block;margin-top:2px;line-height:1.45}
+@media (min-width:721px){
+  .plans{margin-bottom:14px}
+  .plan-tabs{display:flex;align-items:center;min-width:0;overflow-x:auto;
+    scrollbar-width:none;-ms-overflow-style:none}
+  .plan-tabs::-webkit-scrollbar{display:none}
+  .plan-pop.mobile-only{display:none}
+}
+@media (max-width:720px){ .plan-tabs,.plan-add.desktop-only{display:none} }
+@media print{ .plans{display:none} }
 
 /* =====================================================================
    HEADLINE CARDS — the three answers. Mobile first: stacked, one per row;
@@ -4159,19 +4435,27 @@ function Disclaimer({ onAck }) {
    to register before they have seen anything is a toll gate on a tool that
    works perfectly well without an account.
 
-   ⚠️ THE COPY HAS TO BE TRUE. "Create an account to save your numbers" would
-   imply they are otherwise lost, and they are not: every figure is written to
-   localStorage on each keystroke and survives a reload. So this says what an
-   account actually buys — other devices, and not losing it with the browser
-   storage. Harry offered both wordings and asked for the honest one; this is
-   the honest one. */
+   ⚠️ THE COPY HAS TO BE TRUE, and this is the second version of it. The first
+   was careful not to say "create an account to save your numbers", because
+   that would imply they are otherwise lost and they are not — every figure is
+   written to localStorage on each keystroke and survives a reload. So it
+   offered the two things an account genuinely bought: other devices, and not
+   losing the plan with the browser storage.
+
+   Saved plans add a third, and it is the strongest of them: WITHOUT an account
+   there is exactly one plan, and trying a pay rise means typing over the
+   numbers you had. "Try different versions without losing your original" is
+   therefore literally true, and it is the reason the wording below opens with
+   the exploring rather than with the saving. Harry's copy, kept as close to
+   verbatim as the layout allows. */
 function SaveNudge({ onDismiss }) {
   return (
     <div className="nudge">
       <div className="nudge-txt">
-        <div className="nudge-h">Your plan is saved on this device.</div>
-        <p>Create a free account to reach it from anywhere, and to be sure you don’t lose it if you
-          clear your browser or change computer.</p>
+        <div className="nudge-h">Want to keep exploring?</div>
+        <p>Your plan is saved on this device. A free account keeps it safe across your devices — and
+          lets you save several versions, so you can try a pay rise or a different retirement age
+          without losing your original.</p>
       </div>
       <div className="nudge-act">
         <button className="su-go sm" onClick={() => {
@@ -5788,6 +6072,277 @@ function AuthButton(props){
   );
 }
 
+/* =============================================================
+   SAVED PLANS — "what if?" without losing what you had
+   -------------------------------------------------------------
+   A signed-in user keeps up to five named versions of the same
+   forecast and flicks between them. The name is a LABEL and only
+   a label: nothing anywhere behaves differently because somebody
+   called a plan "Me + wife" rather than "Pay rise".
+
+   ⚠️ Deliberately NOT a scenario manager. No dashboard, no
+   folders, no descriptions, no comparison table. The whole
+   visible feature is one row — tabs on a desktop, one dropdown
+   on a phone — because the moment it needs managing it stops
+   being a quick "what if I got a pay rise?".
+
+   ⚠️ "Plans", never "Scenarios", in anything a user reads. The
+   app already has Conservative / Base / Optimistic scenarios and
+   two words for two different things would be a mess. Internally
+   they are plans too, so there is nothing to translate.
+
+   The component talks to OptCloud directly rather than through
+   App: the library belongs to the session, exactly as AuthButton
+   owns the session itself. App only listens for the one event
+   that says "the figures underneath you have been replaced".
+   ============================================================= */
+function PlanBar() {
+  const Cloud = typeof window !== 'undefined' ? window.OptCloud : null;
+  const read = () => ({
+    on: !!(Cloud && Cloud.plansAvailable && Cloud.user),
+    plans: (Cloud && Cloud.plans) || [],
+    activeId: Cloud ? Cloud.activePlanId : null
+  });
+  const [st, setSt] = useState(read);
+  const [status, setStatus] = useState(() => (Cloud && Cloud.status) || 'idle');
+  const [menu, setMenu] = useState(null);          // null | 'list' | 'more'
+  const [dlg, setDlg]   = useState(null);          // null | 'new' | 'rename' | 'delete' | 'full'
+  const [name, setName] = useState('');
+  const [dup, setDup]   = useState(true);          // new plan: duplicate (default) or blank
+  const [busy, setBusy] = useState(false);
+  const [err, setErr]   = useState('');
+  const field = useRef(null);
+
+  useEffect(() => {
+    const onPlans  = () => setSt(read());
+    const onAuth   = () => setSt(read());
+    const onStatus = (e) => setStatus(e && e.detail);
+    window.addEventListener('optcloud:plans', onPlans);
+    window.addEventListener('optcloud:auth', onAuth);
+    window.addEventListener('optcloud:status', onStatus);
+    setSt(read());
+    return () => {
+      window.removeEventListener('optcloud:plans', onPlans);
+      window.removeEventListener('optcloud:auth', onAuth);
+      window.removeEventListener('optcloud:status', onStatus);
+    };
+  }, []);
+
+  // Escape closes whatever is open, innermost first.
+  useEffect(() => {
+    if (!menu && !dlg) return;
+    const esc = (e) => { if (e.key === 'Escape') { if (dlg) closeDlg(); else setMenu(null); } };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [menu, dlg]);
+
+  useEffect(() => {
+    if (dlg !== 'new' && dlg !== 'rename') return;
+    const t = setTimeout(() => { try { field.current && field.current.select(); } catch(e){} }, 30);
+    return () => clearTimeout(t);
+  }, [dlg]);
+
+  if (!st.on || !st.plans.length) return null;
+
+  const plans  = st.plans;
+  const active = plans.filter(p => p.id === st.activeId)[0] || plans[0];
+  const max    = (Cloud && Cloud.maxPlans) || 5;
+  const full   = plans.length >= max;
+
+  const closeDlg = () => { setDlg(null); setErr(''); setBusy(false); };
+  const openNew = (asDuplicate) => {
+    setMenu(null);
+    if (full) { setDlg('full'); return; }
+    setDup(asDuplicate !== false);
+    setName(asDuplicate === false ? '' : trimName(active.name + ' copy'));
+    setErr(''); setDlg('new');
+  };
+  const openRename = () => { setMenu(null); setName(active.name); setErr(''); setDlg('rename'); };
+
+  function trimName(s){ return String(s || '').slice(0, 40); }
+
+  /* Every one of these can fail — offline, a session that expired while the tab
+     sat open, the cap tripping server-side. The message goes in the dialog
+     rather than anywhere near the figures: nothing the user typed is at risk,
+     because the open plan is still exactly where it was. */
+  const run = (p, after) => {
+    setBusy(true); setErr('');
+    Promise.resolve(p).then(() => { setBusy(false); if (after) after(); }, (e) => {
+      setBusy(false);
+      const m = String((e && (e.message || e.hint)) || '');
+      setErr(/plan_limit_reached/.test(m) ? 'You’ve reached ' + max + ' saved plans. Delete one to create another.'
+           : /last_plan/.test(m)          ? 'This is your only plan — rename it instead.'
+           : 'That didn’t save. You may be offline; your figures are untouched.');
+    });
+  };
+
+  const doSwitch = (id) => {
+    setMenu(null);
+    if (id === st.activeId) return;
+    TRK.once('session', 'plan_switched');
+    Promise.resolve(Cloud.switchPlan(id)).catch(() => {});
+  };
+  const doCreate = () => {
+    const n = name.trim();
+    if (!n) return;
+    TRK.once('session', 'plan_created');
+    run(Cloud.createPlan(n, dup ? null : {}), closeDlg);
+  };
+  const doRename = () => {
+    const n = name.trim();
+    if (!n) return;
+    run(Cloud.renamePlan(active.id, n), closeDlg);
+  };
+  const doDelete = () => run(Cloud.deletePlan(active.id), closeDlg);
+
+  const saveState = status === 'saving' ? 'Saving…'
+                  : status === 'saved'  ? 'Saved'
+                  : status === 'error'  ? 'Not saved' : '';
+
+  const listItem = (p) => (
+    <button key={p.id} role="menuitemradio" aria-checked={p.id === active.id}
+      className={p.id === active.id ? 'on' : ''} onClick={() => doSwitch(p.id)}>
+      <span className="pm-tick">{p.id === active.id ? '✓' : ''}</span>
+      <span className="pm-name">{p.name}</span>
+    </button>
+  );
+
+  return (
+    <React.Fragment>
+      <div className="plans">
+        {/* Desktop: tabs. Subtle on purpose — they are navigation, and the
+            three cards below them are the answer. */}
+        <div className="plan-tabs" role="tablist" aria-label="Your plans">
+          {plans.map(p => (
+            <button key={p.id} role="tab" aria-selected={p.id === active.id}
+              className={'plan-tab' + (p.id === active.id ? ' on' : '')}
+              title={p.name} onClick={() => doSwitch(p.id)}>{p.name}</button>
+          ))}
+        </div>
+        <button className="plan-add desktop-only" onClick={() => openNew(true)}
+          title="New plan" aria-label="New plan">+</button>
+
+        {/* Phone: one dropdown instead, so the whole thing costs a single line. */}
+        <div className="plan-pop mobile-only">
+          <button className="plan-pick" aria-haspopup="menu" aria-expanded={menu === 'list'}
+            onClick={() => setMenu(m => m === 'list' ? null : 'list')}>
+            <span className="pp-lab">Plan:</span>
+            <span className="pp-name">{active.name}</span>
+            <span className="pp-caret">▾</span>
+          </button>
+          {menu === 'list' && (
+            <div className="plan-menu" role="menu">
+              {plans.map(listItem)}
+              <div className="plan-sep"></div>
+              <button role="menuitem" onClick={() => openNew(true)}>
+                <span className="pm-tick"></span><span className="pm-name">+ New plan</span></button>
+            </div>
+          )}
+        </div>
+
+        {/* Rename / duplicate / delete, for the plan that is open. */}
+        <div className="plan-pop">
+          <button className="plan-more" aria-haspopup="menu" aria-expanded={menu === 'more'}
+            aria-label="Actions for this plan" title="Rename, duplicate or delete this plan"
+            onClick={() => setMenu(m => m === 'more' ? null : 'more')}>•••</button>
+          {menu === 'more' && (
+            <div className="plan-menu right" role="menu">
+              <button role="menuitem" onClick={openRename}>Rename</button>
+              <button role="menuitem" onClick={() => openNew(true)}>Duplicate</button>
+              {plans.length > 1 && (
+                <React.Fragment>
+                  <div className="plan-sep"></div>
+                  <button role="menuitem" className="danger"
+                    onClick={() => { setMenu(null); setErr(''); setDlg('delete'); }}>Delete</button>
+                </React.Fragment>
+              )}
+            </div>
+          )}
+        </div>
+
+        {saveState && <span className={'plan-state' + (status === 'error' ? ' err' : '')}
+          role="status">{saveState}</span>}
+
+        {menu && <div className="plan-backdrop" onClick={() => setMenu(null)}></div>}
+      </div>
+
+      {dlg && inBody(
+        <div className="auth-overlay" onMouseDown={e => { if (e.target === e.currentTarget) closeDlg(); }}>
+          <div className="auth-modal" role="dialog" aria-modal="true" aria-label="Plans">
+            <button className="auth-x" onClick={closeDlg} aria-label="Close">×</button>
+
+            {dlg === 'full' && (
+              <React.Fragment>
+                <h3 className="auth-title">That’s five plans</h3>
+                <p className="auth-sub">You’ve reached {max} saved plans. Delete one to create another.</p>
+                <button className="btn primary" style={{width:'100%'}} onClick={closeDlg}>OK</button>
+              </React.Fragment>
+            )}
+
+            {dlg === 'new' && (
+              <React.Fragment>
+                <h3 className="auth-title">New plan</h3>
+                <p className="auth-sub">A plan is a complete version of your forecast. Switching between
+                  them changes every figure on the page — and nothing else about your account.</p>
+                {/* Duplicating is the default because it is what people almost
+                    always want: keep these numbers, change one of them, see what
+                    happens. Starting from scratch is for a genuinely different
+                    person's situation. */}
+                <div className="plan-start">
+                  <button className={dup ? 'on' : ''} onClick={() => setDup(true)} aria-pressed={dup}>
+                    <span className="ps-h">Duplicate {active.name}</span>
+                    <span className="ps-p">Keep these numbers and make some changes.</span>
+                  </button>
+                  <button className={!dup ? 'on' : ''} onClick={() => setDup(false)} aria-pressed={!dup}>
+                    <span className="ps-h">Start from scratch</span>
+                    <span className="ps-p">Create a completely different plan.</span>
+                  </button>
+                </div>
+                <label className="acc-label" htmlFor="plan-name">Name your plan</label>
+                <input id="plan-name" ref={field} className="auth-input" type="text" maxLength={40}
+                  placeholder="Pay rise" value={name} autoComplete="off"
+                  onChange={e => setName(trimName(e.target.value))}
+                  onKeyDown={e => { if (e.key === 'Enter') doCreate(); }} />
+                {err && <div className="auth-msg err">{err}</div>}
+                <button className="btn primary auth-go" disabled={busy || !name.trim()}
+                  onClick={doCreate}>{busy ? 'Creating…' : 'Create plan'}</button>
+              </React.Fragment>
+            )}
+
+            {dlg === 'rename' && (
+              <React.Fragment>
+                <h3 className="auth-title">Rename plan</h3>
+                <p className="auth-sub">Call it whatever helps you tell it apart. The name doesn’t change
+                  a single number.</p>
+                <input ref={field} className="auth-input" type="text" maxLength={40}
+                  value={name} autoComplete="off"
+                  onChange={e => setName(trimName(e.target.value))}
+                  onKeyDown={e => { if (e.key === 'Enter') doRename(); }} />
+                {err && <div className="auth-msg err">{err}</div>}
+                <button className="btn primary auth-go" disabled={busy || !name.trim()}
+                  onClick={doRename}>{busy ? 'Saving…' : 'Save name'}</button>
+              </React.Fragment>
+            )}
+
+            {dlg === 'delete' && (
+              <React.Fragment>
+                <h3 className="auth-title">Delete “{active.name}”?</h3>
+                <p className="auth-sub">This version of your forecast goes for good. Your other plans
+                  are untouched.</p>
+                {err && <div className="auth-msg err">{err}</div>}
+                <button className="btn primary auth-go" disabled={busy} onClick={doDelete}
+                  style={{background:'var(--critical)', borderColor:'var(--critical)'}}>
+                  {busy ? 'Deleting…' : 'Delete plan'}</button>
+                <button className="auth-link" onClick={closeDlg}>Keep it</button>
+              </React.Fragment>
+            )}
+          </div>
+        </div>
+      )}
+    </React.Fragment>
+  );
+}
+
 /* ============================================================= */
 /* =============================================================
    MORTGAGE OVERPAYMENT vs INVESTING — side calculator
@@ -6215,23 +6770,33 @@ function MortgageModule({ mp, setMp, plan, C, inheritedGrowth, inflation, onClos
   );
 }
 
+/* ---- reading a plan out of localStorage --------------------------------
+   These four were the inline initialisers of App's four state slices, and
+   every one-time migration a saved plan has ever needed lives in them. They
+   are named functions now for one reason: SWITCHING PLANS RE-RUNS THEM.
+
+   ⚠️ Anything that must happen when a plan is loaded belongs in here, not in
+   a mount effect. A mount effect runs once per page load; a plan can be
+   swapped underneath the page five times without one. */
+function readInputs(){
+  let base = JSON.parse(JSON.stringify(Engine.DEFAULTS));
+  try { const s = localStorage.getItem('optionality.inputs');
+    if (s) base = Object.assign({}, JSON.parse(JSON.stringify(Engine.DEFAULTS)), JSON.parse(s)); } catch(e){}
+  if (!Array.isArray(base.savingsPlan) || !base.savingsPlan.length) {
+    base.savingsPlan = [{ fromYear:0, amount: base.annualSavings != null ? base.annualSavings : 10000,
+      allocPension: base.allocPension != null ? base.allocPension : 0.30 }];
+  }
+  base.spendingInflationLinked = true; // spending always holds its real (today's-money) value
+  return base;
+}
+
 function App() {
   const C = useColors();
   const narrow = useIsNarrow();
   const isAdmin = useIsAdmin();
   const install = useInstall();
   const [installHelp, setInstallHelp] = useState(false);
-  const [inputs, setInputs] = useState(() => {
-    let base = JSON.parse(JSON.stringify(Engine.DEFAULTS));
-    try { const s = localStorage.getItem('optionality.inputs');
-      if (s) base = Object.assign({}, JSON.parse(JSON.stringify(Engine.DEFAULTS)), JSON.parse(s)); } catch(e){}
-    if (!Array.isArray(base.savingsPlan) || !base.savingsPlan.length) {
-      base.savingsPlan = [{ fromYear:0, amount: base.annualSavings != null ? base.annualSavings : 10000,
-        allocPension: base.allocPension != null ? base.allocPension : 0.30 }];
-    }
-    base.spendingInflationLinked = true; // spending always holds its real (today's-money) value
-    return base;
-  });
+  const [inputs, setInputs] = useState(readInputs);
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem('optionality.dark') === '1'; } catch(e){ return false; }
   });
@@ -6274,7 +6839,12 @@ function App() {
   // visitor is asked for their numbers instead of being shown someone else's.
   // A saved plan still merges on top and is completely unaffected: every blob
   // ever written carries these fields, so nothing that exists gets cleared.
-  const [bridgeInputs, setBridgeInputs] = useState(() => {
+  const [bridgeInputs, setBridgeInputs] = useState(readBridge);
+  /* A hoisted function declaration, not an inline initialiser, so that
+     switching plans can re-run it — see readInputs above. Hoisting is what
+     lets it sit below its own useState without moving a line of the migration
+     chain, which is the part of this file least worth disturbing. */
+  function readBridge(){
     let b = Engine.bridgeBlank();
     try { const s = localStorage.getItem('optionality.bridge');
       if (s) b = Object.assign({}, Engine.bridgeBlank(), JSON.parse(s)); } catch(e){}
@@ -6323,7 +6893,7 @@ function App() {
     // one-time migration (v7): sequence-risk Phase 2 target confidence
     if (b._bv < 7) { if (b.confidence == null) b.confidence = 0.90; b._bv = 7; }
     return b;
-  });
+  }
   useEffect(() => { try { localStorage.setItem('optionality.bridge', JSON.stringify(bridgeInputs)); } catch(e){} }, [bridgeInputs]);
   // ---- product analytics -------------------------------------------------
   // Every planner edit funnels through setBp/setCp, so one hook here covers
@@ -6358,7 +6928,8 @@ function App() {
 
   // Pension Coast Planner — independent inputs, blank on the personal figures
   // for the same reason as the bridge above.
-  const [coastInputs, setCoastInputs] = useState(() => {
+  const [coastInputs, setCoastInputs] = useState(readCoast);
+  function readCoast(){
     let c = Engine.coastBlank();
     try { const s = localStorage.getItem('optionality.coast');
       if (s) c = Object.assign({}, Engine.coastBlank(), JSON.parse(s)); } catch(e){}
@@ -6398,7 +6969,7 @@ function App() {
     // one-time migration (v6): sequence-risk fields for the pension drawdown
     if (c._cv < 6) { if (c.lifeExpectancy == null) c.lifeExpectancy = 90; if (c.minResidual == null) c.minResidual = 0; if (c.confidence == null) c.confidence = 0.90; c._cv = 6; }
     return c;
-  });
+  }
   useEffect(() => { try { localStorage.setItem('optionality.coast', JSON.stringify(coastInputs)); } catch(e){} }, [coastInputs]);
   const setCp = (patch) => { notePatch('coast', patch); setCoastInputs(prev => Object.assign({}, prev, patch)); };
   const coast = useMemo(() => Engine.coastPlan(coastInputs), [coastInputs]);
@@ -6488,7 +7059,8 @@ function App() {
   useEffect(() => { if (signedIn) setNudgeAt(null); }, [signedIn]);
 
   // ---- Mortgage or invest? — the side calculator under the planners ----
-  const [mortgageInputs, setMortgageInputs] = useState(() => {
+  const [mortgageInputs, setMortgageInputs] = useState(readMortgage);
+  function readMortgage(){
     let x = JSON.parse(JSON.stringify(Engine.MORTGAGE_DEFAULTS));
     try { const s = localStorage.getItem('optionality.mortgage');
       if (s) x = Object.assign({}, JSON.parse(JSON.stringify(Engine.MORTGAGE_DEFAULTS)), JSON.parse(s)); } catch(e){}
@@ -6496,8 +7068,42 @@ function App() {
     // still carry the old 10-year default across, leaving deliberate choices alone
     if (!x._mv || x._mv < 2) { if (x.horizonMode === '10') x.horizonMode = 'term'; x._mv = 2; }
     return x;
-  });
+  }
   useEffect(() => { try { localStorage.setItem('optionality.mortgage', JSON.stringify(mortgageInputs)); } catch(e){} }, [mortgageInputs]);
+
+  /* ---- switching between saved plans ----
+     By the time this fires, OptCloud has already swapped the four plan keys in
+     localStorage for the ones belonging to the plan just chosen. All that is
+     left is to re-read them.
+
+     Deliberately NOT location.reload(), which is how the cross-device sync
+     pulls a plan in. The whole point of this feature is flicking between two
+     futures and watching the answer move — "Work optional 43" then "Work
+     optional 40" — and a reload turns that into a page transition with a
+     white flash in the middle.
+
+     `planKey` remounts both planners. They hold their own local state (which
+     sections are open, whether the answer has been revealed), and a plan that
+     is blank has to open on its setup card rather than inheriting the last
+     plan's chart. One line, and it cannot get that wrong. */
+  const [planKey, setPlanKey] = useState(0);
+  useEffect(() => {
+    const apply = () => {
+      setInputs(readInputs());
+      setBridgeInputs(readBridge());
+      setCoastInputs(readCoast());
+      setMortgageInputs(readMortgage());
+      setNudgeAt(null);
+      setPlanKey(k => k + 1);
+      // A switch is not an edit. Without this the funnel would record
+      // "returned and updated a plan" every time somebody looked at another one.
+      dirty.current = false;
+      mgDirty.current = false;
+    };
+    window.addEventListener('optcloud:planapply', apply);
+    return () => window.removeEventListener('optcloud:planapply', apply);
+  }, []);
+
   const mgDirty = useRef(false);
   const setMp = (patch) => {
     TRK.once('session','edit_mortgage'); mgDirty.current = true;
@@ -6778,6 +7384,11 @@ function App() {
       <div className="layout">
       <main className="main">
 
+      {/* Saved plans, if there are any: one row, above the answer it belongs
+          to and below the strapline. Renders nothing at all for a signed-out
+          visitor, which is every first-time visitor. */}
+      <PlanBar />
+
       {/* ===== THE THREE HEADLINE CARDS — this is the hero, AND the onboarding
            =====
            There is no separate wizard, no modal, no "step 1 of 4". These cards
@@ -6871,12 +7482,15 @@ function App() {
         );
       })()}
 
+      {/* ⚠️ `key={planKey}` is what makes switching plans clean: both planners
+          are remounted, so their local state starts again with the new
+          figures instead of the previous plan's. See the planapply effect. */}
       <div id="planner-pension"></div>
-      <CoastPlanner cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
+      <CoastPlanner key={'c'+planKey} cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
         onRevealed={()=>revealedIn('coast')}
         nudge={nudgeAt === 'coast' ? nudgeNode : null} />
       <div id="planner-bridge"></div>
-      <BridgePlanner bp={bridgeInputs} setBp={setBp} setAge={setAge} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
+      <BridgePlanner key={'b'+planKey} bp={bridgeInputs} setBp={setBp} setAge={setAge} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
         onRevealed={()=>revealedIn('bridge')}
         nudge={nudgeAt === 'bridge' ? nudgeNode : null} />
 
