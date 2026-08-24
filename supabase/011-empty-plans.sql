@@ -1,6 +1,10 @@
 -- =====================================================================
 --  Future Funded — migration 011: plans that are genuinely empty
 --
+--  ✅ APPLIED to production 2026-08-24, confirmed by Harry. Kept for the
+--     record and for rebuilding from scratch; it does not need running
+--     again. Mind the re-run warnings elsewhere in this file.
+--
 --  Run in Supabase → SQL Editor, after 010. Safe to re-run.
 --
 --  WHY THIS EXISTS

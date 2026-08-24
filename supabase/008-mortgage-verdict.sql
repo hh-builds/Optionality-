@@ -1,5 +1,10 @@
 -- =====================================================================
 --  Future Funded — migration 008: what "Mortgage or invest?" told people
+--
+--  ✅ APPLIED to production 2026-08-24, confirmed by Harry. Kept for the
+--     record and for rebuilding from scratch; it does not need running
+--     again. Mind the re-run warnings elsewhere in this file.
+--
 --  Run in Supabase → SQL Editor, after 007. Safe to re-run.
 --
 --  The calculator reaches a verdict — overpay or invest — and until now that

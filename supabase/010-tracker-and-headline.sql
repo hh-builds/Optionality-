@@ -1,5 +1,9 @@
 -- =====================================================================
 --  Future Funded — migration 010
+--
+--  ✅ APPLIED to production 2026-08-24, confirmed by Harry. Kept for the
+--     record and for rebuilding from scratch; it does not need running
+--     again. Mind the re-run warnings elsewhere in this file.
 --    (a) a done/not-done tracker on feedback, with a filter
 --    (b) headline figures aggregated across people who actually typed
 --        their own numbers in

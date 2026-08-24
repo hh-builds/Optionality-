@@ -1,5 +1,9 @@
 -- =====================================================================
 --  Future Funded — migration 009: user feedback
+--
+--  ✅ APPLIED to production 2026-08-24, confirmed by Harry. Kept for the
+--     record and for rebuilding from scratch; it does not need running
+--     again. Mind the re-run warnings elsewhere in this file.
 --  Run in Supabase → SQL Editor, after 008. Safe to re-run.
 --
 --  A suggestion-box button in the top bar. Anyone can send a note — signed in
