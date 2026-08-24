@@ -18,6 +18,33 @@ const TRK = {
   open:(n) => (e) => { try { if (e.target.open) TRK.once('session', n); } catch(err){} }
 };
 
+/* ---------- things the person has already been told ----------
+   One-off acknowledgements: the pre-results disclaimer, and the "keep your
+   plan" nudge once they have dismissed it.
+
+   ⚠️ NOT stored through OptTrack's mark()/marked(), which is where the other
+   durable per-device flags live. OptTrack bails out entirely when Global
+   Privacy Control is set, and again inside an admin plan preview — so a mark
+   would never stick for those people and they would be shown the disclaimer on
+   EVERY load. An acknowledgement is a preference, not analytics, and belongs
+   with the plan.
+
+   Under the `optionality.` prefix on purpose: it rides the cloud sync with
+   everything else (acknowledge on your laptop, don't get asked again on your
+   phone) and it is shadowed by the read-only preview shim, so opening
+   somebody's plan from the admin page cannot write to it. */
+const ACK_KEY = 'optionality.ack';
+function readAck(){
+  try { return JSON.parse(localStorage.getItem(ACK_KEY) || '{}') || {}; } catch(e){ return {}; }
+}
+function writeAck(patch){
+  try {
+    const next = Object.assign(readAck(), patch);
+    localStorage.setItem(ACK_KEY, JSON.stringify(next));
+    return next;
+  } catch(e){ return readAck(); }
+}
+
 /* ---------- formatting helpers ---------- */
 const gbp = (x, dp) => {
   if (x == null || isNaN(x)) return '—';
@@ -356,6 +383,72 @@ function SuField({ label, hint, children }) {
   );
 }
 
+/* ---------- the one thing we say before the first answer ----------
+   It stands between the last box and the first result, once ever, and it is
+   deliberately a panel in the flow rather than a modal: a plain page that
+   scrolls, that you can read at your own pace, and that you leave by pressing
+   the button you were going to press anyway.
+
+   No checkbox, no "I accept". A tickbox implies a contract and invites the
+   reflex of clicking past it; the button already says "I understand". The
+   point is that somebody has actually READ what the tool does and does not
+   model — above all that tax is not in it — before they see a number they
+   might act on. It is not a liability shield.
+
+   The wording is Harry's, near-verbatim. Keep it that way. */
+function Disclaimer({ onAck, label }) {
+  return (
+    <div className="dscl">
+      <h3 className="dscl-h">Before we crunch the numbers</h3>
+      <p><b>Future Funded is a planning tool, not financial advice.</b> It uses assumptions about
+        investment returns and inflation to show the options that building pension and accessible
+        investments could give you over time.</p>
+      <p>It’s deliberately simplified and doesn’t model every downside or financial consequence.
+        <b> Tax isn’t modelled</b> — including personal tax, pension tax relief, tax on withdrawals,
+        or the different tax treatment of pensions, ISAs and GIAs. For simplicity, the numbers you
+        enter are treated at face value.</p>
+      <p><b>Investment returns aren’t guaranteed.</b> Investments can fall as well as rise, past
+        performance doesn’t guarantee future returns, and actual outcomes could be materially
+        different from the projections shown.</p>
+      <p>Tax and pension rules can also change. Use Future Funded to explore possibilities rather
+        than as a prediction or recommendation. If you’re unsure what’s right for you, consider
+        speaking to a regulated financial adviser.</p>
+      <div className="su-cta">
+        <button className="su-go" onClick={onAck}>{label || 'I understand — show my plan'} →</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- "keep your plan" ----------
+   Shown ONCE, after the first real answer — never before it. Asking somebody
+   to register before they have seen anything is a toll gate on a tool that
+   works perfectly well without an account.
+
+   ⚠️ THE COPY HAS TO BE TRUE. "Create an account to save your numbers" would
+   imply they are otherwise lost, and they are not: every figure is written to
+   localStorage on each keystroke and survives a reload. So this says what an
+   account actually buys — other devices, and not losing it with the browser
+   storage. Harry offered both wordings and asked for the honest one; this is
+   the honest one. */
+function SaveNudge({ onDismiss }) {
+  return (
+    <div className="nudge">
+      <div className="nudge-txt">
+        <div className="nudge-h">Your plan is saved on this device.</div>
+        <p>Create a free account to reach it from anywhere, and to be sure you don’t lose it if you
+          clear your browser or change computer.</p>
+      </div>
+      <div className="nudge-act">
+        <button className="su-go sm" onClick={() => {
+          try { window.dispatchEvent(new CustomEvent('ff:open-auth')); } catch(e){}
+        }}>Save my plan →</button>
+        <button className="nudge-no" onClick={onDismiss}>Continue without saving</button>
+      </div>
+    </div>
+  );
+}
+
 /* The reveal. There is nothing to submit — the model recalculates on every
    keystroke — but the button gives the moment a shape, and it is the one
    place the app says "right, here's your answer". Disabled until the last
@@ -386,7 +479,8 @@ function BpNum({ value, onChange, step, min, money, pct, suffix, nullable, place
   );
 }
 
-function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) {
+function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms,
+                        acked, onAck, onRevealed, nudge }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
   /* ---- is this plan set up yet? ----
@@ -403,6 +497,12 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
   // with it — otherwise typing the first digit of its replacement would make
   // the plan momentarily "complete" again and snap the form away mid-keystroke.
   useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
+  // The disclaimer stands between the last box and the first answer, once ever.
+  // `pending` is the gap: they have pressed the button but haven't read it yet.
+  const [pending, setPending] = useState(false);
+  const go = () => { if (acked) { setRevealed(true); onRevealed && onRevealed(); } else setPending(true); };
+  const ackAndGo = () => { onAck && onAck(); setPending(false); setRevealed(true); onRevealed && onRevealed(); };
+  useEffect(() => { if (acked && pending) ackAndGo(); }, [acked]);
   const showSetup = !(ready && revealed);
   // sequence-risk layers (memoised — the Monte Carlo is ~50ms, don't rerun on theme/units toggles)
   const stress = useMemo(() => Engine.bridgeStressTest(bp, bp.minResidual||0), [bp]);
@@ -517,7 +617,8 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
              answer's precondition, and it goes away for good once the four
              questions are answered. An empty chart ringed with warnings is
              the thing this replaces. */}
-      {showSetup ? (
+      {pending && !acked ? <Disclaimer onAck={ackAndGo} /> :
+       showSetup ? (
       <div className="setup">
         <div className="su-lead">Four numbers and we can tell you when work becomes optional.</div>
         <div className="su-sub">This is about the money you can reach <i>before</i> your pension unlocks
@@ -544,8 +645,7 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
               onChange={setFlatAnnual} />
           </SuField>
         </div>
-        <SuCta left={missing.length} label="See when work becomes optional"
-          onGo={()=>setRevealed(true)} />
+        <SuCta left={missing.length} label="See when work becomes optional" onGo={go} />
         <div className="su-fine">Returns, inflation and pension access age are already set to Future Funded’s
           standard assumptions — you don’t need to touch them, but every one of them is editable under
           <b> Advanced assumptions</b> once you’re in.</div>
@@ -602,6 +702,10 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
           return <div className="bp-help-line" style={runsDry?{color:'var(--critical)'}:null}>{txt}</div>;
         })()}
       </div>
+      {/* The ask lands HERE, right under the answer they just unlocked — not at
+          the top of the page they would have to scroll back to, and not before
+          the result. Value first, then the offer. */}
+      {nudge}
       <details className="bp-why"><summary>Why can it run out later?</summary>
         <ol>
           <li>The bridge fund only has to cover the years <b>between stopping work and pension access ({bp.pensionAccessAge})</b> — from {bp.pensionAccessAge} your pension can take over the income.</li>
@@ -1016,7 +1120,8 @@ function BridgePlanner({ bp, setBp, setAge, plan, C, realTerms, setRealTerms }) 
    zero further contributions)? Reuses the .bridge-planner / bp-*
    styling. Real-terms model; nominal view only re-inflates.
    ============================================================= */
-function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
+function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms,
+                       acked, onAck, onRevealed, nudge }) {
   const base = plan.base, cons = plan.conservative, opt = plan.optimistic;
   const narrow = useIsNarrow();
   // first use — see the notes on BridgePlanner; this half works identically
@@ -1026,6 +1131,10 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
   // Lose a required figure and the reveal is withdrawn with it, so filling the
   // box back in does NOT snap to the answer on the first digit you type.
   useEffect(() => { if (!ready) setRevealed(false); }, [ready]);
+  const [pending, setPending] = useState(false);
+  const go = () => { if (acked) { setRevealed(true); onRevealed && onRevealed(); } else setPending(true); };
+  const ackAndGo = () => { onAck && onAck(); setPending(false); setRevealed(true); onRevealed && onRevealed(); };
+  useEffect(() => { if (acked && pending) ackAndGo(); }, [acked]);
   const showSetup = !(ready && revealed);
   // sequence-risk (pension drawdown) — memoised; the Monte Carlo is ~50ms
   const stress = useMemo(() => Engine.coastStressTest(cp, cp.minResidual||0), [cp]);
@@ -1124,7 +1233,8 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
       </div>
 
       {/* 0) FIRST USE — the setup card (see BridgePlanner for the reasoning) */}
-      {showSetup ? (
+      {pending && !acked ? <Disclaimer onAck={ackAndGo} /> :
+       showSetup ? (
       <div className="setup">
         <div className="su-lead">Four numbers and we can tell you when your pension can look after itself.</div>
         <div className="su-sub">“Coast” is the point where the pot you already have grows into your retirement
@@ -1156,7 +1266,7 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
               onChange={setFlatAnnual} />
           </SuField>
         </div>
-        <SuCta left={missing.length} label="See my pension outlook" onGo={()=>setRevealed(true)} />
+        <SuCta left={missing.length} label="See my pension outlook" onGo={go} />
         <div className="su-fine">Returns, inflation, the State Pension and the age you draw your pension are
           already set to Future Funded’s standard assumptions — all editable under <b>Advanced
           assumptions</b> once you’re in.</div>
@@ -1197,6 +1307,7 @@ function CoastPlanner({ cp, setCp, setAge, plan, C, realTerms, setRealTerms }) {
                 + ' of paying in and growing closes the gap. Or pay in more, or want less.')
           : 'Working longer alone doesn’t close this — it needs more going in, a higher return, or a lower target income.'}</div>
       </div>
+      {nudge}
       <details className="bp-why"><summary>Why so early?</summary>
         <ol>
           <li><b>Coast</b> is the point where your existing pot, left to grow on its own, would still hit your target by age {base.objAge} — <b>with no further contributions</b>. It's not when you retire, it's when saving becomes optional.</li>
@@ -1741,9 +1852,14 @@ function AuthButton(props){
     const onAuth = (e) => setUser(e.detail || null);
     const onStat = (e) => setStatus(e.detail || 'idle');
     const onRecovery = () => { setRecovery(true); setOpen(true); };
+    // Opened from elsewhere on the page — the "keep your plan" card, or Save
+    // plan in the header. An event rather than lifted state: the session
+    // belongs to this component and nothing else needs to know about it.
+    const onAsk = () => { setSignup(!Cloud.user); setMsg(null); setOpen(true); };
     window.addEventListener('optcloud:auth', onAuth);
     window.addEventListener('optcloud:status', onStat);
     window.addEventListener('optcloud:recovery', onRecovery);
+    window.addEventListener('ff:open-auth', onAsk);
     setUser(Cloud.user || null);
     setStatus(Cloud.status || 'idle');
     if (Cloud.recovery){ setRecovery(true); setOpen(true); }
@@ -1751,6 +1867,7 @@ function AuthButton(props){
       window.removeEventListener('optcloud:auth', onAuth);
       window.removeEventListener('optcloud:status', onStat);
       window.removeEventListener('optcloud:recovery', onRecovery);
+      window.removeEventListener('ff:open-auth', onAsk);
     };
   }, []);
 
@@ -2599,6 +2716,47 @@ function App() {
   const coastReady  = Engine.coastReady(coastInputs);
   const bothReady   = bridgeReady && coastReady;
 
+  /* ---- the two one-off things we say ----
+     `ack.disclaimer` gates the FIRST answer; `ack.saveNudge` records that the
+     account offer has been made and answered. Both live with the plan rather
+     than in the analytics flags — see ACK_KEY. */
+  const [ack, setAck] = useState(readAck);
+  /* ⚠️ NOT tracked, on purpose. Firing `disclaimer_ack` / `save_nudge_dismiss`
+     would be the obvious thing, and it would quietly break analytics: events go
+     up in BATCHES, `public.events` has a CHECK constraint listing every allowed
+     name, and one unrecognised name fails the whole insert — taking every
+     legitimate event queued alongside it. Adding these needs a migration
+     extending events_name_allowed FIRST, deployed before the client that fires
+     them. Worth doing if first-use drop-off ever matters; not worth risking the
+     existing numbers for. */
+  const ackDisclaimer = () => setAck(writeAck({ disclaimer: 1 }));
+  const dismissNudge  = () => setAck(writeAck({ saveNudge: 1 }));
+
+  // Is anybody signed in? Only used to decide whether to offer an account at
+  // all — AuthButton owns the actual session.
+  const Cloud = typeof window !== 'undefined' ? window.OptCloud : null;
+  const [signedIn, setSignedIn] = useState(() => !!(Cloud && Cloud.user));
+  useEffect(() => {
+    const on = (e) => setSignedIn(!!(e && e.detail));
+    window.addEventListener('optcloud:auth', on);
+    setSignedIn(!!(Cloud && Cloud.user));
+    return () => window.removeEventListener('optcloud:auth', on);
+  }, []);
+
+  /* Which planner shows the "keep your plan" card: the one whose answer they
+     have just seen. Set when a planner reveals, so the offer appears under the
+     result that earned it rather than at the top of a page they'd have to
+     scroll back to. Never on a page load — a returning visitor is not at a
+     moment of delight, they are just checking their plan. */
+  const [nudgeAt, setNudgeAt] = useState(null);
+  const canNudge = !!(Cloud && Cloud.available) && !signedIn && !ack.saveNudge;
+  const nudgeNode = canNudge ? <SaveNudge onDismiss={dismissNudge} /> : null;
+  // The quiet standing offer in the header, once there is a plan worth keeping.
+  const canSave = !!(Cloud && Cloud.available) && !signedIn && (bridgeReady || coastReady);
+  const revealedIn = (which) => setNudgeAt(which);
+  // Signing in mid-session answers the question; take the card away.
+  useEffect(() => { if (signedIn) setNudgeAt(null); }, [signedIn]);
+
   // ---- Mortgage or invest? — the side calculator under the planners ----
   const [mortgageInputs, setMortgageInputs] = useState(() => {
     let x = JSON.parse(JSON.stringify(Engine.MORTGAGE_DEFAULTS));
@@ -2833,6 +2991,12 @@ function App() {
       {/* top bar */}
       <div className="topbar">
         <div className="brand"><span className="ff-mark">FF</span><h1>Future Funded</h1></div>
+        {/* Once the card below has been answered, this is the whole of the
+            account offer: quiet, always there, never asked again. It only
+            appears when there is actually a plan worth keeping. */}
+        {canSave && <button className="save-plan" onClick={()=>{
+          try { window.dispatchEvent(new CustomEvent('ff:open-auth')); } catch(e){}
+        }} title="Create a free account so your plan follows you between devices">Save<span className="sp-word"> plan</span></button>}
         <FeedbackButton onOpen={()=>setMenuOpen(false)} />
         <button className="burger" aria-label={menuOpen?'Close menu':'Open menu'} aria-expanded={menuOpen}
           onClick={()=>setMenuOpen(o=>!o)}>{menuOpen?'✕':'☰'}</button>
@@ -2958,9 +3122,13 @@ function App() {
       })()}
 
       <div id="planner-pension"></div>
-      <CoastPlanner cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      <CoastPlanner cp={coastInputs} setCp={setCp} setAge={setAge} plan={coast} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
+        acked={!!ack.disclaimer} onAck={ackDisclaimer} onRevealed={()=>revealedIn('coast')}
+        nudge={nudgeAt === 'coast' ? nudgeNode : null} />
       <div id="planner-bridge"></div>
-      <BridgePlanner bp={bridgeInputs} setBp={setBp} setAge={setAge} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms} />
+      <BridgePlanner bp={bridgeInputs} setBp={setBp} setAge={setAge} plan={bridge} C={C} realTerms={realTerms} setRealTerms={setRealTerms}
+        acked={!!ack.disclaimer} onAck={ackDisclaimer} onRevealed={()=>revealedIn('bridge')}
+        nudge={nudgeAt === 'bridge' ? nudgeNode : null} />
 
       {/* ===== OUTPUTS =====
            Both pots on one picture. Held back until BOTH planners have been

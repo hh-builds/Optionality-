@@ -547,7 +547,8 @@ button{font-family:inherit}
      under the notch and is close to untappable. */
   padding:calc(11px + env(safe-area-inset-top, 0px)) 0 11px;
   margin-bottom:8px;border-bottom:1px solid var(--border)}
-.brand{display:flex;align-items:center;gap:11px}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand h1{white-space:nowrap}
 /* FF monogram — theme-constant brand mark */
 .ff-mark{width:28px;height:28px;border-radius:10px;background:#3e5c99;color:#fff;
   display:inline-flex;align-items:center;justify-content:center;font-weight:650;
@@ -1152,6 +1153,56 @@ td.bp-growth{color:var(--muted);font-variant-numeric:tabular-nums}
    where somebody actually meets them. A figure repeated in 12px grey above the
    input holding it is not reassurance, it's noise. */
 .yn-fields{margin-top:4px}
+
+/* =====================================================================
+   THE DISCLAIMER, AND THE ACCOUNT OFFER
+   ---------------------------------------------------------------------
+   Both are deliberately quiet. The disclaimer is a panel in the flow, not
+   a modal and not a legal wall — it sits exactly where the setup card was
+   and is left by pressing the button you were already reaching for. The
+   account card comes AFTER the first answer and can be waved away for
+   good; the header keeps a small standing offer instead of asking again.
+   ===================================================================== */
+.dscl{margin:14px 0 4px;max-width:64ch}
+.dscl-h{font-size:var(--fs-result);font-weight:650;letter-spacing:-0.02em;line-height:1.25;
+  color:var(--text-primary);margin:0 0 12px}
+.dscl p{font-size:var(--fs-body);color:var(--text-secondary);line-height:1.6;margin:0 0 11px}
+.dscl p b{color:var(--text-primary);font-weight:650}
+.dscl .su-cta{margin-top:20px}
+
+/* --- "keep your plan" --- */
+.nudge{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 22px;
+  margin:16px 0 4px;padding:15px 18px;border-radius:12px;
+  background:var(--accent-soft);border:1px solid var(--grid)}
+.nudge-txt{min-width:min(100%,26ch);flex:1 1 30ch}
+.nudge-h{font-size:var(--fs-body);font-weight:650;color:var(--text-primary);letter-spacing:-0.01em}
+.nudge-txt p{font-size:var(--fs-help);color:var(--text-secondary);line-height:1.5;margin:4px 0 0;max-width:52ch}
+.nudge-act{display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;flex:0 0 auto}
+.su-go.sm{padding:10px 17px;min-height:42px;font-size:var(--fs-help);border-radius:10px}
+.nudge-no{background:none;border:none;padding:6px 2px;font:inherit;font-size:var(--fs-help);
+  color:var(--text-secondary);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.nudge-no:hover{color:var(--text-primary)}
+@media (max-width:560px){
+  .nudge{padding:14px}
+  .nudge-act{width:100%} .su-go.sm{flex:1 1 auto;justify-content:center}
+}
+
+/* --- the standing offer in the header --- */
+.save-plan{margin-left:auto;background:none;border:1px solid var(--grid);border-radius:9px;
+  padding:0 12px;height:36px;min-height:36px;font:inherit;font-size:var(--fs-help);font-weight:600;
+  color:var(--accent);cursor:pointer;white-space:nowrap;flex:0 0 auto}
+.save-plan:hover{border-color:var(--accent);background:var(--accent-soft)}
+/* .fb-btn also carries margin-left:auto to push the right-hand group over. With
+   both set the free space is SPLIT between them and Save plan floats out in the
+   middle of the bar — so whichever comes first keeps the auto. */
+.save-plan + .fb-btn{margin-left:0}
+@media (max-width:560px){
+  /* On a phone the brand, two 44px icons and this all share one row. Losing the
+     second word buys back the ~40px that was making "Future Funded" wrap onto
+     two lines — and "Save" alone still reads, where an icon would not. */
+  .save-plan{padding:0 10px;height:36px;min-height:36px;font-size:12px}
+  .save-plan .sp-word{display:none}
+}
 
 /* --- headline card: waiting for numbers ---
    Deliberately NOT dimmed into invisibility. It is the main way into setup,
