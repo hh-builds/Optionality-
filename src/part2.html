@@ -3475,10 +3475,15 @@ function App() {
                 return <HCard key={i} {...c} jumpTo={i === 2 ? 'planner-pension' : 'planner-bridge'} />;
               })}
             </div>
-            <div className="hc-foot">{(bReady || cReady)
-              ? <span>Bridge covers you before pension access {access}; pension takes over after. Today’s money.</span>
-              : <span>Tap a card to fill in the few figures behind it — it takes about a minute, and everything
-                  else is already set to Future Funded’s standard assumptions.</span>}</div>
+            {/* ⚠️ Only while the cards are still asking. Once there is an
+                answer the line under them was explaining the layout to
+                somebody already looking at it — removed 2026-08-24. The
+                pension access age it quoted is on the Bridge card's own
+                sub-line anyway, and "Today's money" is in the toolbar. */}
+            {!(bReady || cReady) &&
+              <div className="hc-foot">Tap a card to fill in the few figures behind it — it takes about
+                a minute, and everything else is already set to Future Funded’s standard
+                assumptions.</div>}
           </React.Fragment>
         );
       })()}
