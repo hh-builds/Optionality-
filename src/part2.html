@@ -1,6 +1,6 @@
 </script>
 <script type="text/babel" data-presets="react">
-const { useState, useMemo, useEffect, useRef } = React;
+const { useState, useMemo, useEffect, useRef, useLayoutEffect } = React;
 const R = window.Recharts || {};
 const { ResponsiveContainer, LineChart, Line, AreaChart, Area, ComposedChart, Bar,
         XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, Cell } = R;
@@ -2148,6 +2148,23 @@ function PlanBar() {
     };
   }, []);
 
+  /* ⚠️ Keep an open menu on screen. Pinning it to either edge of its button is
+     wrong at some width — see the note above `.plan-pop` in part1 — so it is
+     pinned left in CSS and nudged back here once the browser has laid it out.
+     useLayoutEffect, not useEffect, so the nudge lands in the same paint and
+     nobody sees the menu appear half off screen and then jump. */
+  const menuEl = useRef(null);
+  useLayoutEffect(() => {
+    const el = menuEl.current;
+    if (!menu || !el) return;
+    el.style.transform = '';
+    const pad = 8, r = el.getBoundingClientRect(), vw = window.innerWidth;
+    let dx = 0;
+    if (r.right > vw - pad) dx = (vw - pad) - r.right;
+    if (r.left + dx < pad)  dx = pad - r.left;       // never push it off the other side
+    if (dx) el.style.transform = 'translateX(' + Math.round(dx) + 'px)';
+  }, [menu, st.plans]);
+
   // Escape closes whatever is open, innermost first.
   useEffect(() => {
     if (!menu && !dlg) return;
@@ -2254,7 +2271,7 @@ function PlanBar() {
             <span className="pp-caret">▾</span>
           </button>
           {menu === 'list' && (
-            <div className="plan-menu" role="menu">
+            <div className="plan-menu" role="menu" ref={menuEl}>
               {plans.map(listItem)}
               <div className="plan-sep"></div>
               <button role="menuitem" onClick={() => openNew(true)}>
@@ -2269,7 +2286,7 @@ function PlanBar() {
             aria-label="Actions for this plan" title="Rename, duplicate or delete this plan"
             onClick={() => setMenu(m => m === 'more' ? null : 'more')}>•••</button>
           {menu === 'more' && (
-            <div className="plan-menu right" role="menu">
+            <div className="plan-menu" role="menu" ref={menuEl}>
               <button role="menuitem" onClick={openRename}>Rename</button>
               <button role="menuitem" onClick={() => openNew(true)}>Duplicate</button>
               {plans.length > 1 && (

@@ -802,11 +802,22 @@ button{font-family:inherit}
   white-space:nowrap;flex:0 0 auto;padding-left:8px}
 .plan-state.err{color:var(--critical)}
 /* the two popovers (plan list, and the ••• actions) */
+/* ⚠️ A MENU MUST NOT OPEN OFF THE SIDE OF THE SCREEN, and neither edge is safe
+   to pin it to. `right:0` aligns the menu's right edge with its button's, so a
+   200px menu on a ••• sitting 140px in starts at x = -60 — which is what was
+   reported on a phone, and clipped on a desktop too whenever there was one
+   tab. Flipping to `left:0` just moves the problem: with five long plan names
+   the tabs push the ••• to the right-hand end and the menu runs off THAT side
+   instead. The harness caught the second one.
+
+   So the CSS pins it left and `keepOnScreen()` in PlanBar nudges it back with
+   a translateX after layout. Measuring is the only thing that is right at
+   every width, for any number of plans, in any language. */
 .plan-pop{position:relative;flex:0 0 auto}
 .plan-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:60;min-width:200px;
+  max-width:calc(100vw - 32px);
   background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius-sm);
   box-shadow:var(--shadow-lift);padding:5px;display:flex;flex-direction:column}
-.plan-menu.right{left:auto;right:0}
 .plan-menu button{background:none;border:none;text-align:left;font:inherit;
   font-size:var(--fs-body);color:var(--text-primary);padding:9px 10px;border-radius:8px;
   cursor:pointer;min-height:40px;display:flex;align-items:center;gap:8px;width:100%}
@@ -4015,7 +4026,7 @@ details.bp-stress-collapse > .bp-stress{border:none;background:none;border-radiu
 })(typeof window !== 'undefined' ? window : this);
 </script>
 <script type="text/babel" data-presets="react">
-const { useState, useMemo, useEffect, useRef } = React;
+const { useState, useMemo, useEffect, useRef, useLayoutEffect } = React;
 const R = window.Recharts || {};
 const { ResponsiveContainer, LineChart, Line, AreaChart, Area, ComposedChart, Bar,
         XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceDot, Cell } = R;
@@ -6163,6 +6174,23 @@ function PlanBar() {
     };
   }, []);
 
+  /* ⚠️ Keep an open menu on screen. Pinning it to either edge of its button is
+     wrong at some width — see the note above `.plan-pop` in part1 — so it is
+     pinned left in CSS and nudged back here once the browser has laid it out.
+     useLayoutEffect, not useEffect, so the nudge lands in the same paint and
+     nobody sees the menu appear half off screen and then jump. */
+  const menuEl = useRef(null);
+  useLayoutEffect(() => {
+    const el = menuEl.current;
+    if (!menu || !el) return;
+    el.style.transform = '';
+    const pad = 8, r = el.getBoundingClientRect(), vw = window.innerWidth;
+    let dx = 0;
+    if (r.right > vw - pad) dx = (vw - pad) - r.right;
+    if (r.left + dx < pad)  dx = pad - r.left;       // never push it off the other side
+    if (dx) el.style.transform = 'translateX(' + Math.round(dx) + 'px)';
+  }, [menu, st.plans]);
+
   // Escape closes whatever is open, innermost first.
   useEffect(() => {
     if (!menu && !dlg) return;
@@ -6269,7 +6297,7 @@ function PlanBar() {
             <span className="pp-caret">▾</span>
           </button>
           {menu === 'list' && (
-            <div className="plan-menu" role="menu">
+            <div className="plan-menu" role="menu" ref={menuEl}>
               {plans.map(listItem)}
               <div className="plan-sep"></div>
               <button role="menuitem" onClick={() => openNew(true)}>
@@ -6284,7 +6312,7 @@ function PlanBar() {
             aria-label="Actions for this plan" title="Rename, duplicate or delete this plan"
             onClick={() => setMenu(m => m === 'more' ? null : 'more')}>•••</button>
           {menu === 'more' && (
-            <div className="plan-menu right" role="menu">
+            <div className="plan-menu" role="menu" ref={menuEl}>
               <button role="menuitem" onClick={openRename}>Rename</button>
               <button role="menuitem" onClick={() => openNew(true)}>Duplicate</button>
               {plans.length > 1 && (
